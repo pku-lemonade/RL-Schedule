@@ -1,0 +1,57 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Runtime logs and simulator outputs
+logs/
+*.log
+trace.json
+core.json
+link.json
+dfg.txt
+link.txt
+
+# Training and evaluation artifacts
+rl_agent/logs/
+rl_agent/models/
+baselines/rl_without_fail_prob/logs/
+baselines/rl_without_fail_prob/models/
+*.zip
+*.npz
+
+# Model checkpoints and generated weights.
+models/*
+!models/.gitkeep
+!models/README.md
+!models/best_model.pth
+*.pt
+*.pth
+!models/best_model.pth
+*.ckpt
+
+# Local experiment output roots commonly used by this project
+data/
+rl-result/
+
+# OpenSpec/Codex local workspace metadata
+.agents/
+.codex/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

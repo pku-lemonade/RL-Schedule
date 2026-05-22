@@ -1,0 +1,38 @@
+{
+	"core" : {
+		"type" : "Simple",
+		"x" : 4,
+		"y" : 4,
+		"width" : 8,
+		"blk_size" : 10,
+		"spm" : {
+			"size" : 2147483648,
+			"delay" : 0
+		},
+		"tpu" : {
+			"size" : 1,
+			"flops" : 1024
+		},
+		"lsu" : {
+			"size" : 4,
+			"width" : 4
+		}
+	},
+	"noc" : {
+		"type" : "Mesh",
+		"x" : 4,
+		"y" : 4,
+		"router" : {
+			"type" : "XY",
+			"vc" : 2
+		},
+		"link" : {
+			"width" : 16,
+			"delay" : 0
+		}
+	},
+	"mem" : {
+		"width" : 128,
+		"delay" : 1
+	}
+}

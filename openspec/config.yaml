@@ -1,0 +1,56 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Python project with module-level entry points, Pydantic v2 schemas, SimPy discrete-event simulation, NumPy/SciPy for numeric modeling, PyTorch + PyTorch Geometric for the fail-slow detector, and Gymnasium + Stable-Baselines3 for RL mitigation.
+  Domain: fail-slow failure detection and mitigation for NoC-based manycore accelerators.
+
+  High-level architecture:
+  - `configs/schemas/` defines the JSON contracts for architecture configs, fail-slow scenarios, and workload mappings.
+  - `utils/mapper.py`, `utils/dfg.py`, and `utils/task.py` convert mapping JSON into a DFG of `LOAD_FEAT`, `LOAD_WGT`, `CONV`, `POOL`, `FC`, `STORE`, `SEND`, and `RECV` tasks and implement layer retiling for mitigation.
+  - `simulator/architecture.py`, `simulator/core.py`, `simulator/noc.py`, `simulator/tracing.py`, and `simulator/run.py` implement the manycore simulator, fail-slow injection, event capture, and time-sliced traces.
+  - `predictor/data_loader.py`, `predictor/model_hetero.py`, `predictor/predictor.py`, and `predictor/predict.py` build heterogenous temporal graphs from traces and run the trained GNN detector stored in `models/best_model.pth`.
+  - `embedding/hw_encoder.py` embeds the static hardware graph for RL, and `rl_agent/` contains the Gym environment, reward logic, feature extractors, and PPO/DQN training scripts.
+
+  Project workflow:
+  - Architecture examples live in `configs/instances/*.json`, workload mappings live in `workloads/*.json`, and fail-slow scenarios live in `fail_dataset/*.json` (119 checked-in cases).
+  - `simulate()` loads an architecture config and failure scenario, instantiates the mapped DFG on the simulated architecture, injects fail-slow events on routers, links, LSUs, and TPUs, and runs a SimPy environment to completion.
+  - The simulator records per-core compute/IO events and per-link communication events, slices them into 11 runtime windows, and attaches detector probabilities to each core/link trace item.
+  - The detector converts each window into PyG `HeteroData` with 7-D core features, 7-D link features, physical `core<->link` edges, and communication-derived relations, then applies HGT-style message passing plus GRUs for per-core, per-link, and global failure prediction.
+  - The RL environment wraps the simulator/detector loop: observations combine runtime trace tensors with a hardware graph embedding, actions remap layer-to-core allocations, and rewards trade off cycle reduction against thermal/load balance.
+
+  Important domain details:
+  - Fail-slow events are time-bounded degradations. Link and router failures multiply communication delay, LSU failures reduce effective width, and TPU failures reduce effective FLOPS.
+  - Cores explicitly model scratchpad allocation/release, LSU occupancy, and TPU occupancy. NoC links model variable transmission time with a gamma-distributed bandwidth model.
+  - The checked-in reference hardware is a 4x4 manycore with 16 cores. The simulator supports `Mesh`, `Torus`, `RingRoad`, and `Dragonfly` NoC topologies.
+  - The checked-in workload is `workloads/darknet19-4-4.json`, a Darknet19 mapping with tensor block slices, fetch partitions, output partitions, and cross-layer group ids.
+  - `utils/mapper.py` supports dynamic `add_core()` and `remove_core()` actions by recomputing legal partitions and globally retiling input, output, and weight blocks.
+  - `FC` exists in the schemas and DFG types but is not implemented in `utils/task.py`; the current checked-in workload is conv/pool-only.
+  - Comments and debug output are a mix of English and Chinese. Preserve meaning when editing.
+
+  Data and interface conventions:
+  - JSON is the primary interface boundary. Keep `configs/schemas/*.py` aligned with `configs/instances/*.json`, `workloads/*.json`, and `fail_dataset/*.json`.
+  - Runtime trace types live in `utils/definitions.py` and `simulator/tracing.py`; detector inputs are event dictionaries derived from those models.
+  - The active RL action space is `MultiDiscrete([num_layers, max_cores_per_layer, num_ops])`, where `op_type` is currently add/remove.
+  - The older discrete action decoder in `embedding/action_decoder.py` and `rl_agent/spaces/actions.py` is not the main training path.
+  - There is no maintained top-level CLI or documentation source of truth: `README.md`, `requirements.txt`, and `scripts/train.py` / `scripts/evaluate.py` are empty, so the code is the canonical reference.
+
+  Repository conventions and constraints:
+  - Default example sizes are hard-coded in multiple places: 4x4 assumptions, 16 cores, 48 directional links for mesh detection/RL, and 11 runtime slices.
+  - The detector/data-loader path is effectively mesh-only today even though the simulator supports more NoC topologies; topology or dimension changes must reconcile `predictor/data_loader.py`, `predictor/predictor.py`, trained model dimensions, and RL observation sizes.
+  - `FailurePredictor` defaults to `device="cuda"` but falls back to CPU when CUDA is unavailable.
+  - Validation is mostly smoke-test based rather than unit-test based; `rl_agent/train_test.py` is the closest thing to an integration test.
+  - If dependencies change, update `requirements.txt` to match the actual imports.
+
+rules:
+  proposal:
+    - Separate simulator, detector, and RL-agent impact clearly instead of describing the framework as a single black box.
+    - Name every JSON contract, trace structure, model artifact, or observation/action shape that changes.
+    - State whether the change preserves the current 4x4 mesh + Darknet19 + fail-dataset workflow or intentionally generalizes it.
+  design:
+    - Preserve the current boundary between `configs/schemas`, `utils/mapper`, `simulator`, `predictor`, `embedding`, and `rl_agent` unless the change is explicitly architectural.
+    - For workload remapping or action-space changes, explain how DFG generation, trace generation, detector graph construction, and RL observations/rewards remain consistent end-to-end.
+    - For topology or scale changes, call out every hard-coded assumption that must move together: core/link counts, detector input dimensions, model checkpoints, and RL observation shapes.
+  tasks:
+    - Break work into module-scoped steps that can be validated independently.
+    - Include at least one executable validation path when relevant, such as a direct `simulate()` / `detect()` smoke run or `python3 rl_agent/train_test.py`.
+    - Call out required updates to example JSON assets, checked-in model assumptions, and any generated trace/log artifacts.
