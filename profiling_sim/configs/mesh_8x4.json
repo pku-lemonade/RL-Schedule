@@ -1,0 +1,43 @@
+{
+    "core": {
+        "type": "Simple",
+        "x": 8,
+        "y": 4,
+        "width": 8,
+        "blk_size": 10,
+        "spm": {
+            "size": 19922944,
+            "delay": 0
+        },
+        "tpu": {
+            "size": 1,
+            "flops": 512
+        },
+        "lsu": {
+            "size": 4,
+            "width": 4
+        },
+        "nmc": {
+            "channels": 2,
+            "start_up_time": 1
+        },
+        "element_bytes": 2
+    },
+    "noc": {
+        "type": "Mesh",
+        "x": 8,
+        "y": 4,
+        "router": {
+            "type": "XY",
+            "vc": 2
+        },
+        "link": {
+            "width": 16,
+            "delay": 0
+        }
+    },
+    "clock": {
+        "aci_mhz": 1125,
+        "ddr_mhz": 1150
+    }
+}
