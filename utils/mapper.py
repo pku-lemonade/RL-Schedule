@@ -103,10 +103,10 @@ class NetworkMapper:
         self.all_tasks_completed_counter = 0
 
     def xy2x(self, x: int, y: int) -> int:
-        return x * self.y_size + y
+        return y * self.x_size + x
 
     def x2xy(self, x: int) -> Tuple[int, int]:
-        return x // self.y_size, x % self.y_size
+        return x % self.x_size, x // self.x_size
 
     def _clone_slice(self, tensor_slice: List[DimSlice]) -> List[DimSlice]:
         return [DimSlice(start=dim.start, end=dim.end) for dim in tensor_slice]
