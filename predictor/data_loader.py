@@ -34,7 +34,7 @@ class Mesh:
         self._build_links()
 
     def _core_id(self, i: int, j: int) -> int:
-        return i * self.y + j
+        return j * self.x + i
 
     def _register_link(self, a: int, b: int):
         key = (a, b)
@@ -58,47 +58,45 @@ class Mesh:
         return idx
 
     def _build_links(self):
-        # Grid 4-neighbor links (undirected, stored once with ordered (min,max))
         for i in range(self.x):
             for j in range(self.y):
                 cur = self._core_id(i, j)
                 if i < self.x - 1:
-                    down = self._core_id(i + 1, j)
-                    self._register_link(down, cur)
-                    self._register_link(cur, down)
+                    east = self._core_id(i + 1, j)
+                    self._register_link(east, cur)
+                    self._register_link(cur, east)
                 if j < self.y - 1:
-                    right = self._core_id(i, j + 1)
-                    self._register_link(right, cur)
-                    self._register_link(cur, right)
+                    north = self._core_id(i, j + 1)
+                    self._register_link(north, cur)
+                    self._register_link(cur, north)
 
         # DRAM links: connect each core to a virtual DRAM node id = core_count
         # dram_id = self.core_count
         # for core in range(self.core_count):
         #     self._register_link(core, dram_id)
 
-    def manhattan_path_nodes(self, src: int, dst: int) -> List[int]:
-        # Return sequence of alternating core/link/core/... nodes along X-then-Y path (represented as indices where even steps are links and odd steps are cores between links)
+    def manhattan_path_nodes(self, src: int, dst: int) -> List[Tuple[str, int]]:
         nodes: List[Tuple[str, int]] = []
         if src == dst:
             return nodes
-        sx, sy = divmod(src, self.y)
-        dx, dy = divmod(dst, self.y)
+        sx = src % self.x
+        sy = src // self.x
+        dx = dst % self.x
+        dy = dst // self.x
         curx, cury = sx, sy
-        # Move along X
         while curx != dx:
             nextx = curx + 1 if dx > curx else curx - 1
-            cur = curx * self.y + cury
-            nxt = nextx * self.y + cury
+            cur = cury * self.x + curx
+            nxt = cury * self.x + nextx
             link_idx = self.to_link_index[(min(cur, nxt), max(cur, nxt))]
             nodes.append(('link', link_idx))
             if nxt != dst:
                 nodes.append(('core', nxt))
             curx = nextx
-        # Move along Y
         while cury != dy:
             nexty = cury + 1 if dy > cury else cury - 1
-            cur = curx * self.y + cury
-            nxt = curx * self.y + nexty
+            cur = cury * self.x + curx
+            nxt = nexty * self.x + curx
             link_idx = self.to_link_index[(min(cur, nxt), max(cur, nxt))]
             nodes.append(('link', link_idx))
             if nxt != dst:
@@ -157,18 +155,25 @@ class ManycoreDatasetBuilder:
         self.window_cfg = window_cfg
 
     def _calculate_link_endpoint(self, router_id: int, direction: int) -> int:
-        x, y = divmod(router_id, self.mesh.y)
-        match direction:
-            case 0:  # NORTH
-                return router_id + 1
-            case 1:  # SOUTH  
-                return router_id - 1
-            case 2:  # EAST
-                return router_id + self.mesh.y
-            case 3:  # WEST
-                return router_id - self.mesh.y
-            case _:
+        rx = router_id % self.mesh.x
+        ry = router_id // self.mesh.x
+        if direction == 0:
+            if ry >= self.mesh.y - 1:
                 return -1
+            return router_id + self.mesh.x
+        elif direction == 1:
+            if ry <= 0:
+                return -1
+            return router_id - self.mesh.x
+        elif direction == 2:
+            if rx >= self.mesh.x - 1:
+                return -1
+            return router_id + 1
+        elif direction == 3:
+            if rx <= 0:
+                return -1
+            return router_id - 1
+        return -1
 
     def _get_link_id_from_core_pair(self, core1: int, core2: int) -> int:
         key = (min(core1, core2), max(core1, core2))

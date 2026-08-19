@@ -295,7 +295,7 @@ class FailurePredictor:
             for failure in window_result['core_failures']:
                 core_id = failure['core_id']
                 prob = failure['probability']
-                x, y = divmod(core_id, self.mesh_y)
+                x, y = core_id % self.mesh_x, core_id // self.mesh_x
                 print(f"    - Core {core_id} (位置 {x},{y}): 概率 {prob:.4f}")
         
         if window_result['link_failures']:
@@ -373,7 +373,7 @@ class FailurePredictor:
             print(f"\n疑似Core故障 (按出现频率排序):")
             for item in summary['suspected_core_failures']:
                 core_id = item['core_id']
-                x, y = divmod(core_id, self.mesh_y)
+                x, y = core_id % self.mesh_x, core_id // self.mesh_x
                 print(f"  - Core {core_id} (位置 {x},{y}): "
                       f"出现 {item['frequency']} 次, "
                       f"最高概率 {item['max_probability']:.4f}")

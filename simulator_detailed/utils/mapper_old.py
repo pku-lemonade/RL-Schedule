@@ -60,11 +60,11 @@ class NetworkMapper:
         pass
 
     def xy2x(self, x: int, y: int) -> int:
-        return x * self.y_size + y
+        return y * self.x_size + x
 
 
     def x2xy(self, x: int) -> Tuple[int, int]:
-        return x // self.y_size, x % self.y_size
+        return x % self.x_size, x // self.x_size
     
 
     def get_core_ids(self, layer: Layer) -> List[int]:

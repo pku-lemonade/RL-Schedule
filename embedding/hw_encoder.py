@@ -24,15 +24,15 @@ def build_hardware_graph(noc_instance: NoC):
     
     # router node feature
     for r in routers:
-        r_row, r_col = r.to_xy(r.id)
-        node_features.append([0, r_row, r_col]) 
+        r_x, r_y = r.to_xy(r.id)
+        node_features.append([0, r_x, r_y]) 
         
-    # link nore feature
+    # link node feature
     for i, link in enumerate(links):
         src_id = link.corefromid
-        src_row = src_id // noc_instance.y
-        src_col = src_id % noc_instance.y
-        node_features.append([1, src_row, src_col])
+        src_x = src_id % noc_instance.x
+        src_y = src_id // noc_instance.x
+        node_features.append([1, src_x, src_y])
 
     x = torch.tensor(node_features, dtype=torch.float)
 
