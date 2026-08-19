@@ -77,6 +77,9 @@ class NMC:
         self.channel_store = simpy.Store(env, capacity=config.channels)
         for i in range(config.channels):
             self.channel_store.put(i)
+        inj_cap = config.injection_ports
+        self.injection_ports = simpy.Resource(
+            env, capacity=inj_cap if inj_cap and inj_cap > 0 else 10 ** 6)
 
     def acquire(self):
         return self.channel_store.get()
@@ -158,6 +161,12 @@ class Core:
         self.lsu = LSU(env, config.lsu)
         self.tpu = TPU(env, config.tpu)
         self.nmc = NMC(env, config.nmc)
+        rp = config.sram_read_ports
+        wp = config.sram_write_ports
+        self.sram_read = simpy.Resource(
+            env, capacity=rp if rp and rp > 0 else 10 ** 6)
+        self.sram_write = simpy.Resource(
+            env, capacity=wp if wp and wp > 0 else 10 ** 6)
         self.events = []
         self.index2id = {}
         self._build_shadow_pipelines()

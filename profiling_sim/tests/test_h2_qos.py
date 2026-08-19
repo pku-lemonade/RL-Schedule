@@ -27,7 +27,7 @@ def ds(n):
 
 
 def make_noc(env, width=W, delay=0, burst_bubble=1):
-    cfg = NoCConfig(x=8, y=4,
+    cfg = NoCConfig(x=4, y=8,
                     router=RouterConfig(burst_bubble=burst_bubble),
                     link=LinkConfig(width=width, delay=delay))
     return NoC(env, cfg, deterministic=True).build()
@@ -77,7 +77,7 @@ def contention_run(prio0, prio1, n0=8 * W, n1=8 * W, burst0=-1, burst1=-1,
         yield env.timeout(at)
         out.put(Message(src=src, dst=8, index=idx, data=ds(n),
                         element_bytes=1, dst_local_port=0,
-                        priority=p, burst_len_mode=b))
+                        priority=p, burst_len_mode=b, header_bytes=0))
     env.process(sched(out0, 1, n0, prio0, burst0, inject0, 400))
     env.process(sched(out1, 2, n1, prio1, burst1, inject1, 401))
     env.run()
@@ -147,7 +147,8 @@ def priority_contest(high_on_port1):
     def sched(out, idx, n, p, at):
         yield env.timeout(at)
         out.put(Message(src=400 + idx, dst=8, index=idx, data=ds(n),
-                        element_bytes=1, dst_local_port=0, priority=p))
+                        element_bytes=1, dst_local_port=0, priority=p,
+                        header_bytes=0))
     env.process(sched(ob, 9, 8 * W, 0, 0))   # blocker
     if high_on_port1:
         env.process(sched(ol, 1, W, 0, 8))    # low on port0
@@ -332,7 +333,8 @@ def fifo_workload(D, consume, K=8, use_fifo=True, n=W):
                             element_bytes=1, dst_local_port=0,
                             fifo_hw_id=0 if use_fifo else -1,
                             fifo_logic_id=0 if use_fifo else -1,
-                            fifo_check_type=0 if use_fifo else -1))
+                            fifo_check_type=0 if use_fifo else -1,
+                            header_bytes=0))
         env.process(s())
     env.run(until=2000)
     lk = find_r2r(noc, 4, 8)
@@ -398,7 +400,7 @@ def stream(out, idx0, dst_port, hw, logic, ctype, src):
             out.put(Message(src=src, dst=8, index=idx0 + k, data=ds(W),
                             element_bytes=1, dst_local_port=dst_port,
                             fifo_hw_id=hw, fifo_logic_id=logic,
-                            fifo_check_type=ctype))
+                            fifo_check_type=ctype, header_bytes=0))
         env18.process(s())
 
 
@@ -425,7 +427,8 @@ def put19(idx, port, out, ctype, at):
     yield env19.timeout(at)
     out.put(Message(src=500 + port, dst=500 + port, index=idx, data=ds(W),
                     element_bytes=1, dst_local_port=port,
-                    fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=ctype))
+                    fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=ctype,
+                    header_bytes=0))
 
 
 env19.process(put19(1, 0, p0_out, 0, 0))   # WRITE_FULL (returns immediately)
@@ -563,7 +566,8 @@ for _ in range(2):
         out.put(Message(src=src, dst=8, index=idx, data=ds(4 * W),
                         element_bytes=1, dst_local_port=0,
                         priority=p, burst_len_mode=b,
-                        fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=0))
+                        fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=0,
+                        header_bytes=0))
     env23.process(inj(o0, 1, 0, 0, 400))
     env23.process(inj(o1, 2, 3, 7, 401))
     env23.run()
@@ -593,7 +597,8 @@ env24 = simpy.Environment()
 noc24 = make_noc(env24)
 o24, _ = attach(noc24, 0, 0, 0)  # drains too
 o24.put(Message(src=0, dst=0, index=1, data=ds(W), element_bytes=1,
-                fifo_hw_id=3, fifo_logic_id=3, fifo_check_type=0))
+                fifo_hw_id=3, fifo_logic_id=3, fifo_check_type=0,
+                header_bytes=0))
 raised_f = False
 try:
     env24.run()
@@ -615,7 +620,8 @@ for i in (1, 2):
     def s(i=i):
         yield env25.timeout(0)
         o25.put(Message(src=0, dst=0, index=i, data=ds(W), element_bytes=1,
-                        fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=0))
+                        fifo_hw_id=0, fifo_logic_id=0, fifo_check_type=0,
+                        header_bytes=0))
     env25.process(s())
 env25.run(until=200)
 check("T-H2.25 self-loop FIFO: both packets drain with credit accounting",

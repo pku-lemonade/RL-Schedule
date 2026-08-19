@@ -21,12 +21,13 @@ class LSUConfig(BaseModel):
 class NMCConfig(BaseModel):
     channels: int = 2
     start_up_time: int = 1
+    injection_ports: int = 0
 
 
 class CoreConfig(BaseModel):
     type: str = "Simple"
-    x: int = 8
-    y: int = 4
+    x: int = 4
+    y: int = 8
     width: int = 8
     blk_size: int = 10
     spm: SPMConfig
@@ -34,6 +35,8 @@ class CoreConfig(BaseModel):
     lsu: LSUConfig = LSUConfig()
     nmc: NMCConfig = NMCConfig()
     element_bytes: int = 1
+    sram_read_ports: int = 0
+    sram_write_ports: int = 0
 
 
 class RouterConfig(BaseModel):
@@ -41,6 +44,7 @@ class RouterConfig(BaseModel):
     vc: int = 2
     reduce_latency: int = 2
     burst_bubble: int = 1
+    local_injection_capacity: int = 0
 
 
 class LinkConfig(BaseModel):
@@ -50,10 +54,12 @@ class LinkConfig(BaseModel):
 
 class NoCConfig(BaseModel):
     type: str = "Mesh"
-    x: int = 8
-    y: int = 4
+    x: int = 4
+    y: int = 8
     router: RouterConfig = RouterConfig()
     link: LinkConfig = LinkConfig()
+    concentrated_routers: List[int] = Field(
+        default_factory=lambda: [0, 3, 28, 29, 30, 31])
 
 
 class ClockConfig(BaseModel):
@@ -68,6 +74,7 @@ class ClockConfig(BaseModel):
 class DMAEngineConfig(BaseModel):
     channels: int = 2
     width: int = 16
+    dispatch_interval: int = 0
 
 
 class MemoryConfig(BaseModel):
@@ -78,6 +85,7 @@ class MemoryConfig(BaseModel):
     gm_engine_width: int = 16
     ddr_engine_width: int = 16
     aiu_sram_size: int = 256 * 1024
+    dma: DMAEngineConfig = DMAEngineConfig()
 
 
 class NodeConfig(BaseModel):

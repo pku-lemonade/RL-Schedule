@@ -1,8 +1,8 @@
 {
     "core": {
         "type": "Simple",
-        "x": 8,
-        "y": 4,
+        "x": 4,
+        "y": 8,
         "width": 8,
         "blk_size": 10,
         "spm": {
@@ -19,25 +19,39 @@
         },
         "nmc": {
             "channels": 2,
-            "start_up_time": 1
+            "start_up_time": 1,
+            "injection_ports": 1
         },
-        "element_bytes": 2
+        "element_bytes": 2,
+        "sram_read_ports": 0,
+        "sram_write_ports": 0
     },
     "noc": {
         "type": "Mesh",
-        "x": 8,
-        "y": 4,
+        "x": 4,
+        "y": 8,
         "router": {
             "type": "XY",
-            "vc": 2
+            "vc": 2,
+            "reduce_latency": 2,
+            "burst_bubble": 1,
+            "local_injection_capacity": 1
         },
         "link": {
             "width": 16,
             "delay": 0
-        }
+        },
+        "concentrated_routers": [0, 3, 28, 29, 30, 31]
     },
     "clock": {
         "aci_mhz": 1125,
         "ddr_mhz": 1150
+    },
+    "memory": {
+        "dma": {
+            "channels": 2,
+            "width": 16,
+            "dispatch_interval": 0
+        }
     }
 }

@@ -68,15 +68,21 @@ class Task:
         env = core.env
         match self.operation:
             case OperatorType.LOAD_FEAT:
-                yield env.process(core.spm.allocate(self.input_size(), self.index))
-                yield env.process(core.lsu.occupy(self.input_size()))
+                with core.sram_write.request() as wr_req:
+                    yield wr_req
+                    yield env.process(core.spm.allocate(self.input_size(), self.index))
+                    yield env.process(core.lsu.occupy(self.input_size()))
 
             case OperatorType.LOAD_WGT:
-                yield env.process(core.spm.allocate(self.weight_size(), self.index))
-                yield env.process(core.lsu.occupy(self.weight_size()))
+                with core.sram_write.request() as wr_req:
+                    yield wr_req
+                    yield env.process(core.spm.allocate(self.weight_size(), self.index))
+                    yield env.process(core.lsu.occupy(self.weight_size()))
 
             case OperatorType.CONV:
-                yield env.process(core.spm.allocate(self.output_size(), self.index))
+                with core.sram_write.request() as wr_req:
+                    yield wr_req
+                    yield env.process(core.spm.allocate(self.output_size(), self.index))
                 batch = self.input_shape[0].end - self.input_shape[0].start
                 c_in = self.input_shape[1].end - self.input_shape[1].start
                 c_out = self.weight_shape[1].end - self.weight_shape[1].start
@@ -85,15 +91,19 @@ class Task:
                 w_out = self.output_shape[3].end - self.output_shape[3].start
                 flops = batch * c_in * c_out * k * h_out * w_out
                 core.events[core.index2id[self.index]].flops = flops
-                if core.shadow_enabled:
-                    cal = flops // core.tpu.flops
-                    yield core.enter_matrix(self.index, cal)
-                else:
-                    yield env.process(core.tpu.occupy(flops))
+                with core.sram_read.request() as rd_req:
+                    yield rd_req
+                    if core.shadow_enabled:
+                        cal = flops // core.tpu.flops
+                        yield core.enter_matrix(self.index, cal)
+                    else:
+                        yield env.process(core.tpu.occupy(flops))
                 yield env.process(core.spm.release(self.input_size() + self.weight_size(), self.index))
 
             case OperatorType.POOL:
-                yield env.process(core.spm.allocate(self.output_size(), self.index))
+                with core.sram_write.request() as wr_req:
+                    yield wr_req
+                    yield env.process(core.spm.allocate(self.output_size(), self.index))
                 batch = self.input_shape[0].end - self.input_shape[0].start
                 h_in = self.input_shape[2].end - self.input_shape[2].start
                 w_in = self.input_shape[3].end - self.input_shape[3].start
@@ -102,33 +112,41 @@ class Task:
                 kh, kw = h_in // h_out, w_in // w_out
                 flops = batch * kh * kw * h_out * w_out
                 core.events[core.index2id[self.index]].flops = flops
-                if core.shadow_enabled:
-                    cal = flops // core.tpu.flops
-                    yield core.enter_vector(self.index, cal)
-                else:
-                    yield env.process(core.tpu.occupy(flops))
+                with core.sram_read.request() as rd_req:
+                    yield rd_req
+                    if core.shadow_enabled:
+                        cal = flops // core.tpu.flops
+                        yield core.enter_vector(self.index, cal)
+                    else:
+                        yield env.process(core.tpu.occupy(flops))
                 yield env.process(core.spm.release(self.input_size() + self.weight_size(), self.index))
 
             case OperatorType.FC:
                 pass
 
             case OperatorType.STORE:
-                yield env.process(core.lsu.occupy(self.output_size()))
+                with core.sram_read.request() as rd_req:
+                    yield rd_req
+                    yield env.process(core.lsu.occupy(self.output_size()))
                 yield env.process(core.spm.release(self.output_size(), self.index))
 
             case OperatorType.SEND:
                 ch = yield core.nmc.acquire()
                 try:
-                    if core.shadow_enabled:
-                        yield core.enter_sramc(ch, upload=True, tag=self.index)
-                    yield env.timeout(core.nmc.start_up_time)
-                    for son in self.successors:
-                        node = core.mapper.dfg.get_node(son)
-                        msg = Message(src=core.id, dst=node.core_id,
-                                      index=self.index,
-                                      data=node.input_slice().tensor_slice,
-                                      element_bytes=self.element_bytes)
-                        yield core.data_out.put(msg)
+                    with core.nmc.injection_ports.request() as inj_req, \
+                            core.sram_read.request() as rd_req:
+                        yield inj_req
+                        yield rd_req
+                        if core.shadow_enabled:
+                            yield core.enter_sramc(ch, upload=True, tag=self.index)
+                        yield env.timeout(core.nmc.start_up_time)
+                        for son in self.successors:
+                            node = core.mapper.dfg.get_node(son)
+                            msg = Message(src=core.id, dst=node.core_id,
+                                          index=self.index,
+                                          data=node.input_slice().tensor_slice,
+                                          element_bytes=self.element_bytes)
+                            yield core.data_out.put(msg)
                     yield env.process(core.spm.release(self.output_size(), self.index))
                 finally:
                     yield core.nmc.release(ch)
@@ -138,8 +156,10 @@ class Task:
                 try:
                     yield env.process(core.spm.allocate(self.input_size(), self.index))
                     yield core.data_in.get()
-                    if core.shadow_enabled:
-                        yield core.enter_sramc(ch, upload=False, tag=self.index)
+                    with core.sram_write.request() as wr_req:
+                        yield wr_req
+                        if core.shadow_enabled:
+                            yield core.enter_sramc(ch, upload=False, tag=self.index)
                 finally:
                     yield core.nmc.release(ch)
 

@@ -28,7 +28,7 @@ def ds(n):
 
 
 def make_noc(env, width=16, reduce_latency=2):
-    cfg = NoCConfig(x=8, y=4,
+    cfg = NoCConfig(x=4, y=8,
                     router=RouterConfig(reduce_latency=reduce_latency),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
@@ -80,7 +80,7 @@ def reduce_run(sources, root, n=1600, op=1, values=None, root_port=0,
                 src=s, dst=root, index=i + 1, data=ds(n), element_bytes=1,
                 trans_type=TransType.REDUCE, task_id=task_id, reduce_op=op,
                 reduce_count=1, value=v, src_local_port=port,
-                dst_local_port=root_port))
+                dst_local_port=root_port, header_bytes=0))
 
         env.process(_send())
 
@@ -97,7 +97,7 @@ def reduce_run(sources, root, n=1600, op=1, values=None, root_port=0,
             o.put(Message(
                 src=u['src'], dst=u['dst'], index=u.get('index', 900),
                 data=ds(n), element_bytes=1,
-                dst_local_port=u.get('dst_port', 0)))
+                dst_local_port=u.get('dst_port', 0), header_bytes=0))
         for u in extra_unicasts:
             env.process(_u(u))
 
@@ -115,33 +115,36 @@ print("=== Tree builder (unit) ===")
 env = simpy.Environment()
 noc = make_noc(env)
 tree = noc.register_reduce(1, [0, 4], 28, op=1)
-check("T-H1.1a r0 children {local} parent EAST",
-      tree[0]['children'] == {"local"} and tree[0]['parent'] == Direction.EAST,
+check("T-H1.1a r0 children {local} parent NORTH",
+      tree[0]['children'] == {"local"} and tree[0]['parent'] == Direction.NORTH,
       f"{tree[0]}")
-check("T-H1.1b r4 children {WEST,local} parent EAST",
-      tree[4]['children'] == {Direction.WEST, "local"}
-      and tree[4]['parent'] == Direction.EAST, f"{tree[4]}")
+check("T-H1.1b r4 children {SOUTH,local} parent NORTH",
+      tree[4]['children'] == {Direction.SOUTH, "local"}
+      and tree[4]['parent'] == Direction.NORTH, f"{tree[4]}")
 for r in (8, 12, 16, 20, 24):
-    check(f"T-H1.1c r{r} pass-through {{WEST}} parent EAST",
-          tree[r]['children'] == {Direction.WEST}
-          and tree[r]['parent'] == Direction.EAST, f"{tree[r]}")
-check("T-H1.1d r28 root {WEST} parent None",
-      tree[28]['children'] == {Direction.WEST}
+    check(f"T-H1.1c r{r} pass-through {{SOUTH}} parent NORTH",
+          tree[r]['children'] == {Direction.SOUTH}
+          and tree[r]['parent'] == Direction.NORTH, f"{tree[r]}")
+check("T-H1.1d r28 root {SOUTH} parent None",
+      tree[28]['children'] == {Direction.SOUTH}
       and tree[28]['parent'] is None and tree[28]['is_root'])
 check("T-H1.1e no extra routers in tree",
       set(tree.keys()) == {0, 4, 8, 12, 16, 20, 24, 28},
       f"{set(tree.keys())}")
 
 tree2 = noc.register_reduce(2, [24, 25, 29, 30], 28, op=1)
-check("T-H1.2a r29 children {WEST,NORTH,local} parent SOUTH",
-      tree2[29]['children'] == {Direction.WEST, Direction.NORTH, "local"}
-      and tree2[29]['parent'] == Direction.SOUTH, f"{tree2[29]}")
-check("T-H1.2b r28 root children {WEST,NORTH}",
-      tree2[28]['children'] == {Direction.WEST, Direction.NORTH}
+check("T-H1.2a r29 children {EAST,local} parent WEST",
+      tree2[29]['children'] == {Direction.EAST, "local"}
+      and tree2[29]['parent'] == Direction.WEST, f"{tree2[29]}")
+check("T-H1.2b r28 root children {EAST,SOUTH}",
+      tree2[28]['children'] == {Direction.EAST, Direction.SOUTH}
       and tree2[28]['parent'] is None)
-for r in (25, 30, 24):
+for r in (25, 30):
     check(f"T-H1.2c r{r} source {{local}}",
           tree2[r]['children'] == {"local"}, f"{tree2[r]}")
+check("T-H1.2c r24 children {EAST,local} parent NORTH",
+      tree2[24]['children'] == {Direction.EAST, "local"}
+      and tree2[24]['parent'] == Direction.NORTH, f"{tree2[24]}")
 
 check("T-H1.3a duplicate task_id raises", True)
 try:
@@ -202,9 +205,9 @@ check("T-H1.8 four-chain: count=4 makespan 9c+7+3R=913",
       f"{arr[0][0] if arr else 'none'}")
 
 _, _, arr = reduce_run([24, 25, 29, 30], 28, n=W * c)
-check("T-H1.9 two-level 3-way: count=4 makespan 4c+2+3R=408",
+check("T-H1.9 two-level 2x2-way: count=4 makespan 4c+2+2R=406",
       len(arr) == 1 and arr[0][1].reduce_count == 4
-      and arr[0][0] == 4 * c + 2 + 3 * R,
+      and arr[0][0] == 4 * c + 2 + 2 * R,
       f"{arr[0][0] if arr else 'none'}")
 
 # T-H1.10 size-independent overhead
@@ -213,22 +216,15 @@ for nn, cc in [(160, 10), (16000, 1000)]:
     overhead = a[0][0] - (9 * cc + 7)
     check(f"T-H1.10 overhead = 3R for n={nn} (c={cc})",
           overhead == 3 * R, f"{overhead}")
-# 4-child merge costs 2R vs 2-child R: compare T-H1.9 (3R total: 2R+R)
-# vs a contrived root with 4 children directly.
-env4 = simpy.Environment()
-noc4 = make_noc(env4)
-# 4 sources that all reach root r28 from distinct directions is impossible on
-# a mesh corner; instead verify the log2 staging via the 3-way point:
-# T-H1.9 uses one 3-way (2R) + one 2-way (R) = 3R total vs a pure binary
-# 4-chain which uses three 2-way merges = 3R total. Assert the 3-way point
-# alone contributed 2R by checking makespan difference against a 2-source
-# variant on the same topology.
-_, _, a2 = reduce_run([25, 29], 28, n=W * c)  # r29 2-way (R), root k=1 (0)
+# T-H1.9 uses two parallel 2-way merges (R each) at r24/r29 plus a 2-way
+# merge (R) at the root. Compare against a 2-source variant on the same
+# topology to isolate the first-level merge cost.
+_, _, a2 = reduce_run([25, 29], 28, n=W * c)  # root 2-way (R) only
 check("T-H1.10b 2-way tree (25,29)->28 makespan 4c+2+R=404",
       a2[0][0] == 4 * c + 2 + R, f"{a2[0][0]}")
 _, _, a3 = reduce_run([25, 29, 24, 30], 28, n=W * c)  # T-H1.9 topology
-check("T-H1.10c adding operands r24,r30 adds exactly 2R (r29 R->2R, root 0->R)",
-      a3[0][0] - a2[0][0] == 2 * R, f"{a3[0][0] - a2[0][0]}")
+check("T-H1.10c adding operands r24,r30 adds exactly R (parallel first-level merges)",
+      a3[0][0] - a2[0][0] == R, f"{a3[0][0] - a2[0][0]}")
 
 _, _, arr = reduce_run([0, 28], 28, n=W * c)
 check("T-H1.11 source co-located with root: count=2 makespan 9c+7+R=909",
@@ -247,8 +243,8 @@ hp28 = abs(28 // 4 - 12 // 4) + abs(28 % 4 - 12 % 4)
 slow = max(hp3, hp28)
 expected_mid = (slow + 2) * c + slow + R
 _, noc_mid, arr = reduce_run([3, 28], 12, n=W * c)
-check("T-H1.13a root r12 has children {NORTH,EAST}",
-      noc_mid.reduce_trees[1][12]['children'] == {Direction.NORTH, Direction.EAST},
+check("T-H1.13a root r12 has children {NORTH,SOUTH}",
+      noc_mid.reduce_trees[1][12]['children'] == {Direction.NORTH, Direction.SOUTH},
       f"{noc_mid.reduce_trees[1][12]}")
 check("T-H1.13b middle-root makespan == (HP+2)c+HP+R",
       len(arr) == 1 and arr[0][1].reduce_count == 2
@@ -487,7 +483,7 @@ def ss():
             sarr.append(envs.now)
 envs.process(ss())
 so.put(Message(src=0, dst=3, index=1, data=ds(W * c), element_bytes=1,
-               dst_local_port=0))
+               dst_local_port=0, header_bytes=0))
 envs.run()
 # 0->3 HP=3: (3+2)*100+3 = 503
 check("T-H1.23a unicast 0->3 still 503 (no reduce interference)",

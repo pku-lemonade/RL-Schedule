@@ -31,7 +31,7 @@ def ds(*dims):
 
 
 def make_noc(env, width=16):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
 
@@ -96,14 +96,16 @@ def run_x3():
         timeline['read'] = env.now
         rdma.data_out[DataNocLocalId.GM_RDMA].put(Message(
             src=32, dst=0, index=1, data=ds(N), element_bytes=1,
-            dst_local_port=0, src_local_port=DataNocLocalId.GM_RDMA))
+            dst_local_port=0, src_local_port=DataNocLocalId.GM_RDMA,
+            header_bytes=0))
         yield pe_in.get()
         timeline['recv'] = env.now
         yield env.timeout(compute_t)
         timeline['compute'] = env.now
         pe_out.put(Message(
             src=0, dst=36, index=2, data=ds(N), element_bytes=1,
-            dst_local_port=DataNocLocalId.GM_WDMA_CH0, src_local_port=0))
+            dst_local_port=DataNocLocalId.GM_WDMA_CH0, src_local_port=0,
+            header_bytes=0))
 
     env.process(pipeline())
     env.run()
@@ -159,7 +161,8 @@ def run_x4():
         yield env.timeout(compute_t)
         pe_out.put(Message(
             src=r, dst=36, index=100 + r, data=ds(N), element_bytes=1,
-            dst_local_port=DataNocLocalId.GM_WDMA_CH0, src_local_port=0))
+            dst_local_port=DataNocLocalId.GM_WDMA_CH0, src_local_port=0,
+            header_bytes=0))
 
     for r in MCAST_PE_ROUTERS:
         env.process(pe_worker(r))
@@ -170,7 +173,7 @@ def run_x4():
     rdma.data_out[DataNocLocalId.GM_RDMA].put(Message(
         src=32, dst=28, index=1, data=ds(N), element_bytes=1,
         dst_local_port=0, src_local_port=DataNocLocalId.GM_RDMA,
-        trans_type=TransType.MULTICAST, dst_mask=mask))
+        trans_type=TransType.MULTICAST, dst_mask=mask, header_bytes=0))
     env.run()
     return env, noc, gmem, received
 

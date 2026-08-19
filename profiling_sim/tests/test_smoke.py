@@ -84,10 +84,10 @@ def check(name, cond, detail=""):
 
 
 # =========================================================
-print("=== Test 1: Config loading & 8x4 Mesh topology ===")
+print("=== Test 1: Config loading & 4x8 Mesh topology ===")
 cfg = load_arch("profiling_sim/configs/mesh_8x4.json")
 check("config is Mesh", cfg.noc.type == "Mesh")
-check("config is 8x4", cfg.noc.x == 8 and cfg.noc.y == 4)
+check("config is 4x8", cfg.noc.x == 4 and cfg.noc.y == 8)
 check("router type XY", cfg.noc.router.type == "XY")
 
 env = simpy.Environment()
@@ -96,14 +96,14 @@ check("32 routers", len(noc.routers) == 32, f"got {len(noc.routers)}")
 check("104 r2r links", len(noc.r2r_links) == 104, f"got {len(noc.r2r_links)}")
 
 r0 = noc.routers[0]
-# (row=0,col=0): EAST (row+1) and NORTH (col+1) exist; WEST/SOUTH do not
+# (x=0,y=0): EAST (x+1) and NORTH (y+1) exist; WEST/SOUTH do not
 check("router 0 has EAST out", r0.links[Direction.EAST]['out'] is not None)
 check("router 0 has NORTH out", r0.links[Direction.NORTH]['out'] is not None)
 check("router 0 has no WEST out", r0.links[Direction.WEST]['out'] is None)
 check("router 0 has no SOUTH out", r0.links[Direction.SOUTH]['out'] is None)
 
 r31 = noc.routers[31]
-# (row=7,col=3): WEST (row-1) and SOUTH (col-1) exist; EAST/NORTH do not
+# (x=3,y=7): WEST (x-1) and SOUTH (y-1) exist; EAST/NORTH do not
 check("router 31 has WEST out", r31.links[Direction.WEST]['out'] is not None)
 check("router 31 has SOUTH out", r31.links[Direction.SOUTH]['out'] is not None)
 check("router 31 has no EAST out", r31.links[Direction.EAST]['out'] is None)
@@ -119,16 +119,16 @@ for d in Direction:
 print("\n=== Test 2: XY routing correctness ===")
 check("0->31 first hop EAST", r0.calculate_next_router(31) == Direction.EAST)
 check("31->0 first hop WEST", r31.calculate_next_router(0) == Direction.WEST)
-check("0->3 goes NORTH (Y-dir)", r0.calculate_next_router(3) == Direction.NORTH)
-check("0->28 goes EAST (X-dir)", r0.calculate_next_router(28) == Direction.EAST)
+check("0->3 goes EAST (X-dir)", r0.calculate_next_router(3) == Direction.EAST)
+check("0->28 goes NORTH (Y-dir)", r0.calculate_next_router(28) == Direction.NORTH)
 check("13->18 goes EAST", r13.calculate_next_router(18) == Direction.EAST)
-check("13->12 goes SOUTH", r13.calculate_next_router(12) == Direction.SOUTH)
-check("13->9 goes WEST", r13.calculate_next_router(9) == Direction.WEST)
-check("13->14 goes NORTH", r13.calculate_next_router(14) == Direction.NORTH)
+check("13->12 goes WEST", r13.calculate_next_router(12) == Direction.WEST)
+check("13->9 goes SOUTH", r13.calculate_next_router(9) == Direction.SOUTH)
+check("13->14 goes EAST", r13.calculate_next_router(14) == Direction.EAST)
 
 for rid in range(32):
     x, y = r0.to_xy(rid)
-    check(f"to_x(to_xy({rid}))=={rid}", r0.to_x(x, y) == rid)
+    check(f"to_id(to_xy({rid}))=={rid}", r0.to_id(x, y) == rid)
 
 
 # =========================================================
@@ -195,7 +195,7 @@ check("PE3 ran 3 events (RECV,POOL,STORE)", len(c3) == 3, f"got {len(c3)}")
 
 link_events = [e for l in arch2.noc.r2r_links for e in l.events if e.end_time > 0]
 check("network carried packets", len(link_events) > 0, f"got {len(link_events)}")
-# 0->3: same row, col 0->3 = 3 NORTH hops
+# 0->3: same row (y=0), x 0->3 = 3 EAST hops
 check("path 0->3 used 3 links", len(link_events) == 3,
       f"got {len(link_events)}")
 

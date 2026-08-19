@@ -1,9 +1,11 @@
 import simpy
 import logging
 import contextlib
+import math
+from typing import Any, Dict, Optional, Tuple
 
 from .definitions import (
-    Direction, Message, ceil, Event, TransType, TransferMode,
+    Direction, Message, Event, TransType, TransferMode,
     UnboundLocalPortError, UnsupportedTransferMode, ProfilingSimError,
 )
 from .config import RouterConfig, LinkConfig
@@ -70,7 +72,7 @@ class Link:
             tx_bytes = payload_bytes + (msg.header_bytes if i == 0 else 0)
             if i == 0:
                 tx_bytes += msg.imm_bytes
-            tx_time = ceil(tx_bytes, var_bw)
+            tx_time = math.ceil(tx_bytes / var_bw)
             with self.busy.request(priority=-msg.priority) as req:
                 yield req
                 event_index = len(self.events)
@@ -102,12 +104,14 @@ class Link:
 
 
 class Router:
-    def __init__(self, env, config: RouterConfig, id: int, x: int, y: int,
-                 per_hop_time=1, start_up_time=1):
+    def __init__(self, env, config: RouterConfig, id: int, dim_x: int, dim_y: int,
+                 per_hop_time=1, start_up_time=1, local_inj_cap: int = 0):
         self.env = env
         self.vc = config.vc
         self.routing_algorithm = config.type
-        self.id, self.x, self.y = id, x, y
+        self.id = id
+        self.dim_x = dim_x
+        self.dim_y = dim_y
         self.per_hop_time = per_hop_time
         self.start_up_time = start_up_time
         self.chip_rank = 0
@@ -119,13 +123,16 @@ class Router:
             Direction.EAST:  {'in': None, 'out': None},
             Direction.WEST:  {'in': None, 'out': None},
         }
-        self.local_ports = {}
-        self.node_router = None
+        self.local_ports: Dict[int, Dict[str, Any]] = {}
+        self.node_router: Optional[Dict[int, int]] = None
         self.reduce_latency = config.reduce_latency
-        self.reduce_stores = {}
-        self.reduce_active = set()
-        self.reduce_trees = None
-        self.fifos = None
+        self.reduce_stores: Dict[int, Any] = {}
+        self.reduce_active: set = set()
+        self.reduce_trees: Optional[Dict[int, Any]] = None
+        self.fifos: Optional[Dict[Tuple[int, int], Any]] = None
+        cap = local_inj_cap if local_inj_cap and local_inj_cap > 0 else 10 ** 6
+        self.local_inj_cap = cap
+        self.local_inj = simpy.Resource(env, capacity=cap)
         self.env.process(self.run())
 
     def bind_link(self, direction, link_in, link_out):
@@ -171,7 +178,7 @@ class Router:
         if msg.trans_type in (TransType.MULTICAST, TransType.BROADCAST):
             mask = msg.dst_mask
             if msg.trans_type == TransType.BROADCAST and not mask:
-                mask = (1 << (self.x * self.y)) - 1
+                mask = (1 << (self.dim_x * self.dim_y)) - 1
             if mask:
                 self.route_multicast(msg, mask)
             else:
@@ -195,7 +202,7 @@ class Router:
         do_sync = bool(msg.sync) and not msg.is_control
 
         if single and from_local:
-            if 0 <= msg.src < self.x * self.y and 0 <= msg.dst < self.x * self.y:
+            if 0 <= msg.src < self.dim_x * self.dim_y and 0 <= msg.dst < self.dim_x * self.dim_y:
                 raise UnsupportedTransferMode(
                     "single-side transfer between two PEs is unsupported")
             if target != self.id:
@@ -217,33 +224,61 @@ class Router:
                 if overhead:
                     yield self.env.timeout(overhead)
 
-        if target == self.id:
-            delivery_port = (self.egress_table[msg.dst_rank][1]
-                             if cross else msg.dst_local_port)
-            yield self.env.process(self.route_local(msg, delivery_port))
-            yield self.env.process(self._fifo_return(msg))
-            if cross:
-                return
-            if single:
-                src_router = self.resolve_router(msg.src)
-                if src_router != self.id:
-                    back_dir = self.calculate_next_router(src_router)
-                    back = self.links[back_dir]['out']
-                    if back is not None:
-                        back.put(self._control_msg(msg, msg.src, msg.dst,
-                                                   req=False))
-            if do_sync:
-                src_router = self.resolve_router(msg.src)
-                if src_router != self.id:
-                    acq_dir = self.calculate_next_router(src_router)
-                    acq_out = self.links[acq_dir]['out']
-                    if acq_out is not None:
-                        acq_out.put(self._sync_msg(msg, msg.src, msg.dst,
-                                                   to_dst=False))
-        else:
-            yield self.env.timeout(self.per_hop_time)
-            next_dir = self.calculate_next_router(target)
-            yield self.env.process(self.route(msg, next_dir))
+        next_dir = None
+        if target != self.id:
+            if msg.trans_type == TransType.FIXPATH and msg.fixed_path:
+                next_dir = self._fixed_path_next(msg)
+            else:
+                next_dir = self.calculate_next_router(target)
+
+        uses_local_bus = from_local or target == self.id
+        inj_cm = None
+        if uses_local_bus and not msg.is_control:
+            inj_cm = self.local_inj.request()
+            yield inj_cm
+        try:
+            if target == self.id:
+                delivery_port = (self.egress_table[msg.dst_rank][1]
+                                 if cross else msg.dst_local_port)
+                yield self.env.process(self.route_local(msg, delivery_port))
+                yield self.env.process(self._fifo_return(msg))
+                if cross:
+                    return
+                if single:
+                    src_router = self.resolve_router(msg.src)
+                    if src_router != self.id:
+                        back_dir = self.calculate_next_router(src_router)
+                        back = self.links[back_dir]['out']
+                        if back is not None:
+                            back.put(self._control_msg(msg, msg.src, msg.dst,
+                                                       req=False))
+                if do_sync:
+                    src_router = self.resolve_router(msg.src)
+                    if src_router != self.id:
+                        acq_dir = self.calculate_next_router(src_router)
+                        acq_out = self.links[acq_dir]['out']
+                        if acq_out is not None:
+                            acq_out.put(self._sync_msg(msg, msg.src, msg.dst,
+                                                       to_dst=False))
+            else:
+                yield self.env.timeout(self.per_hop_time)
+                yield self.env.process(self.route(msg, next_dir))
+        finally:
+            if inj_cm is not None:
+                self.local_inj.release(inj_cm)
+
+    def _fixed_path_next(self, msg):
+        path = msg.fixed_path
+        try:
+            idx = path.index(self.id)
+        except ValueError as exc:
+            raise ProfilingSimError(
+                f"router {self.id} not on FIXPATH {path}") from exc
+        if idx + 1 >= len(path):
+            raise ProfilingSimError(
+                f"FIXPATH {path} has no next hop after router {self.id}")
+        nxt = path[idx + 1]
+        return self.calculate_next_router(nxt)
 
     @staticmethod
     def _control_msg(msg, dst, src, req: bool):
@@ -306,7 +341,7 @@ class Router:
     def route_multicast(self, msg, mask=None):
         if mask is None:
             mask = msg.dst_mask
-        mask = mask & ((1 << (self.x * self.y)) - 1)
+        mask = mask & ((1 << (self.dim_x * self.dim_y)) - 1)
         if not mask:
             logger.warning("router %s received multicast with empty mask",
                            self.id)
@@ -340,7 +375,7 @@ class Router:
         branches = []
         rx, ry = self.to_xy(self.id)
         east = west = north = south = 0
-        for rid in range(self.x * self.y):
+        for rid in range(self.dim_x * self.dim_y):
             if not (mask & (1 << rid)):
                 continue
             tx, ty = self.to_xy(rid)
@@ -363,14 +398,14 @@ class Router:
         return branches
 
     def _neighbor(self, direction):
-        rx, ry = self.to_xy(self.id)
+        x, y = self.to_xy(self.id)
         if direction == Direction.EAST:
-            return self.to_x(rx + 1, ry)
+            return self.to_id(x + 1, y)
         if direction == Direction.WEST:
-            return self.to_x(rx - 1, ry)
+            return self.to_id(x - 1, y)
         if direction == Direction.NORTH:
-            return self.to_x(rx, ry + 1)
-        return self.to_x(rx, ry - 1)
+            return self.to_id(x, y + 1)
+        return self.to_id(x, y - 1)
 
     def _handle_reduce(self, msg):
         task_id = msg.task_id
@@ -390,6 +425,7 @@ class Router:
             self.env.process(self._reduce_run(task_id))
 
     def _reduce_run(self, task_id):
+        assert self.reduce_trees is not None
         node = self.reduce_trees[task_id][self.id]
         children = node['children']
         k = len(children)
@@ -411,9 +447,12 @@ class Router:
             merged_value = max(m.value for m in operands)
         else:
             merged_value = operands[0].value
+        is_last = node['is_root']
+        ins_mode = 3 if is_last else 2
         merged = operands[0].model_copy(update={
             'reduce_count': sum(m.reduce_count for m in operands),
-            'reduce_is_last': node['is_root'],
+            'reduce_is_last': is_last,
+            'ins_sync_mode': ins_mode,
             'value': merged_value,
         })
         if node['is_root']:
@@ -452,31 +491,32 @@ class Router:
         self.env.process(self.routing(msg, from_local, in_port))
 
     def calculate_next_router(self, target_id):
-        now_x, now_y = self.to_xy(self.id)
-        tar_x, tar_y = self.to_xy(target_id)
+        x, y = self.to_xy(self.id)
+        tx, ty = self.to_xy(target_id)
 
-        if now_x != tar_x:
-            if tar_x > now_x:
+        if x != tx:
+            if tx > x:
                 return Direction.EAST
             else:
                 return Direction.WEST
-        if now_y != tar_y:
-            if tar_y > now_y:
+        if y != ty:
+            if ty > y:
                 return Direction.NORTH
             else:
                 return Direction.SOUTH
         return Direction.EAST
 
-    def to_x(self, x, y):
-        return x * self.y + y
+    def to_id(self, x, y):
+        return y * self.dim_x + x
 
-    def to_xy(self, id):
-        return id // self.y, id % self.y
+    def to_xy(self, rid):
+        return rid % self.dim_x, rid // self.dim_x
 
 
 class NoC:
     def __init__(self, env, config, deterministic: bool = False, rank: int = 0):
         self.env = env
+        self.config = config
         self.x = config.x
         self.y = config.y
         self.rank = rank
@@ -492,10 +532,12 @@ class NoC:
         self.fifos = {}
 
     def build(self):
+        concentrated = set(getattr(self.config, 'concentrated_routers', []) or [])
+        lic = self.router_config.local_injection_capacity
         for rid in range(self.x * self.y):
-            r = Router(self.env, self.router_config, rid, self.x, self.y)
-            r.x = self.x
-            r.y = self.y
+            cap = lic if (lic > 0 and rid in concentrated) else 0
+            r = Router(self.env, self.router_config, rid, self.x, self.y,
+                       local_inj_cap=cap)
             r.chip_rank = self.rank
             r.egress_table = self.egress
             r.node_router = self.node_router
@@ -503,15 +545,14 @@ class NoC:
             r.fifos = self.fifos
             self.routers.append(r)
 
-        for row in range(self.x):
-            for col in range(self.y):
-                rid = row * self.y + col
-                if row < self.x - 1:
-                    east_id = (row + 1) * self.y + col
-                    self._connect(rid, Direction.EAST, east_id, Direction.WEST)
-                if col > 0:
-                    south_id = row * self.y + (col - 1)
-                    self._connect(rid, Direction.SOUTH, south_id, Direction.NORTH)
+        for y in range(self.y):
+            for x in range(self.x):
+                rid = y * self.x + x
+                if x < self.x - 1:
+                    self._connect(rid, Direction.EAST, rid + 1, Direction.WEST)
+                if y < self.y - 1:
+                    self._connect(rid, Direction.NORTH,
+                                  rid + self.x, Direction.SOUTH)
 
         return self
 
@@ -527,7 +568,7 @@ class NoC:
         self.routers[peer_id].bind_link(dir_b, l2, l1)
         self.r2r_links.extend([l1, l2])
 
-    def attach_local(self, router_id: int, port: int, node_id: int = None):
+    def attach_local(self, router_id: int, port: int, node_id: Optional[int] = None):
         if node_id is None:
             node_id = router_id
         if node_id >= 0:

@@ -28,7 +28,7 @@ def ds(*dims):
 
 
 def make_noc(env, width=16):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
 

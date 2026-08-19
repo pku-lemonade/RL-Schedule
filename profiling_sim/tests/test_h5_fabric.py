@@ -43,7 +43,7 @@ class NullMapper:
 
 
 def make_noc(env, width=16):
-    return NoC(env, NoCConfig(x=8, y=4), deterministic=True).build()
+    return NoC(env, NoCConfig(x=4, y=8), deterministic=True).build()
 
 
 def base_cfg(adalink_latency=0, shadow=None):
@@ -260,7 +260,7 @@ def e2e(op=AdaLinkOp.WRITE, imm=0, link_latency=5, atomic_latency=4,
     inject(env, fab.chips[0],
            Message(src=0, dst=dst, index=1, data=ds(16), dst_rank=dst_rank,
                    dst_local_port=9, adalink_op=int(op), imm=imm,
-                   is_aiu=is_aiu))
+                   is_aiu=is_aiu, header_bytes=0))
     env.run(until=2000)
     arr = probe.received[0][0] if probe.received else None
     return arr, fab, probe

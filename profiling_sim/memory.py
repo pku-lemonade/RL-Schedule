@@ -1,9 +1,10 @@
 """GM / DDR memory nodes with per-engine channels and aggregate bandwidth."""
+import math
 from typing import Dict, List, Optional
 
 import simpy
 
-from .definitions import Message, DimSlice, ceil, TransType, TransferMode
+from .definitions import Message, DimSlice, TransType, TransferMode
 from .config import MemoryConfig, ShadowConfig
 from .nodes import (
     NoCNode, NodeType, DataNocLocalId, attach_nodes,
@@ -67,7 +68,8 @@ class DMANode(NoCNode):
                  channels: int = 1, is_read: bool = True,
                  aiu_port: Optional[int] = None,
                  aiu_sram_size: int = 256 * 1024,
-                 shadow_cfg: Optional[ShadowConfig] = None):
+                 shadow_cfg: Optional[ShadowConfig] = None,
+                 dispatch_interval: int = 0):
         super().__init__(env, node_id, nt, router_id, ports, noc)
         if aiu_port is None:
             aiu_port = _aiu_port_for(nt)
@@ -82,6 +84,8 @@ class DMANode(NoCNode):
         self.channel_store = simpy.Store(env, capacity=channels)
         for i in range(channels):
             self.channel_store.put(i)
+        self.dispatch_interval = dispatch_interval
+        self.dispatch = simpy.Resource(env, capacity=1)
         self.aiu_port = aiu_port
         self.aiu_sram_size = aiu_sram_size
         self.aiu_used = 0
@@ -159,12 +163,16 @@ class DMANode(NoCNode):
 
     def transfer(self, n_bytes: int, addr: int = 0, value: int = 0,
                  write_sum: int = 0):
+        if self.dispatch_interval:
+            with self.dispatch.request() as dreq:
+                yield dreq
+                yield self.env.timeout(self.dispatch_interval)
         ch = yield self.channel_store.get()
         start = self.env.now
         if not self.is_read:
             self.memory.allocate(n_bytes)
             self.memory.write(addr, value, write_sum)
-        engine_time = (ceil(n_bytes, self.effective_width)
+        engine_time = (math.ceil(n_bytes / self.effective_width)
                        if self.effective_width > 0 else 0)
         lane = self.memory.lane_resource(self.effective_width)
         pipeline = self._mdma_pipelines.get(ch)
@@ -177,7 +185,7 @@ class DMANode(NoCNode):
                 yield req
                 yield self.env.timeout(engine_time)
         finally:
-            if slot is not None:
+            if slot is not None and pipeline is not None:
                 yield self.env.process(pipeline.release(slot))
             yield self.channel_store.put(ch)
         self.memory.events.append((self.id, start, self.env.now, n_bytes))
@@ -225,7 +233,8 @@ def build_memory_system(env, noc, mcfg: MemoryConfig, clock,
             env, gid, nt, router_id, ports, noc,
             memory=memory, engine_width=width, channels=channels,
             is_read=is_read, aiu_port=_aiu_port_for(nt),
-            aiu_sram_size=mcfg.aiu_sram_size, shadow_cfg=shadow_cfg)
+            aiu_sram_size=mcfg.aiu_sram_size, shadow_cfg=shadow_cfg,
+            dispatch_interval=mcfg.dma.dispatch_interval)
 
     from .nodes import (
         GM_RDMA_ROUTERS, GM_WDMA_ROUTERS, DDR_RDMA_ROUTERS, DDR_WDMA_ROUTERS,

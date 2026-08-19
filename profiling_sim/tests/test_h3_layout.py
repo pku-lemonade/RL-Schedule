@@ -41,7 +41,7 @@ def ds(n):
 
 
 def make_noc(env, width=W, delay=0):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=delay))
     return NoC(env, cfg, deterministic=True).build()
 
@@ -325,7 +325,8 @@ def sink24():
 
 
 env24.process(sink24())
-n2r.put(Message(src=0, dst=3, index=1, data=ds(1600), dst_local_port=0))
+n2r.put(Message(src=0, dst=3, index=1, data=ds(1600), dst_local_port=0,
+                header_bytes=0))
 env24.run()
 mk24 = arr24[-1][0] if arr24 else -1
 HP3 = hops(0, 3)

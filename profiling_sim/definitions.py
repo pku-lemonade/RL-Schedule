@@ -117,11 +117,13 @@ class Message(BaseModel):
     element_bytes: int = 1
     src_local_port: int = 0
     dst_local_port: int = 0
-    header_bytes: int = 0
+    header_bytes: int = 4
     trans_type: int = TransType.SINGLECAST
     dst_mask: int = 0
     transfer_mode: int = TransferMode.DUAL_SIDE
     sync: bool = False
+    ins_sync_mode: int = 0
+    fixed_path: Optional[List[int]] = None
     addr: int = 0
     value: int = 0
     write_sum: int = 0
@@ -153,6 +155,13 @@ class Message(BaseModel):
     def _check_imm(cls, v: int) -> int:
         if v < 0:
             raise ValueError(f"imm {v} must be >= 0")
+        return v
+
+    @field_validator('ins_sync_mode')
+    @classmethod
+    def _check_sync_mode(cls, v: int) -> int:
+        if v not in (0, 1, 2, 3):
+            raise ValueError(f"ins_sync_mode {v} not in (0,1,2,3)")
         return v
 
     @property
@@ -188,10 +197,14 @@ class Message(BaseModel):
 
     @model_validator(mode='after')
     def _check_layout_trans_type(self) -> "Message":
-        if self.layout is not None and self.trans_type != TransType.SINGLECAST:
+        if self.layout is not None and self.trans_type not in (
+                TransType.SINGLECAST, TransType.FIXPATH):
             raise ValueError(
-                f"layout is only valid for SINGLECAST, got trans_type="
-                f"{self.trans_type}")
+                f"layout is only valid for SINGLECAST/FIXPATH, got "
+                f"trans_type={self.trans_type}")
+        if self.fixed_path is not None and self.trans_type != TransType.FIXPATH:
+            raise ValueError(
+                "fixed_path is only valid for FIXPATH trans_type")
         return self
 
     def __lt__(self, other: "Message") -> bool:

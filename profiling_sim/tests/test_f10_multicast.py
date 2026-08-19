@@ -26,7 +26,7 @@ def ds(*dims):
 
 
 def make_noc(env, width=16):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
 
@@ -61,7 +61,7 @@ def multicast(env, noc, src_router, mask, port=0, n=16, width=16,
         src=1000 + src_router, dst=src_router, index=1,
         data=ds(n), element_bytes=element_bytes,
         dst_local_port=dst_port if dst_port is not None else port,
-        trans_type=trans, dst_mask=mask))
+        trans_type=trans, dst_mask=mask, header_bytes=0))
     env.run()
     return arrivals
 
@@ -114,17 +114,17 @@ check("T10.5 all 32 routers receive", got == list(range(32)), f"{len(got)}")
 check("T10.5 exactly 32 deliveries (no duplicates)", len(arr) == 32,
       f"{len(arr)}")
 
-# T10.6 shared link one copy, parallel branches after fork {19,28} from 0
+# T10.6 shared link one copy, parallel branches after fork {19,21} from 0
+# X-first routing: both go EAST to r1, then r19 goes EAST, r21 goes NORTH
 env = simpy.Environment(); noc = make_noc(env)
-arr = multicast(env, noc, 0, (1 << 19) | (1 << 28), n=16)
+arr = multicast(env, noc, 0, (1 << 19) | (1 << 21), n=16)
 got = sorted(set(r for r, _, _, _ in arr))
-check("T10.6 both targets received", got == [19, 28], f"{got}")
+check("T10.6 both targets received", got == [19, 21], f"{got}")
 lm = link_map(noc)
-check("T10.6 shared prefix link 0->4 one copy",
-      len(lm[(0, 4)].events) == 1, f"{len(lm[(0,4)].events)}")
-# at router 16 (4,0): east to 20 (toward 28), north to 17 (toward 19)
-e_branch = lm[(16, 20)].events
-n_branch = lm[(16, 17)].events
+check("T10.6 shared prefix link 0->1 one copy",
+      len(lm[(0, 1)].events) == 1, f"{len(lm[(0,1)].events)}")
+e_branch = lm[(1, 2)].events
+n_branch = lm[(1, 5)].events
 check("T10.6 one east branch copy", len(e_branch) == 1)
 check("T10.6 one north branch copy", len(n_branch) == 1)
 check("T10.6 branches start at same time (parallel)",

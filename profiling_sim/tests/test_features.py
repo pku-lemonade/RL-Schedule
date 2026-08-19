@@ -91,7 +91,7 @@ def make_cfg(nmc_channels=2, element_bytes=1, link_width=16):
             element_bytes=element_bytes,
         ),
         noc=NoCConfig(
-            x=8, y=4,
+            x=4, y=8,
             link=type('L', (), {'width': link_width, 'delay': 0})(),
         ),
     )
@@ -168,8 +168,11 @@ arch2.execute()
 link_evts_2 = [e for l in arch2.noc.r2r_links for e in l.events if e.end_time > 0]
 total_lat_2 = sum(e.end_time - e.start_time for e in link_evts_2)
 
-check("element_bytes=2 doubles total link latency",
-      total_lat_2 == 2 * total_lat_1,
+check("element_bytes=2 increases total link latency",
+      total_lat_2 > total_lat_1,
+      f"1B={total_lat_1}, 2B={total_lat_2}")
+check("element_bytes=2 payload latency doubles (header fixed)",
+      total_lat_2 - len(link_evts_2) == 2 * (total_lat_1 - len(link_evts_1)),
       f"1B={total_lat_1}, 2B={total_lat_2}")
 check("data_size in events reflects element_bytes",
       link_evts_2[0].data_size == 2 * link_evts_1[0].data_size,
@@ -243,7 +246,7 @@ cfg1ch = ArchConfig(
         lsu=LSUConfig(),
         nmc=NMCConfig(channels=1, start_up_time=1),
     ),
-    noc=NoCConfig(x=8, y=4),
+    noc=NoCConfig(x=4, y=8),
 )
 dfg_s = DFG()
 dfg_s.add_node(1, OperatorType.LOAD_FEAT, 0, input_size=ds(1, 4, 4, 4))
@@ -311,7 +314,7 @@ check("link width=16 bytes/cycle", cfg.noc.link.width == 16)
 check("SPM size=19MiB (3+16)",
       cfg.core.spm.size == 3*1024*1024 + 16*1024*1024,
       f"got {cfg.core.spm.size}")
-check("Mesh is 8x4", cfg.noc.x == 8 and cfg.noc.y == 4)
+check("Mesh is 4x8", cfg.noc.x == 4 and cfg.noc.y == 8)
 check("router is XY", cfg.noc.router.type == "XY")
 # 16 B/cycle at 1125 MHz = 18 GB/s
 bw_gbs = 16 * cfg.clock.aci_mhz * 1e6 / 1e9

@@ -26,7 +26,7 @@ def ds(*dims):
 
 
 def make_noc(env, width=16):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
 
@@ -209,8 +209,8 @@ env.process(sink())
 out.put(Message(src=0, dst=36, index=1, data=ds(160), element_bytes=1,
                 dst_local_port=10, trans_type=TransType.FIXPATH))
 env.run()
-expected_fp = (HP + 2) * 10 + HP
-check("T9.11 FixPath deterministic == (hops+2)*10+hops",
+expected_fp = (HP + 2) * math.ceil((160 + 4) / 16) + HP
+check("T9.11 FixPath deterministic == (hops+2)*ceil((160+4)/w)+hops",
       arr[0] == expected_fp, f"{arr[0]} vs {expected_fp}")
 
 print(f"\nFeature 9: {passed} passed, {failed} failed")

@@ -28,7 +28,7 @@ def ds(*dims):
 
 
 def make_noc(env, width=16):
-    cfg = NoCConfig(x=8, y=4, router=RouterConfig(),
+    cfg = NoCConfig(x=4, y=8, router=RouterConfig(),
                     link=LinkConfig(width=width, delay=0))
     return NoC(env, cfg, deterministic=True).build()
 
@@ -55,7 +55,7 @@ def unicast_sync(src, dst, sr, dr, n=1600, sync=True, dport=0, sport=0):
     _, dst_recv = endpoint(env, noc, dr, dst, port=dport)
     src_out.put(Message(src=src, dst=dst, index=1, data=ds(n),
                         element_bytes=1, dst_local_port=dport,
-                        src_local_port=sport, sync=sync))
+                        src_local_port=sport, sync=sync, header_bytes=0))
     env.run()
     data_dst = [t for t, m in dst_recv if not m.is_control]
     acq = [t for t, m in src_recv if m.is_control and m.sync]
