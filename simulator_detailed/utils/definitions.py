@@ -51,10 +51,9 @@ class FlitType(IntEnum):
 
 class TransType(IntEnum):
     """Transmission type for a message."""
-    SINGLECAST = 0  # Normal unicast to one destination
-    FIXPATH    = 1  # Manually specified fixed path (for routed collectives)
-    MULTICAST  = 2  # Multicast to a subset of destinations (in-router fan-out)
-    BROADCAST  = 3  # Broadcast to all PEs (multicast with full mask)
+    SINGLECAST = 0  # Normal unicast to one destination (XY routing)
+    MULTICAST  = 1  # Multicast to a subset of destinations (in-router fan-out)
+    BROADCAST  = 2  # Broadcast to all PEs (multicast with full mask)
 
 
 PORT_PE           = 0   # local port: PE NMC
@@ -178,7 +177,6 @@ class Message(BaseModel):
     src_local_port: int = PORT_PE     # source local port on source router
     dst_local_port: int = PORT_PE     # destination local port on destination router
     trans_type: TransType = TransType.SINGLECAST  # transmission type
-    fixed_path: Optional[List[int]] = None        # fixed router path for FIXPATH mode
     is_broadcast: bool = False        # whether this is a broadcast message
     broadcast_dst_mask: int = 0       # destination bitmask for broadcast/multicast
     reduce_op: int = -1               # reduce operation (-1 = none)
