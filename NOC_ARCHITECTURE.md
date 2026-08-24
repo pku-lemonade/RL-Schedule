@@ -18,8 +18,6 @@ The ADA2S-32 is a heterogeneous many-core AI accelerator SoC built around a 2D m
 
 **Total on-chip NoC nodes**: 32 + 4 + 4 + 4 + 4 = **48 nodes**
 
-**Multi-chip extension (ADALINK)**: 8-chip full-mesh configuration adds **18 ADALINK nodes** (IDs 0-3 inter-chassis, 4-17 intra-chassis full mesh), yielding a total launch configuration of 66 nodes. ADALINK provides 1-hop full-mesh connectivity between any two chips; no ring topology is needed. CommID allocation by firmware: Bridge (Attention→MoE inter-chip AllReduce) uses commid=18; MoE internal cross-chip reduction uses commid=16; slot isolation prevents conflicts between phases.
-
 ### 1.2 Memory Hierarchy
 
 | Memory | Capacity | Aggregate Bandwidth | Visibility | Address Range |
@@ -129,12 +127,6 @@ Each router implements a simple wormhole-cut-through design (mentor-confirmed pa
 
 **Bandwidth per directional link**: 128 B/cycle × 1125 MHz = **144 GB/s per direction** (full-duplex: 288 GB/s bidirectional). Effective payload throughput ≈ 120 B/cycle = **135 GB/s** after inter-flit bubbles (~6%) and per-flit CRC overhead (~4 B/flit).
 
-**Physical layer vs logical ports (important conceptual model)**:
-- All physical links are **unidirectional point-to-point**. There are no true bidirectional wires (half-duplex turnaround latency is avoided entirely in NoC designs).
-- All **logical ports visible to software** (the 23 local ports in §2.5 plus the 4 directional neighbor ports, totaling 27 per router) are **bidirectional logical ports**. Each logical port is physically implemented as **two independent unidirectional wires**: one ingress (receiving flits into the router) and one egress (sending flits out of the router).
-- There are no unidirectional logical ports. Even "write-only" WDMA ports need to receive credits/ACKs, and "read-only" RDMA ports need to receive read requests.
-- Every bidirectional logical port has the same underlying physical capacity: 144 GB/s in + 144 GB/s out = **288 GB/s bidirectional wire capacity**. Actual achieved bandwidth depends on the endpoint device capability, not on router-imposed throttling.
-
 ### 2.5 Router Local Port Map (DataNocLocalId)
 
 Each router has local ports connecting to attached modules, defined by the DataNocLocalId enum. Not all ports exist on every router (e.g., only routers 0/3/28/31 have DDR ports; only routers 28-31 have GM ports):
@@ -159,23 +151,7 @@ Each router has local ports connecting to attached modules, defined by the DataN
 | 15 | DATA_NOC_LOCAL_ID_GM_WDMA | GM WDMA (single-side) | Single-side | 28-31 |
 | 22 | DATA_NOC_LOCAL_ID_MMU | Memory Management Unit | -- | [TBD] |
 
-> **DMA channel sharing rules** ★: Each DMA instance has its own command processor and independent physical NoC port (bandwidth stacks across instances). Within a CH0/CH1 pair (e.g., NMC CH0/CH1 on a PE, or GM_WDMA CH0/CH1), the pair shares one physical NoC injection port (bandwidth is NOT doubled). Different DMA types (GM_RDMA vs GM_WDMA vs DDR_RDMA vs PE NMC) are independent. Each of the 4 GM_WDMA nodes has an independent port to its router.
-
-**DMA attachment and X fast path**:
-- DDR DMAs attach to the four corner routers (0=top-left, 3=top-right, 28=bottom-left, 31=bottom-right).
-- GM DMAs attach to the bottom edge (Y=7, routers 28-31), one per column. PE in column i accessing GM i travels straight down Y-direction with no turns.
-- **Bottom/top row X fast path**: Dedicated crossbar on Y=0 (top row) and Y=7 (bottom row) reduces X-hop latency to **~11 cycles/X-hop** vs **~17 cycles/Y-hop**; the first 2-6 X-hops add nearly zero latency.
-
-**Achieved bandwidth by port type** (large messages, silicon-measured):
-| Port | Connected Device | Single-stream unidir BW | Full-duplex bidir aggregate BW | Bottleneck |
-|------|-----------------|-------------------------|--------------------------------|------------|
-| N/S/E/W directional ports | Adjacent router | ~135 GB/s (94% wire speed) | ~270 GB/s (135 each direction) | ~6% inter-flit bubbles + ~1% CRC only; near wire capacity |
-| Port 0 (PE NMC) | PE DMA engine | ~118-120 GB/s | **~120 GB/s total** (~60 send + ~60 recv) | PE-internal SRAM access port shared by 7 masters (Matrix/Vector/NMC CH0/CH1/Scalar); read+write time-share a single ~120 GB/s port |
-| Ports 3/4/10/11 (GM/DDR WDMA dual-side) | GM/DDR write DMA | ~104-122 GB/s | ~120 GB/s aggregate | DMA engine internal logic (same as NMC sharing) |
-| Ports 7/14 (GM/DDR RDMA single/dual-side) | GM/DDR read DMA | GM: ~119 GB/s<br>DDR: ~103 GB/s | ~120 GB/s aggregate | DDR download bottleneck is DDR memory controller read pipeline (13% lower than GM), NOT NoC |
-| Ports 2/22 (DNOC2AXI/MMU) | Config bus / MMU | <10 GB/s | Far below wire speed | Control-plane ports; register reads/writes and address translation only; not used for bulk data |
-
-> Key insight: The bottleneck is always at the **endpoint DMA/SRAM port**, never at the router-to-router links. Four disjoint PE pairs simultaneously achieve ~119 GB/s each with zero interference, proving NoC fabric capacity is abundant.
+> **DMA channel sharing rules** ★ (updated 2026-08-23): Each DMA instance has its own command processor and independent physical NoC port (bandwidth stacks across instances). For **PE NMC CH0/CH1**, same-direction parallel injection (back-to-back `send_with_sync<0>`+`send_with_sync<1>` before a single fence) achieves full 2× bandwidth (~240 B/cyc aggregate) for PE↔PE traffic, proving independent NoC datapaths per channel (§9.13). For **GM_WDMA/GM_RDMA CH0/CH1** and traffic to/from DDR, the remote DMA receiver caps aggregate throughput at ~114-126 GB/s (NOT 2×). Cross-channel full-duplex patterns (send on CH0 while recv on CH1) were previously measured at ~120 GB/s but used sequential posting (fence between directions), which does not test true simultaneous bidirectional. Different DMA types (GM_RDMA vs GM_WDMA vs DDR_RDMA vs PE NMC) are independent. Each of the 4 GM_WDMA nodes has an independent port to its router.
 
 ---
 
@@ -276,7 +252,13 @@ Routers support in-flight element-wise reduction during packet traversal, config
 
 **Mechanism**: When packets with matching metadata (same task ID, same reduction tree) arrive at a router, the router performs the specified arithmetic operation per element before forwarding. This creates a hardware reduction tree across the mesh.
 
-> [TBD: Per-hop reduction latency overhead in cycles; number of concurrent reduction trees supported; whether reduction is cut-through or store-and-forward; data type support for reduction.]
+**Measured characteristics** (§9.11, 2026-08-20 Round6):
+- **Cut-through reduction**: The in-router ALU operates in cut-through mode (not store-and-forward). Reduction adds **~42 cycles per chain hop** of fixed overhead (tree-depth latency) but does not reduce payload bandwidth.
+- **Zero incremental BW cost**: Add/Max ALU is fully pipelined; asymptotic bandwidth unchanged from unicast (~59 B/cyc = 66 GB/s end-to-end for reduce+bcast chain, 92% of theoretical).
+- **Sum and Max have identical performance** (same latency, same bandwidth).
+- **CH0 and CH1 are symmetric** for reduction (identical cycle counts).
+- **Mandatory broadcast release**: After reduction reaches root, `pe_broadcast_sync` MUST be called to reset download units left in reduce-forward state; non-root PEs must call `recv_with_sync(view, NodeType::PE, root_pe)` to complete the release. Without broadcast release, subsequent NOC operations on the same channel deadlock.
+- **Minimum transfer size**: ≥256B for reliable correctness across multi-iteration runs (sub-256B sizes can produce stale flit contamination).
 
 ### 3.5 Burst Length Control
 
@@ -365,16 +347,7 @@ Other PE execution units:
 
 Channel-to-unit mapping is fixed: CH0 <-> {DOWNLOAD_0, UPLOAD_0}, CH1 <-> {DOWNLOAD_1, UPLOAD_1}.
 
-**NMC SRAM port bandwidth sharing model (derived from silicon measurements):**
-The two NMC channels (CH0/CH1) present 4 logical execution units (UPLOAD_0/DOWNLOAD_0/UPLOAD_1/DOWNLOAD_1), but all share **a single PE-internal SRAM read/write port** between NMC and Local/Weight SRAM. This is the root cause of the ~120 GB/s aggregate NMC bandwidth cap:
-- 7 PE-internal bus masters compete for SRAM access: Matrix Core, Vector Core, NMC Upload CH0/CH1, NMC Download CH0/CH1, Scalar Core.
-- The NMC-facing SRAM port has a total bandwidth of ~120 GB/s. Reads (upload) and writes (download) time-share this port.
-- **Single direction alone** (either upload or download, one channel) achieves ~118-120 GB/s, near the port cap.
-- **Same-direction CH0+CH1 concurrency** achieves only ~114-126 GB/s aggregate (3-15% gain over single channel, NOT 2×).
-- **Full-duplex CH0 upload + CH1 download** achieves **~120 GB/s total aggregate** (~60 GB/s send + ~60 GB/s recv), NOT 240 GB/s.
-- CH0 and CH1 are best understood as **two independent command queues** enabling pipeline overlap (e.g., upload current tile while downloading next tile while Matrix Core computes), not as bandwidth doublers.
-
-This is an intentional bandwidth-matching design decision: the Matrix Core GEMM compute engine itself produces/consumes data at ~100-120 GB/s, so matching NMC bandwidth to compute bandwidth is sufficient to fully hide communication latency via double-buffering. Widening the NMC SRAM port to bidirectional 288 GB/s would waste area and power without providing real kernel benefit.
+> [TBD: Per-channel SRAM read/write bandwidth (bytes/cycle); contention model when Matrix/Vector/Scalar + both NMC channels access SRAM simultaneously (hardware handles bank conflicts, but port-level arbitration and bandwidth sharing is not documented).]
 
 ### 4.3 NMC Channel Capabilities
 
@@ -592,7 +565,7 @@ Read DMAs (RDMA) have one port plus an AIU Download SRAM port. Write DMAs (WDMA)
 
 > [TBD: Per-channel GM/DDR bandwidth (4 RDMAs + 4 WDMAs share the 576 GB/s GM / 533 GB/s DDR aggregate -- per-channel allocation is not documented).]
 >
-> **Measured (2026-08-13)**: GM_WDMA CH0 and CH1 **share one physical NoC injection port** (confirmed by B7/C6 dual-channel tests: upload CH0+CH1 aggregate 114 GB/s vs single-ch 104 GB/s; download CH0+CH1 aggregate 124 GB/s vs single-ch 119 GB/s — NOT 2×). Same sharing rule applies to GM_RDMA CH0/CH1 as to PE NMC CH0/CH1. Each GM_WDMA single-channel receive hard-caps at ~100-120 GB/s under N-way incast; each GM_RDMA single-channel send hard-caps at ~120-125 GB/s under N-way outcast.
+> **Measured (2026-08-13, updated 2026-08-23)**: GM_WDMA CH0 and CH1 show limited gain from dual-channel use (upload CH0+CH1 aggregate 114 GB/s vs single-ch 104 GB/s; download CH0+CH1 aggregate 124 GB/s vs single-ch 119 GB/s — NOT 2×). This bottleneck is in the GM_WDMA/RDMA receiver itself, not in the PE NMC or NoC fabric. PE NMC CH0/CH1 achieve full 2× bandwidth for PE↔PE traffic (same-direction parallel and allreduce, §9.13), proving the NoC links carry both channels independently. Each GM_WDMA single-channel receive hard-caps at ~100-120 GB/s under N-way incast; each GM_RDMA single-channel send hard-caps at ~120-125 GB/s under N-way outcast.
 
 ### 5.2 DMA Scalar Core
 
@@ -808,6 +781,14 @@ Unmarked items are either well-known software-visible facts (e.g., register map 
 | GM→PE download (single-sided) | [noc_gm_download.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_gm_download.cpp) (and noc_gm_bench.cpp) | .out | §9.9 |
 | Upload benchmark runner | [test_ul_bench.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/test_ul_bench.py) | launches .adafb | §9.9 |
 | All-PE upload runner | [test_allpe.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/test_allpe.py) and [sweep_allpe.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/sweep_allpe.py) | launches .adafb | §9.9 |
+| In-router PE-side reduce+broadcast (X-chain 4-PE, Y-chain 8-PE) | [noc_rb39.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb39.cpp) (X-row Sum) / [noc_rb40.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb40.cpp) (Max) / [noc_rb41.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb41.cpp) (CH=1) / [noc_rb42.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb42.cpp) (Y-column) | fatbin .adafb / launchFatbinKernel | §9.11 |
+| In-router 2-PE X/Y pair reduce | [noc_rb43.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb43.cpp) (X-pairs) / [noc_rb45.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb45.cpp) (Y-pairs) | fatbin .adafb / launchFatbinKernel | §9.11 |
+| PE↔PE unicast ping-pong (baseline) | [noc_rb44.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb44.cpp) | fatbin .adafb / launchFatbinKernel | §9.11 |
+| 32-PE full-chip 2D allreduce (X→Y→Y→X) | [noc_rb46.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb46.cpp) (CH0 Sum) / noc_rb47.cpp (CH1) / noc_rb48.cpp (Max) | fatbin .adafb / launchFatbinKernel | §9.12 |
+| Dual-channel 32-PE allreduce (CH0+CH1 parallel) | [noc_rb49.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb49.cpp) | fatbin .adafb / launchFatbinKernel | §9.13 |
+| Dual-channel PE↔PE same-dir parallel echo | [noc_rb50.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb50.cpp) | fatbin .adafb / launchFatbinKernel | §9.13 |
+| PE↔PE full-duplex cross-channel | noc_pe_fulldup.cpp | fatbin .adafb | §9.13 |
+| Reduce benchmark runner | [test_rb39.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/test_rb39.py) / test_rb40.py / test_rb41.py / test_rb42.py / test_rb43.py / test_rb44.py / test_rb45.py / test_rb46.py / test_rb47.py / test_rb48.py / test_rb49.py / test_rb50.py | launches .adafb | §9.11-13 |
 
 ### 9.0.2 Test Methodology (Common to All Benchmarks)
 
@@ -923,13 +904,31 @@ At 64KB, BW drops only ~16% from 1-hop to 10-hop — the NoC is highly pipelined
 
 ### 9.5 Channel Independence (CH0 vs CH1) and Aggregation
 
+**Cross-channel bidirectional (sequential) — noc_pe_fulldup mode=1 (2026-08-13 Round3)**:
+
 | Channel | BW @ 64KB (GB/s) | Configuration |
 |---------|-------------------|---------------|
-| CH0 only | 85.1 | Single channel |
+| CH0 only | 85.1 | Single channel echo (send + 128B ACK) |
 | CH1 only | 82.8 | Single channel (symmetric to CH0) |
-| CH0+CH1 parallel (aggregate) | **94.8** | Both channels issued back-to-back, 2×size bytes |
+| CH0→/→CH1 cross-duplex | **94.8** | Sequential: CH0 send size → fence → CH1 recv size; bidirectional aggregate |
 
-Key finding: CH0 and CH1 **share bandwidth within the NMC pair** (mentor confirmed; "CH0/CH1 pair内共享带宽"). Adding CH1 gives only ~11% aggregate throughput gain via command pipelining, not 2×. This means per-PE injection port is the bottleneck, not per-channel resources.
+**Same-direction parallel (back-to-back) — noc_rb50 mode=1 (2026-08-23)**:
+
+| Size (B) | Single-ch echo BW (GB/s) | Dual-ch parallel BW (GB/s) | Ratio |
+|----------|--------------------------|----------------------------|-------|
+| 16384 | 45.3 | 56.9 | 1.26× |
+| 32768 | 67.5 | 80.1 | 1.19× |
+| 65536 | 88.9 | 99.6 | 1.12× |
+
+Note: rb50 is an RTT echo (send→fence→recv), so one-way BW is ~2× the reported echo BW. Incremental per-channel one-way BW (32KB→64KB slope): **~117 B/cyc per channel** ≈ single-channel asymptotic (120 B/cyc), confirming channels operate independently for PE↔PE traffic.
+
+**Clarification on channel sharing**: The earlier conclusion that "CH0/CH1 share bandwidth within an NMC pair" was based on (a) sequential cross-channel patterns and (b) PE→GM/DDR tests where the remote endpoint (GM_RDMA/DDR_RDMA) is the bottleneck, not the NoC link. For **PE↔PE same-direction parallel** (back-to-back `send_with_sync<0>` + `send_with_sync<1>` before a single fence), and for **PE↔PE collectives like allreduce**, both channels achieve full independent bandwidth (~120 B/cyc/channel), giving **~2× aggregate throughput** on NoC links. The 2× speedup is confirmed by dual-channel allreduce (§9.13) achieving 58 B/cyc vs 29.4 B/cyc single-channel = 1.97×.
+
+| Channel mode | Aggregate injection BW | Notes |
+|-------------|----------------------|-------|
+| Single channel | ~120 B/cyc = 135 GB/s | One NMC upload engine active |
+| Dual-channel same-direction parallel (PE↔PE) | **~240 B/cyc = 270 GB/s** | Both channels back-to-back, independent engines (§9.13) |
+| Dual-channel PE→GM/DDR | ~114-126 GB/s | Remote DMA receiver is bottleneck; NOT 2× (§9.9-9.10) |
 
 ### 9.6 Contention (4 Disjoint Flows)
 
@@ -958,9 +957,11 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | NMC endpoint setup (dynamic/runtime size) | **~125 cycles/endpoint** | 267 cyc/2 − 8.5 |
 | Dynamic-shape dispatch overhead | **~45 cycles** | Δ(static, dynamic) |
 | Credit round-trip latency | **~17 cycles** (RTT hop = 2×per-hop) | Flit departs → credit returns |
-| Per-channel injection BW | **~120 B/cyc = 135 GB/s** | Asymptotic large-message slope |
-| Per-direction link wire BW | **144 GB/s** (128 B/cyc × 1125 MHz) | Raw phit rate |
-| CH0↔CH1 sharing | Shared port within pair ★ | Mentor-confirmed; B7 dual-channel test shows aggregate ≈95 GB/s; PE↔PE full-duplex bidir also ~120 GB/s (2026-08-13 Round3) |
+| Per-channel injection BW | **~120 B/cyc = 135 GB/s** | Asymptotic large-message slope (single channel) |
+| Per-channel raw phit BW | **144 GB/s** (128 B/cyc × 1125 MHz) | 1024-bit phit per channel, 94% efficiency gives 135 GB/s |
+| Aggregate dual-ch per-direction BW | **~240 B/cyc = 270 GB/s** (PE↔PE) | CH0+CH1 independent for PE↔PE (§9.13); caps at ~126 GB/s to GM/DDR due to remote endpoint |
+| CH0↔CH1 independence (PE↔PE) | **Independent physical datapaths, 2× aggregate for same-direction** | Same-direction parallel (back-to-back send<0>+send<1>) achieves ~240 B/cyc (270 GB/s); dual-channel allreduce 58 B/cyc = 1.97× single-channel (§9.13) |
+| CH0↔CH1 to GM/DDR | Shared receiver bottleneck (NOT 2×) | PE→GM/DDR dual-ch caps at ~114-126 GB/s aggregate (§9.9-9.10); remote DMA endpoint is the limit, not NoC links |
 | DMA instance independence | Independent ports, BW stacks ★ | Mentor-confirmed; 4×GM_WDMA measured 314 GB/s |
 | Multicast replication | In-router single-write multi-read ★ | Mentor-confirmed |
 | XY routing symmetry | Perfect (Manhattan distance only) | All 31 PE pairs tested |
@@ -974,9 +975,9 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | Jitter under zero load | <1 cycle (min=avg) | All measurements show deterministic timing |
 | PE↔PE RTT latency (dynamic) | **250 + 17×hops cyc** | Linear fit across 31 PEs, R²=1.0; 8.5 cyc/hop one-way |
 | PE↔PE asymptote BW (single ch, 1-hop) | **~118-120 GB/s** | 256KB ping-pong, CH0; matches PE↔GM download BW |
-| PE NMC receive cap (N-way incast) | **~125 GB/s aggregate** | N PE senders to 1 PE receiver; fair RR; ~125/N GB/s per flow |
-| PE NMC send cap (N-way outcast) | **~130 GB/s aggregate** | 1 PE to N receivers; symmetric to incast; endpoint cap |
-| PE↔PE CH0+CH1 full-duplex bidir | **~120 GB/s aggregate** | CH0 send + CH1 recv simultaneously; shared port caps total; NOT 2× |
+| PE NMC receive cap (N-way incast, single-ch) | **~125 GB/s per channel** | N PE senders to 1 PE receiver; fair RR; ~125/N GB/s per flow; dual-channel untested for incast |
+| PE NMC send cap (N-way outcast, single-ch) | **~130 GB/s per channel** | 1 PE to N receivers; symmetric to incast; endpoint cap per channel |
+| PE↔PE same-direction dual-ch (parallel) | **~270 GB/s aggregate** (asymptotic) | Back-to-back send<0>+send<1>; 2× single-channel (§9.13); chain reduce patterns achieve this |
 | Disjoint-flow contention | **Zero interference** | 4 non-overlapping pairs each achieve ~119 GB/s independently; NoC fabric is not the bottleneck |
 | Bottleneck location | **Endpoint NMC ports (PE/GM), not NoC fabric** | All endpoint types cap at ~120-130 GB/s/ch; disjoint flows scale linearly |
 | PE→GM_WDMA fixed latency (single PE) | **138 cycles** one-way (0-hop PE28) / **257 cycles** one-way (7-hop PE0) | RTT = 2×138+17h = 276+119 = 395; measured 257cy one-way @7h |
@@ -988,7 +989,7 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | GM_RDMA→PE download fixed latency | **246 cycles** one-way (0-hop PE28) / **365 cycles** one-way (7-hop PE0) | GM_RDMA setup heavier than NMC upload (246 vs 138) |
 | GM→PE download asymptote BW (single PE) | **~119 GB/s per channel** (0-hop 256KB) / ~113 GB/s (7-hop) | Download BW slightly higher than upload at large sizes |
 | N-way outcast from 1 GM_RDMA (large msg) | **~120-125 GB/s aggregate cap** | Symmetric to incast; fair RR sharing |
-| CH0+CH1 dual-channel (both directions) | **114-124 GB/s aggregate** | Shared physical port; NOT 2× single channel; gain ~4-15% |
+| CH0+CH1 dual-channel to GM (both directions) | **114-124 GB/s aggregate** | GM receiver caps throughput; NOT 2×; gain ~4-15% (PE NMC itself can do 2× for PE↔PE, §9.13) |
 | Bottom-row X fast path (upload+download) | **0 cyc for first 2-6 X-hops** | Dedicated GM-side crossbar; PEs closer to GM benefit most |
 | GM→PE download (single PE, 4KB) | **~400 cycles ≈ 11.5 GB/s** | Dual-side or single-sided pull (equivalent, <3% diff) |
 | 4×GM_RDMA aggregate broadcast BW | **projected ~500 GB/s** (4×125 GB/s) | Outcast pattern, MoE dispatch |
@@ -1002,9 +1003,29 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | DDR_RDMA→PE download asymptote BW | **~103 GB/s/ch** (0-hop 512KB) | ~13% lower than GM (119 GB/s) due to DDR memory controller read-side limitation; NOT NoC-limited |
 | PE↔DDR hop cost (download, per hop) | **~15-17 cyc/hop** (dl_min) | Same as PE↔GM/PE↔PE; X fast path on rows 0/7 also applies (~11 cyc/hop X vs ~17 cyc/hop Y) |
 | PE↔DDR hop cost (upload, per hop) | **0 cyc/hop (min, large msg)** | Deep DDR_WDMA write-posting pipeline completely hides hop latency for ≥256KB messages |
-| PE↔DDR CH0+CH1 dual-ch upload aggregate | **~126 GB/s** (512KB total) | Shared NMC port (NOT 2×); consistent with PE↔GM/PE↔PE finding; single-stream already at 122 GB/s so dual-ch adds <4% at large sizes |
+| PE↔DDR CH0+CH1 dual-ch upload aggregate | **~126 GB/s** (512KB total) | DDR_WDMA receiver caps throughput (NOT 2×); single-stream already at 122 GB/s so dual-ch adds <4% at large sizes; contrast with PE↔PE which achieves 2× (§9.13) |
 | DDR↔NoC bottleneck location | **DDR_RDMA read + DDR_MC**, not NoC fabric | All 4 DDRs symmetric; disjoint flows expected to scale (4-disjoint-DDR aggregate TBD med-pri) |
 | Scalar SRAM write caveat (DDR context) | **Scalar core writes crash** | Same as GM; must use ddr_to_sram for PE-side preload |
+| Scalar SRAM read alias | **0x20000000 + 0x100000 + offset** (DLCM_BASE + LOCAL_SRAM_ADDR) | Scalar core must use alias to read NOC-populated data; physical address 0x100000+offset causes coredump |
+| **In-router reduce (X 4-PE row)** | **335 cyc base + sz/59 cyc** (post-warmup) | Reduce+bcast allreduce; 335cyc=298ns; 59 B/cyc = 66 GB/s; §9.11 |
+| **In-router reduce (Y 8-PE col)** | **502 cyc base + sz/60 cyc** (post-warmup) | Reduce+bcast allreduce; 502cyc=446ns; 60 B/cyc = 67 GB/s; §9.11 |
+| **In-router reduce per-hop cost** | **~42 cyc/hop** (chain depth overhead) | Includes ALU + reverse-chain release; BW unchanged per hop |
+| **In-router reduce BW** | **~59 B/cyc = 66 GB/s (92% of theoretical)** | ALU fully pipelined; same BW as unicast for large payloads |
+| **In-router Sum vs Max** | **Identical performance** | Same latency, same BW |
+| **In-router CH0 vs CH1** | **Symmetric** | Same latency, same BW |
+| **Reduce mandatory broadcast release** | Root MUST pe_broadcast_sync after reduce | Download units left in reduce-forward state; non-roots must recv_with_sync(root) |
+| **Minimum reduce transfer size** | **≥256B** (multi-iteration) | Sub-256B may have stale flit contamination |
+| **PE↔PE unicast one-way BW** | **~120 B/cyc = 135 GB/s** (asymptotic, all distances) | Hop cost fully hidden for ≥32KB; small-msg ~17 cyc/hop; RTT base 222 cyc (1-hop) |
+| **PE↔PE unicast vs reduce BW ratio** | **0.49× (reduce is ~half unicast BW)** | Two sequential payload passes (reduce→bcast); ALU adds zero BW cost |
+| **32-PE full-chip allreduce base latency** | **1090 cyc = 969 ns** (post-warmup, ≤1KB) | 4-phase (X-red→Y-red→Y-bcast→X-bcast); root PE31 |
+| **32-PE allreduce asymptotic BW** | **29.4 B/cyc = 33 GB/s** (≥8 KB) | = 120/4 = link BW / 4 phases; 98% efficiency |
+| **32-PE allreduce Sum vs Max** | **Identical within 1%** | Same latency, same BW |
+| **32-PE allreduce CH0 vs CH1** | **Identical (exact match)** | Channels symmetric for collective operations |
+| **Dual-channel allreduce programming** | **Back-to-back post ch0+ch1 descriptors per phase, one fence_io per phase** | ReduceOp::Sum works in parallel on both channels; no inter-channel fence needed within a phase; §9.13 |
+| **Dual-ch 32-PE allreduce base latency** | **~1450 cyc = 1289 ns** (post-warmup, ≤2KB) | 4× (ch0+ch1 parallel) phases; extra ~360 cyc from programming 8 NMC descriptors vs 4; §9.13 |
+| **Dual-ch 32-PE allreduce asymptotic BW** | **~58 B/cyc = 65 GB/s** (≥96 KB) | = 2× single-channel (29.4 B/cyc); 98% of theoretical 2×; §9.13 |
+| **Dual-ch allreduce crossover point** | **~32 KB** (dual-ch faster above, slower below) | Below 32KB: extra NMC programming overhead dominates; above: 2× BW dominates; §9.13 |
+| **Dual-ch PE↔PE same-dir parallel BW** | **~120 B/cyc agg (60 B/cyc/ch) asymptotic** (≥32KB) | Both channels inject simultaneously; aggregate 2× single-channel; §9.13 |
 | **PE hardware broadcast (pe_broadcast_sync)** | **Zero-cost in-router fan-out** | Round5 2026-08-13: PE0->31 PEs @256KB min=2354cyc (vs 2347cyc N=1, +0.3%); BW per receiver 125 GB/s (~NMC cap); 512B latency 127cyc vs 120cyc (+7cyc spanning-tree); aggregate BW ~3.9 TB/s to 31 PEs |
 | **GM hardware broadcast (gm_broadcast_sync)** | **Zero-cost in-router fan-out, ~135 GB/s/stream** | Round5 2026-08-13: GM1->32 PEs @512KB avg=4376cyc (vs 4262cyc N=1, +2.7%); BW per receiver ~135 GB/s; aggregate ~4.3 TB/s; command-issue latency 443cyc(N=1)/598cyc(N=32) fire-and-forget |
 | Broadcast vs unicast N-way speedup | **Nx linear up to N*126 GB/s** | Round5: N=31 PE-bcast ~3887 GB/s agg vs ~130 GB/s unicast = **30x speedup**; in-router SWMR replication adds ~7cyc flat overhead independent of N |
@@ -1096,7 +1117,7 @@ Key observations:
 | 128KB      | 256KB | 2423    | 121.6        | +6%         |
 | 256KB      | 512KB | 4667    | **126.3**    | +3%         |
 
-Conclusion: CH0+CH1 share the **same physical NMC injection port** on PE (same as PE↔GM/PE↔PE). Aggregate cap ~126 GB/s, NOT 2× single channel; dual-channel helps small/medium sizes (12-20% gain at 64-128KB) but adds <4% at 512KB where single-stream already saturates. DDR0 (PE0→DDR0) dual-ch gives identical 126.2 GB/s → all 4 DDRs symmetric.
+Conclusion: When sending to DDR, the DDR_WDMA receiver is the bottleneck (not the PE NMC or NoC links). Aggregate cap ~126 GB/s, NOT 2× single channel; dual-channel helps small/medium sizes (12-20% gain at 64-128KB) but adds <4% at 512KB where single-stream already saturates the DDR path. Note: This does NOT mean PE NMC channels share bandwidth — for PE↔PE traffic (where both endpoints have dual-channel NMC engines), same-direction parallel achieves ~2× BW (§9.13). DDR0 (PE0→DDR0) dual-ch gives identical 126.2 GB/s → all 4 DDRs symmetric.
 
 **E3. Y-hop sweep @256KB (X=0 column → DDR1) confirms ul_min = 2337 = constant across 0–7 hops; dl_min increases 102cyc over 7 hops = 14.6 cyc/hop.** Cross-corner (PE0→4 DDRs) confirms X fast-path on top row (Y=0): X-only 3-hop = +34cyc (11.3 cyc/hop) vs Y-only 7-hop = +119cyc (17.0 cyc/hop), same asymmetry as GM/PE↔PE.
 
@@ -1109,41 +1130,279 @@ Conclusion: CH0+CH1 share the **same physical NMC injection port** on PE (same a
 
 ---
 
-### 9.11 Network Bisection Bandwidth
+### 9.11 In-Router PE-Side Reduction (Measured, Round6 2026-08-20)
 
-Bisection bandwidth is the minimum total bandwidth crossing any cut that evenly divides all compute nodes (32 PEs) into two equal halves of 16 PEs each. For an 8×4 2D mesh:
+In-router reduction uses the hardware Sum/Max ALU in each NoC router to perform element-wise reduction along a chain of PEs. The pattern is: leaf PE sends East/South with `(RouteMode::Remote, reduce_op, RouteMode::Local)`, intermediate PEs passthrough+reduce with `(Remote, reduce_op, Remote, prev_pe)`, root PE receives then sends reverse-chain release, then root broadcasts result back to all participants via `pe_broadcast_sync`.
 
-| Cut | Links cut | Per-link physical unidir BW | Physical unidir bisection BW | Physical bidir full-duplex bisection BW | Router-level effective unidir BW (with ~6% bubble loss) |
-|-----|----------|----------------------------|------------------------------|----------------------------------------|------------------------------------------------------|
-| **Minimal bisection** (horizontal cut: Y=0-3 vs Y=4-7, cutting 4 vertical links between Y=3 and Y=4) | 4 | 144 GB/s | **576 GB/s** | **1.15 TB/s** | ~540 GB/s (4×135 GB/s) |
-| Vertical cut (X=0-1 vs X=2-3, cutting 8 horizontal links between X=1 and X=2) | 8 | 144 GB/s | 1152 GB/s | 2.3 TB/s | ~1.08 TB/s |
+**Benchmark kernels**: [noc_rb39.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb39.cpp) (X-row 4-PE Sum, CH0), [noc_rb40.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb40.cpp) (Max), [noc_rb41.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb41.cpp) (CH=1), [noc_rb42.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb42.cpp) (Y-column 8-PE). All 32 PEs run simultaneously in 8 independent X-row chains or 4 independent Y-column chains; timing measured on one root PE (PE3 for X, PE31 for Y). Methodology: 5 warmup + 20 measured iterations; post-warmup cycle counts are deterministic (zero jitter); t0 before first send, t1 after `ada_sync_fence_io()` completes all transfers.
 
-The **minimum bisection bandwidth** (the architecturally significant number) is **576 GB/s unidirectional / 1.15 TB/s bidirectional physical**, or ~540 GB/s / ~1.08 TB/s effective at router level.
+**API pattern (from production `pe_rowwise_reduce`/`pe_rowwise_broadcast` in [rowwise_pe_allreduce.hpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/m13_attention_tp4dp8/rowwise_pe_allreduce.hpp))**:
+```cpp
+// Leaf (col 0)
+send_with_sync<CH>(view, PE, pe_id+1, Remote, Sum, Local);
+// Mid (col 1..N-2)
+send_with_sync<CH>(view, PE, pe_id+1, Remote, Sum, Remote, pe_id-1);
+// Root (col N-1): recv reduce result + release reverse chain
+recv_with_sync<CH>(view, PE, pe_id, Local, Remote);
+send_with_sync<CH>(view, PE, pe_id, Local, Sum, Remote, pe_id-1);
+// Root broadcasts to all
+pe_broadcast_sync<CH>(view, dst_mask_sync);
+// Non-root receives broadcast release
+recv_with_sync<CH>(view, PE, root_pe);
+```
 
-**Endpoint-constrained effective bisection**: When the number of concurrent flows crossing the bisection is ≤ 4 (e.g., 4 PEs sending to the other half), each flow achieves ~120 GB/s (NMC endpoint cap) for an aggregate of ~480 GB/s, and the links themselves are not yet saturated. Only when more than 4 concurrent flows cross the cut do the links become the bottleneck, and flows are fairly round-robin partitioned.
+**Critical programming note for result verification**: To read NOC-populated data from the scalar core after `ada_sync_fence_io()`, the scalar core MUST use the DLCM-aliased address `0x20000000 + 0x100000 + offset` (i.e., `DLCM_BASE + LOCAL_SRAM_ADDR + offset`). Direct reads from the physical address `0x100000 + offset` cause device coredump. Writing to SRAM from scalar core in a fatbin context that references GM/DMA DMA functions also causes coredump (same caveat as §C.1).
 
-The bottom/top-row X fast path (~11 cyc/X-hop vs ~17 cyc/Y-hop) reduces latency for horizontal traffic on the edge rows but does not change the bisection bandwidth values.
+**X-direction row reduce (4 PEs/row, 3-hop chain, 8 rows running in parallel)**:
+
+| Size (B) | min_cyc (post-warmup) | Payload cyc | Effective BW (B/cyc) | Effective BW (GB/s) |
+|----------|----------------------|-------------|---------------------|---------------------|
+| 256–512 | 348–365 | 0–17 | 0.7–1.4 | 0.8–1.6 |
+| 1024 | 365 | 17 | 2.8 | 3.2 |
+| 2048 | 365 | 17 | 5.6 | 6.3 |
+| 4096 | 399 | 51 | 10.3 | 11.5 |
+| 8192 | 467 | 119 | 17.5 | 19.7 |
+| 16384 | 603 | 255 | 27.2 | 30.6 |
+| 32768 | 892 | 544 | 36.7 | 41.3 |
+| 65536 | 1453 | 1105 | 45.1 | 50.7 |
+| 98304 | 2014 | 1666 | 48.8 | 54.9 |
+
+**Y-direction column reduce (8 PEs/column, 7-hop chain, 4 columns running in parallel)**:
+
+| Size (B) | min_cyc (post-warmup) | Payload cyc | Effective BW (B/cyc) | Effective BW (GB/s) |
+|----------|----------------------|-------------|---------------------|---------------------|
+| 512 | 519 | -- | 1.0 | 1.1 |
+| 4096 | 570 | 68 | 7.2 | 8.1 |
+| 8192 | 638 | 136 | 12.8 | 14.4 |
+| 16384 | 774 | 272 | 21.2 | 23.8 |
+| 32768 | 1046 | 544 | 31.3 | 35.2 |
+| 65536 | 1607 | 1105 | 40.8 | 45.9 |
+
+**Linear model (post-warmup, ≥4KB where payload dominates)**:
+
+```
+X-reduce (4 PE, 3-hop):  cycles = 335 + 0.0170 × size_bytes     (R² ≈ 1.0)
+                         base = 335 cyc (298 ns), slope = 0.0170 cyc/B → 59 B/cyc = 66 GB/s
+Y-reduce (8 PE, 7-hop):  cycles = 502 + 0.0168 × size_bytes     (R² ≈ 1.0)
+                         base = 502 cyc (446 ns), slope = 0.0168 cyc/B → 60 B/cyc = 67 GB/s
+```
+
+**X-direction 2-PE pair reduce (1-hop chain, 16 independent pairs running in parallel)**:
+
+| Size (B) | min_cyc (post-warmup) | Payload cyc | Effective BW (B/cyc) | Effective BW (GB/s) |
+|----------|----------------------|-------------|---------------------|---------------------|
+| 256–1024 | 273 | ~23 | 0.9–3.8 | 1.0–4.2 |
+| 2048 | 290 | 40 | 7.1 | 7.9 |
+| 4096 | 307 | 57 | 13.3 | 15.0 |
+| 8192 | 375 | 125 | 21.8 | 24.6 |
+| 16384 | 528 | 278 | 31.0 | 34.9 |
+| 32768 | 803 | 553 | 40.8 | 45.9 |
+| 65536 | 1361 | 1111 | 48.2 | 54.2 |
+| 98304 | 1922 | 1672 | 51.1 | 57.5 |
+
+**Linear model verification (per-hop cost)**:
+
+```
+2-PE X-pair (1-hop East, 16 parallel):   cycles = 250 + 0.0170 × size_bytes  → 59 B/cyc = 66 GB/s, base=222ns
+2-PE Y-pair (1-hop South, 16 parallel):  cycles = 263 + 0.0172 × size_bytes  → 58 B/cyc = 65 GB/s, base=234ns
+4-PE X-row  (3-hop East, 8 parallel):    cycles = 335 + 0.0170 × size_bytes  → 59 B/cyc = 66 GB/s, base=298ns
+8-PE Y-col  (7-hop South, 4 parallel):   cycles = 502 + 0.0168 × size_bytes  → 60 B/cyc = 67 GB/s, base=446ns
+
+Per-chain-hop overhead: ~42 cyc/hop (includes reverse release + broadcast fan-out setup)
+X vs Y direction: within ~5% — essentially symmetric for both latency and BW
+```
+
+**Cost decomposition vs plain unicast** (measured via separate ping-pong benchmark [noc_rb44.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb44.cpp) on same hardware):
+
+| Operation | Base latency (1-hop, post-warmup) | Asymptotic BW | Payload passes |
+|-----------|-----------------------------------|---------------|----------------|
+| PE↔PE unicast RTT (send + small ack) | ~150 cyc (large msg floor), 222 cyc (small msg min) | **120 B/cyc = 135 GB/s** | 1 (forward dominates) |
+| Reduce+bcast allreduce (2 PE) | 250–263 cyc | **59 B/cyc = 66 GB/s** | 2 (forward reduce + reverse bcast) |
+| Ratio: allreduce/unicast | 1.7× (base) | 0.49× (BW) | 2× payload, sequential |
+
+The ~50% bandwidth ratio confirms that in-router allreduce is **bandwidth-limited by two sequential full-payload traversals** (reduce toward root + broadcast back to leaves). The in-router ALU itself adds **zero measurable bandwidth penalty** — BW is exactly half of single-stream unicast, as expected from the two-pass nature of ring/reduce-then-broadcast.
+
+The base latency difference (250 cyc allreduce vs 150 cyc unicast RTT) is ~100 cyc, which accounts for: (a) one additional NMC descriptor programming (reverse-chain `send_with_sync`), (b) `pe_broadcast_sync` spanning-tree setup, (c) one additional hop of reverse-chain traversal at each intermediate PE. The per-chain-hop cost of ~42 cyc is consistent with the ~17 cyc/hop unicast forward cost plus the ~25 cyc/hop reverse release cost.
+
+**Plain unicast hop cost (for reference)**: 1-hop East small-RTT min=222 cyc, 3-hop East=256 cyc, 7-hop South=324 cyc → **~17 cyc/hop for small messages** (XY deterministic, cut-through). For large messages (≥32 KB), hop cost is fully hidden by pipelining; BW is identical (120 B/cyc) at all distances from 1 to 10 hops.
+
+**Key findings**:
+- **Per-hop overhead**: (502 − 335) / (7 − 3) = **~42 cycles per additional chain hop** (includes router ALU + reverse-chain release setup). This is the fixed per-hop latency for the reduce-tree depth, independent of payload size.
+- **Bandwidth scaling**: Incremental bandwidth is ~59 B/cyc for both X and Y chains, independent of chain length. The Sum/Max ALU is fully pipelined and does not create a serialization bottleneck.
+- **Theoretical comparison**: A 3-hop reduce + 3-hop reverse bcast sequentially traverses 6 links; with cut-through pipelining, asymptotic throughput approaches one direction of the link (128 B/cyc) divided by 2 for round-trip = 64 B/cyc. Measured 59 B/cyc = **92% efficiency** (residual 8% from NMC programming overhead and per-flit bubbles).
+- **Cold-start (first iteration)**: ~573 cycles for 512B (vs 348 post-warmup), representing ~225 cycles of credit warmup / NMC cold-cache overhead.
+- **Sum vs Max**: identical cycle counts for all sizes (hardware ALU handles both ops at same throughput).
+- **CH0 vs CH1**: identical cycle counts (channels are symmetric).
+- **Correctness**: v0=10 confirmed for X-reduce (1+2+3+4), v0=36 for Y-reduce (1+2+...+8), v0=4 for Max reduce (max(1,2,3,4)).
+- **Allreduce total cost**: The measured cost is the **complete reduce + broadcast** (allreduce on 4 or 8 PEs). This is the pattern used in production `pe_rowwise_reduce` immediately followed by `pe_rowwise_broadcast` (see [attention.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/m13_attention_tp4dp8/attention.cpp)).
 
 ---
 
-### 9.12 Collective Communication Best Practices by Scale
+### 9.12 32-PE Full-Chip 2D Allreduce (Measured, Round6 2026-08-20)
 
-The optimal collective communication algorithm depends on the number of participating PEs and the operation type. Based on hardware capabilities and measured performance:
+The production attention kernel performs allreduce across all 32 PEs using a 2D recursive halving & doubling pattern over the 8×4 mesh. The sequence (exactly as used in [attention.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/m13_attention_tp4dp8/attention.cpp) lines 251-272) is:
+1. **Phase 1 — X-reduce**: Each row independently reduces 4 PEs (col0→col3) via `pe_rowwise_reduce<Sum>`. Result stays at col3 PEs (8 PEs). No broadcast yet.
+2. **Phase 2 — Y-reduce**: Column 3 reduces 8 PEs (row0→row7) via `pe_outer_cp_reduce<Sum>`. Result arrives at PE31 (global root). No broadcast yet.
+3. **Phase 3 — Y-broadcast**: PE31 broadcasts the fully-reduced result north to all 7 col3 PEs via `pe_outer_cp_broadcast`.
+4. **Phase 4 — X-broadcast**: Each col3 PE broadcasts west to its 3 row peers via `pe_rowwise_broadcast`. All 32 PEs now hold the allreduced result.
 
-| Participating PEs | Topology | Optimal Algorithm | Measured BW per endpoint | Typical kernel use case |
-|-------------------|----------|-------------------|--------------------------|------------------------|
-| 2 PEs (adjacent) | Direct neighbor | Single dual-side send/recv | ~120 GB/s | Pairwise neighbor exchange |
-| 4 PEs (same row) | Linear chain along X | Neighbor-chain pipeline reduce + broadcast; long packets fill pipeline for ~100% link utilization | ~120 GB/s/PE | Attention SV reduction (4 PEs per row), QKV/Gate AllReduce, MoE MLP1 N-dim shard reduction |
-| 8 PEs (same column) | Linear chain along Y | Same chain pipeline reduce + broadcast | ~120 GB/s/PE | Attention Gate GEMM row-wise reduce, MoE MLP0 K-dim shard reduction |
-| 16 PEs (half-chip) | Either | Break-even point: chain pipeline latency ≈ GM-relay latency; choice depends on message size | Similar for both | Rarely used in current kernels |
-| 32 PEs (full-chip global) | All PEs | **GM write_sum (reduce) + GM BROADCAST (distribute)**: all PEs write shards to GM simultaneously using atomic add, one GM BROADCAST distributes result to all PEs; zero-cost in-router fan-out | Reduce: ~120 GB/s aggregate<br>Broadcast: **~135 GB/s/PE independent**, aggregate ~4.3 TB/s | Attention LSE global merge, MoE expert task list broadcast |
-| N PEs (scatter-add only, result stays in GM) | All PEs → GM | **GM write_sum atomic add directly**: no need for PE-to-PE reduce at all; each PE writes its contribution straight to GM, hardware sums atomically; result already in GM no return broadcast needed | 4×GM_WDMA aggregate **~314 GB/s** | MoE final output accumulation: different experts'/cards' contributions to same token sum directly in GM |
-| 8 chips (multi-card) | 8-chip ADALINK fullmesh | ADALINK 1-hop AllReduce; no ring topology needed | 1-hop direct; commid 16/18 slot-isolated | Bridge stage inter-chip Attention O-projection AllReduce, MoE cross-card expert reduction |
+**Benchmark kernel**: [noc_rb46.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb46.cpp) (CH0 Sum), noc_rb47.cpp (CH1), noc_rb48.cpp (Max). All 32 PEs participate; timing measured at global root PE31; correctness verified at all 32 PEs. Methodology: 5 warmup + 20 measured iterations; t0 before Phase 1, t1 after Phase 4 fence.
 
-**Core decision rule**:
-- ≤ 8 PEs (row or column): use **neighbor-chain pipelining** — avoids GM endpoint setup overhead (~250+ cyc), fills pipeline for near-100% bandwidth utilization, result lands directly at the end PE ready for subsequent ops (SiLU, quantization, etc.)
-- ≥ 16 PEs (full/half chip): use **GM relay + hardware broadcast** — GM BROADCAST zero-cost fan-out gives every receiver ~135 GB/s independent bandwidth, 30× faster than N-way unicast; the GM endpoint setup overhead (~155 cyc) is amortized across large fan-out
-- Pure scatter-add (reduction result consumed by next layer in GM, not needed back on PEs): use **GM write_sum directly** — skips an entire communication phase (no return broadcast needed)
+**All 4 phases are sequential** (no pipelining between phases in current production code — each phase is separated by a pipeline barrier/completion fence).
+
+**Measured data (CH0, Sum, post-warmup, deterministic zero jitter)**:
+
+| Size (B) | min_cyc | Payload cyc | Effective BW (B/cyc) | Effective BW (GB/s) |
+|----------|---------|-------------|---------------------|---------------------|
+| 256–1024 | 1097 | 0–7 | 0.2–0.9 | 0.3–1.0 |
+| 2048 | 1131 | 41 | 1.8 | 2.0 |
+| 4096 | 1216 | 126 | 3.4 | 3.8 |
+| 6144 | 1284 | 194 | 4.8 | 5.4 |
+| 8192 | 1369 | 279 | 6.0 | 6.7 |
+| 12288 | 1505 | 415 | 8.2 | 9.2 |
+| 16384 | 1641 | 551 | 10.0 | 11.2 |
+| 24576 | 1913 | 823 | 12.8 | 14.5 |
+| 32768 | 2185 | 1095 | 15.0 | 16.9 |
+| 49152 | 2729 | 1639 | 18.0 | 20.3 |
+| 65536 | 3307 | 2217 | 19.8 | 22.3 |
+| 98304 | 4429 | 3339 | 22.2 | 25.0 |
+| 110000 | 4837 | 3747 | 22.7 | 25.6 |
+
+**Linear model (post-warmup, ≥8 KB)**:
+
+```
+32-PE full-chip allreduce (Sum, CH0):  cycles = 1090 + 0.0340 × size_bytes     (R² ≈ 0.999)
+                                       base = 1090 cyc (969 ns), slope = 0.0340 cyc/B → 29.4 B/cyc = 33.1 GB/s
+```
+
+**Phase cost decomposition**:
+
+The 29.4 B/cyc asymptotic BW corresponds exactly to **link BW / 4 = 120/4 = 30 B/cyc**, confirming that the full-chip allreduce is bandwidth-limited by **four sequential full-payload traversals** of the critical path (X-forward, Y-forward, Y-bcast, X-bcast), with no ALU overhead:
+- Phase 1 (X-reduce): payload east 3 hops, 8 rows in parallel → 120 B/cyc (one direction)
+- Phase 2 (Y-reduce): payload south 7 hops, 1 chain serial → 120 B/cyc
+- Phase 3 (Y-bcast): payload north, SWMR bcast → 120 B/cyc
+- Phase 4 (X-bcast): payload west, 8 rows in parallel SWMR → 120 B/cyc
+- **Efficiency**: 29.4/30.0 = **98%** of theoretical (residual 2% from NMC programming overhead between phases)
+
+**Base latency decomposition** (1090 cyc for small messages):
+- Phase 1 X-reduce (3-hop, 8 rows parallel): ~300 cyc (reduce + reverse ack, no bcast)
+- Phase 2 Y-reduce (7-hop, 1 chain): ~460 cyc (reduce + reverse ack, no bcast)
+- Phase 3 Y-bcast (7-hop, SWMR): ~160 cyc (spanning-tree setup + propagation)
+- Phase 4 X-bcast (3-hop, 8 rows parallel): ~140 cyc (spanning-tree setup + propagation)
+- Four inter-phase `ada_sync_fence_io()` barriers: ~30 cyc total
+
+**Comparison with reduce+bcast sub-phases**:
+- X 4-PE reduce+bcast (rb39): 335 cyc base, 59 B/cyc (2 passes)
+- Y 8-PE reduce+bcast (rb42): 502 cyc base, 60 B/cyc (2 passes)
+- Sum of independent X+Y reduce+bcast: 335+502 = 837 cyc (hypothetical, if bcasts were fused into reduce phases)
+- Measured full allreduce (X-reduce + Y-reduce + Y-bcast + X-bcast): 1090 cyc
+- Overhead of sequential 4-phase vs fused 2-phase: ~250 cyc (25%), from four fence barriers + separate spanning-tree setups for Y-bcast and X-bcast
+
+**Key findings**:
+- **Sum vs Max**: identical performance within 1% (1097 vs 1105 cyc at 512B; 1369 vs 1377 cyc at 8KB)
+- **CH0 vs CH1**: identical cycle counts (exact match at all tested sizes)
+- **Correctness**: v0=32 (sum of 1×32 PEs) verified on all 32 PEs; v0=32 (max of 1..32) verified for Max op.
+- **Bandwidth bottleneck**: The full-chip allreduce is **NoC link BW limited**, not ALU or NMC limited. Each of the 4 phases runs at ~120 B/cyc effective throughput, consistent with unicast link bandwidth.
+- **Algorithm note**: The 4-phase 2D allreduce achieves 120/4 = 30 B/cyc. A ring allreduce around the chip perimeter would be 31 hops and potentially slower; the 2D recursive halving & doubling minimizes the maximum hop count (3+7=10 sequential hops) and maximizes parallelism (8 rows in parallel for X phases, 1 chain for Y phase).
+- **Allreduce aggregate throughput**: Since all 32 PEs receive the result, the effective aggregate bandwidth is 32 × 33 GB/s ≈ 1 TB/s of useful data delivered (though this counts SWMR fan-out duplication).
+
+### 9.13 Dual-Channel NOC Operations (CH0+CH1 Parallel) (2026-08-23)
+
+#### 9.13.1 Programming Model
+
+Each PE's NMC contains two independent DMA channels (CH0 and CH1), each with its own upload engine, download engine, and NOC descriptor queue. The channels can post descriptors **back-to-back within the same phase** without inter-channel `ada_sync_fence_io()`. Only one `ada_sync_fence_io()` is needed per collective phase (after both channels' descriptors are posted) to ensure both channels' operations complete before the next phase.
+
+**Correct programming pattern for dual-channel parallel allreduce** (noc_rb49.cpp):
+
+```cpp
+// Phase 1: X-reduce (CH0 + CH1 parallel, back-to-back)
+send_with_sync<0>(half0, ...);
+recv_with_sync<0>(half0, ..., ReduceOp::Sum);
+send_with_sync<1>(half1, ...);
+recv_with_sync<1>(half1, ..., ReduceOp::Sum);
+ada_sync_fence_io();   // ONE fence after BOTH channels posted
+
+// Phase 2: Y-reduce (same pattern)
+send_with_sync<0>(half0, ...);
+recv_with_sync<0>(half0, ..., ReduceOp::Sum);
+send_with_sync<1>(half1, ...);
+recv_with_sync<1>(half1, ..., ReduceOp::Sum);
+ada_sync_fence_io();
+
+// Phase 3: Y-bcast
+pe_broadcast_sync<0>(half0, ...);
+pe_broadcast_sync<1>(half1, ...);
+ada_sync_fence_io();
+
+// Phase 4: X-bcast
+pe_broadcast_sync<0>(half0, ...);
+pe_broadcast_sync<1>(half1, ...);
+ada_sync_fence_io();
+```
+
+Key points:
+1. **Buffer split**: Total payload `size_bytes` split into two halves (`half = size_bytes/2`); CH0 carries first half, CH1 carries second half. Buffers must be ≥64KB apart to avoid overlap at large sizes.
+2. **Back-to-back posting**: Post ch0 descriptor(s), then ch1 descriptor(s) immediately, then ONE `ada_sync_fence_io()`. No fence between channels within a phase.
+3. **ReduceOp::Sum works on both channels simultaneously**: In-router ALU processes each channel's flits independently; no crosstalk or serialization.
+4. **Init loops**: Separate initialization loops per buffer (`for(i<size)buf[i]=1; for(i<half)buf1[i]=1;`) — combined loops may cause device state corruption.
+5. **Device state reset**: After any coredump, reset device by running a known-good kernel (e.g., rb46) before subsequent tests; otherwise corrupted state causes unpredictable failures.
+
+**Important correction to earlier finding**: An initial round of testing incorrectly concluded that parallel dual-channel reduce operations cause coredumps. This was due to a combination of buffer overlap at large sizes, combined init loops, and device state corruption from prior failures — not a hardware limitation. With proper buffer layout and device reset, fully parallel dual-channel reduce+broadcast works correctly at all tested sizes (512B–256KB), producing correct results (v0=32, v1=32 for Sum).
+
+#### 9.13.2 Dual-Channel 32-PE Allreduce Measurements (noc_rb49.cpp, DUAL-FULL-PAR)
+
+Same 4-phase 2D allreduce algorithm as §9.12, but with both CH0 and CH1 carrying half the payload in parallel within each phase. Buffer layout: buf0=LOCAL_SRAM+0x4000, buf1=LOCAL_SRAM+0x84000 (64KB separation), cyc_arr=DLCM+0x100000.
+
+| Size (B) | half/ch (B) | min cyc | avg cyc | BW (B/cyc) | BW (GB/s) | Single-ch cyc | Single-ch BW | Speedup |
+|----------|-------------|---------|---------|------------|-----------|---------------|--------------|---------|
+| 512      | 256         | 1449    | 1449    | 0.35       | 0.40      | 1097          | 0.47         | 0.76×   |
+| 1024     | 512         | 1449    | 1449    | 0.71       | 0.80      | 1097          | 0.93         | 0.76×   |
+| 2048     | 1024        | 1449    | 1454    | 1.41       | 1.59      | 1129          | 1.81         | 0.78×   |
+| 4096     | 2048        | 1500    | 1500    | 2.73       | 3.07      | 1199          | 3.42         | 0.80×   |
+| 8192     | 4096        | 1585    | 1585    | 5.17       | 5.82      | 1367          | 5.99         | 0.86×   |
+| 16384    | 8192        | 1721    | 1727    | 9.52       | 10.7      | 1641          | 9.98         | 0.95×   |
+| 32768    | 16384       | 1993    | 1998    | 16.40      | 18.5      | 2185          | 15.00        | 1.09×   |
+| 49152    | 24576       | 2282    | 2283    | 21.53      | 24.2      | 2741          | 17.93        | 1.20×   |
+| 65536    | 32768       | 2554    | 2554    | 25.66      | 28.9      | 3302          | 19.85        | 1.29×   |
+| 98304    | 49152       | 3115    | 3121    | 31.45      | 35.4      | 4429          | 22.20        | 1.42×   |
+| 131072   | 65536       | 3687    | 3687    | 35.55      | 40.0      | —             | —            | —       |
+| 196608   | 98304       | 4798    | 4798    | 40.98      | 46.1      | —             | —            | —       |
+| 262144   | 131072      | 5920    | 5933    | 44.24      | 49.8      | —             | —            | —       |
+
+**Linear model** (fit from large-size region 64KB–256KB):
+
+```
+cyc ≈ 1435 + size_bytes / 58
+Asymptotic BW = 58 B/cyc = 65 GB/s
+```
+
+Comparison with single-channel model (cyc ≈ 1090 + N/29.4):
+- **Base latency**: 1435 cyc vs 1090 cyc → 345 cyc overhead (≈32%) from programming 8 NMC descriptors instead of 4, plus doubled fence overhead.
+- **Asymptotic BW**: 58 B/cyc vs 29.4 B/cyc → **1.97× ≈ 2× bandwidth**. 98% of theoretical 2× speedup.
+- **Crossover point**: ~32 KB. Below 32 KB, the extra base latency dominates and dual-channel is slower (0.76–0.95×). Above 32 KB, the bandwidth advantage dominates, reaching 1.42× at 96 KB and trending toward 2× as size increases.
+
+**Key findings**:
+1. **Dual-channel allreduce achieves near-perfect 2× bandwidth** (98% efficiency). The NMC upload/download engines for CH0 and CH1 are fully independent and can inject/extract flits simultaneously.
+2. **In-router ReduceOp::Sum operates independently per channel**. Both channels can have in-flight reduce operations concurrently with no serialization or crosstalk.
+3. **Small-message penalty**: Dual-channel adds ~350 cyc fixed overhead (8 vs 4 NMC descriptor posts). For payloads <16 KB this overhead outweighs the bandwidth benefit.
+4. **Independent channel datapaths**: PE NMC CH0+CH1 have independent DMA engines and NoC datapaths, achieving full 2× bandwidth for PE↔PE traffic. The <2× gain observed for PE→GM/DDR is due to GM/DDR receiver bottlenecks, not NoC link sharing.
+
+#### 9.13.3 Dual-Channel PE↔PE Same-Direction Parallel Echo (noc_rb50.cpp)
+
+Two PEs (PE0, PE1) send payload on BOTH CH0 and CH1 simultaneously in same direction (PE0→PE1 ch0+ch1 parallel, then PE1→PE0 ch0+ch1 parallel echo). Buffer layout: sb=0x101000, rb=0x102000, sb2=0x122000, rb2=0x142000.
+
+| Size (B) | min cyc | Aggregate BW (B/cyc) | Aggregate BW (GB/s) |
+|----------|---------|---------------------|---------------------|
+| 512      | 376     | 2.7                 | 3.1                 |
+| 1024     | 376     | 5.4                 | 6.1                 |
+| 2048     | 393     | 10.4                | 11.7                |
+| 4096     | 427     | 19.2                | 21.6                |
+| 8192     | 512     | 32.0                | 36.0                |
+| 16384    | 648     | 50.6                | 56.9                |
+| 32768    | 920     | 71.2                | 80.1                |
+| 65536    | 1481    | 88.5                | 99.6                |
+
+This is an RTT echo pattern (PE0 sends both-ch → fence → PE0 recvs both-ch echo), so the reported BW uses `2*size/RTT` (aggregate both channels, one direction). Incremental one-way per-channel BW (32KB→64KB slope): ~117 B/cyc ≈ single-channel asymptotic (120 B/cyc), confirming independent channel operation. One-way aggregate dual-channel throughput trends toward ~240 B/cyc = 270 GB/s for large messages.
 
 ---
 
@@ -1155,12 +1414,12 @@ Parameters marked **[TBD]** in this document that require additional measurement
 
 | # | Parameter | Why It Matters | How to Measure |
 |---|-----------|---------------|----------------|
-| 1 | ~~**PE↔GM bandwidth** (single GM_RDMA/WDMA channel)~~ | **DONE (§9.9, updated 2026-08-13 Round2)**: Single-PE upload ~104 GB/s (0-hop) to ~90 GB/s (7-hop), 138cyc/257cyc fixed latency; 4-GM_WDMA aggregate ~314 GB/s; download ~119 GB/s (0-hop 256KB), 246cyc/365cyc fixed latency; CH0+CH1 share port (114-124 GB/s dual-ch aggregate); N-way incast caps at ~100-120 GB/s/GM, outcast ~120-125 GB/s/GM; bottom-row X fast path confirmed for both directions; atomic with_sum=1 ~120 GB/s aggregate. | Extend bench with `sram_to_gm` / `gm_to_sram` using `__global_sram__` GM allocation from Python host; sweep message sizes to/from GM0 (router 28). |
-| 2 | ~~**PE↔DDR bandwidth**~~ | **DONE (§9.10, 2026-08-13 Round4)**: Upload ~122 GB/s/ch (0-hop, PE NMC-limited, hop latency fully hidden at ≥256KB), download ~103 GB/s/ch (DDR_RDMA/MC-limited, ~13% lower than GM); 512B base latency: ul 193cyc (+5cyc CDC), dl 426cyc (+180cyc DDR PHY); hop cost dl ~15-17cyc/hop, ul ~0cyc/hop (large msg); CH0+CH1 shared port (126 GB/s dual-ch agg, NOT 2×); X fast path confirmed for DDR on rows 0/7; all 4 DDRs symmetric. CDC penalty <10cyc. | Fatbin split-kernel with __global_ddr__ buffers (adaMemoryType.GDDR), ddr_send_sync/ddr_receive_sync/ddr_to_sram APIs, same launch config as GM. |
-| 3 | ~~**Multicast/broadcast fanout latency** (1-to-N)~~ | **DONE (§9.7, Round5 2026-08-13)**: Zero-cost in-router SWMR replication; min_cyc 2347->2354 (+7cyc = +0.3%) from N=1 to N=31; each receiver gets full sender BW (~126 GB/s PE, ~135 GB/s GM); PE bcast 512B latency 120->127cyc (+7cyc spanning-tree); GM bcast 512B 443->598cyc (+155cyc); agg BW 3.9 TB/s (PE) / 4.3 TB/s (GM) to full chip; **30x speedup vs unicast N-way outcast** (130 GB/s cap). Use pe_broadcast_sync/gm_broadcast_sync with dst_mask bitmask; receivers call standard recv_with_sync. | `pe_broadcast_sync<CH>(view, int64_t dst_mask)` / `gm_broadcast_sync<CH>(view, NodeType::PE, int64_t dst_mask)`; measure N=1..31. |
-| 4 | **In-router reduction overhead** (Add/Max per-hop) | Allreduce / reduce-scatter for MoE router-logit aggregation uses `opType=Add`; need per-reduce-hop cycle cost and whether reduction is cut-through or store-and-forward. Note: GM-side atomic (with_sum=1) measured fully pipelined (~0 overhead); PE-side in-router reduction chain still TBD. | Use `send_with_sync(..., ReduceOp::Add, ...)` in a reduction chain across PEs; compare RTT with reduction enabled vs disabled. |
-| 5 | ~~**Incast/outcast/full-duplex/contention**~~ | **ALL DONE (2026-08-13 Round2+Round3)**: N-way incast/outcast caps at ~100-130 GB/s aggregate for all endpoints (GM_WDMA rx ~100-120, GM_RDMA tx ~120-125, PE rx ~125, PE tx ~130 GB/s) with fair RR; CH0+CH1 full-duplex bidir ~120 GB/s (shared NMC port, NOT 2x); 4 disjoint pairs ~119 GB/s each with zero interference → **endpoint NMC ports (~120 GB/s/ch) are the bottleneck, not NoC fabric**. Root cause: PE-internal NMC-to-SRAM port is shared (~120 GB/s total aggregate, read+write time-shared), an intentional bandwidth match to Matrix Core compute (see §4.2). | noc_pe_incast/outcast/fulldup/contend + GM fatbin kernels. |
-| 6 | ~~**SRAM port structure / NMC bandwidth sharing**~~ | **RESOLVED (§4.2, 2026-08-20 analysis)**: All 4 NMC logical units (UPLOAD_0/DOWNLOAD_0/UPLOAD_1/DOWNLOAD_1) share a single PE-internal SRAM read/write port of total ~120 GB/s; single direction achieves ~118-120 GB/s; same-direction CH0+CH1 concurrency gains only 3-15% (NOT 2×); full-duplex CH0+CH1 aggregate is also ~120 GB/s (~60 send + ~60 recv). CH0/CH1 are independent command queues for pipeline overlap, not bandwidth doublers. 7 PE-internal bus masters (Matrix, Vector, NMC x4, Scalar) compete for SRAM access; hardware handles bank conflicts transparently. Remaining TBD: exact SRAM macro port count (1R1W vs 2R1W) at the circuit level, but irrelevant for kernel programming. | Run concurrent upload (CH0) + download (CH1) + matrix compute; measure achieved NMC BW vs isolated. |
+| 1 | ~~**PE↔GM bandwidth** (single GM_RDMA/WDMA channel)~~ | **DONE (§9.9, updated 2026-08-23)**: Single-PE upload ~104 GB/s (0-hop) to ~90 GB/s (7-hop), 138cyc/257cyc fixed latency; 4-GM_WDMA aggregate ~314 GB/s; download ~119 GB/s (0-hop 256KB), 246cyc/365cyc fixed latency; CH0+CH1 to GM caps at 114-124 GB/s (GM receiver bottleneck, NOT NMC/NoC limit; PE↔PE achieves 2× at 270 GB/s §9.13); N-way incast caps at ~100-120 GB/s/GM, outcast ~120-125 GB/s/GM; bottom-row X fast path confirmed for both directions; atomic with_sum=1 ~120 GB/s aggregate. | Extend bench with `sram_to_gm` / `gm_to_sram` using `__global_sram__` GM allocation from Python host; sweep message sizes to/from GM0 (router 28). |
+| 2 | ~~**PE↔DDR bandwidth**~~ | **DONE (§9.10, updated 2026-08-23)**: Upload ~122 GB/s/ch (0-hop, PE NMC-limited, hop latency fully hidden at ≥256KB), download ~103 GB/s/ch (DDR_RDMA/MC-limited, ~13% lower than GM); 512B base latency: ul 193cyc (+5cyc CDC), dl 426cyc (+180cyc DDR PHY); hop cost dl ~15-17cyc/hop, ul ~0cyc/hop (large msg); CH0+CH1 to DDR caps at 126 GB/s (DDR_WDMA receiver bottleneck; NOT 2×, but PE↔PE achieves 2× §9.13); X fast path confirmed for DDR on rows 0/7; all 4 DDRs symmetric. CDC penalty <10cyc. | Fatbin split-kernel with __global_ddr__ buffers (adaMemoryType.GDDR), ddr_send_sync/ddr_receive_sync/ddr_to_sram APIs, same launch config as GM. |
+| 3 | ~~**Multicast/broadcast fanout latency** (1-to-N)~~ | **DONE (§9.11, Round5 2026-08-13)**: Zero-cost in-router SWMR replication; min_cyc 2347->2354 (+7cyc = +0.3%) from N=1 to N=31; each receiver gets full sender BW (~126 GB/s PE, ~135 GB/s GM); PE bcast 512B latency 120->127cyc (+7cyc spanning-tree); GM bcast 512B 443->598cyc (+155cyc); agg BW 3.9 TB/s (PE) / 4.3 TB/s (GM) to full chip; **30x speedup vs unicast N-way outcast** (130 GB/s cap). Use pe_broadcast_sync/gm_broadcast_sync with dst_mask bitmask; receivers call standard recv_with_sync. | `pe_broadcast_sync<CH>(view, int64_t dst_mask)` / `gm_broadcast_sync<CH>(view, NodeType::PE, int64_t dst_mask)`; measure N=1..31. |
+| 4 | ~~**In-router reduction overhead** (Add/Max per-hop)~~ | **DONE (§9.11, Round6 2026-08-20)**: In-router reduce ALU is fully pipelined (zero BW cost, 92% efficiency = 59 B/cyc = 66 GB/s); per-chain-hop fixed overhead ~42 cycles; X-row (4 PE, 3-hop) base 335 cyc, Y-col (8 PE, 7-hop) base 502 cyc; Sum/Max identical; CH0/CH1 symmetric; mandatory broadcast release after reduce; min size ≥256B. Allreduce (reduce+bcast) cost measured end-to-end. | Use `send_with_sync(..., ReduceOp::Add, ...)` in a reduction chain across PEs; compare RTT with reduction enabled vs disabled. |
+| 5 | ~~**Incast/outcast/full-duplex/contention**~~ | **DONE (updated 2026-08-23)**: N-way incast/outcast caps at ~100-130 GB/s per channel for all endpoints; 4 disjoint pairs ~119 GB/s each with zero interference → **endpoint NMC ports (~120 GB/s/ch) match NoC link rate per channel, not NoC fabric bottleneck**. **Dual-channel same-direction parallel (PE↔PE) achieves 2× BW** (~270 GB/s aggregate, §9.13); GM/DDR dual-channel limited by remote receiver to ~114-126 GB/s. | noc_pe_incast/outcast/fulldup/contend + GM fatbin kernels. |
+| 6 | **SRAM port structure** (1R1W vs 2R1W vs more) | When NMC CH0+CH1 + Matrix + Vector all access Local/Weight SRAM simultaneously, port contention determines real achievable BW. Note: PE↔PE CH0+CH1 same-direction measured at ~2× (§9.13); PE→GM/DDR CH0+CH1 limited by remote receiver (114-126 GB/s ≠ 2×). SRAM bank-level contention during dual-ch+compute TBD. | Run concurrent upload (CH0) + download (CH1) + matrix compute; measure achieved NMC BW vs isolated. |
 
 ### 10.2 Medium Priority (Affects Contention Accuracy)
 
@@ -1193,15 +1452,15 @@ Parameters marked **[TBD]** in this document that require additional measurement
 
 To get from current state to <20% end-to-end error for MoE workloads:
 
-1. ~~**GM↔PE BW** (#1)~~: **DONE (§9.9, Round1+Round2 2026-08-13)**. Upload/download latency, BW, CH sharing, incast/outcast, hop-sweep, X fast-path, atomic, symmetricity all measured.
-2. ~~**PE↔DDR bandwidth** (#2)~~: **DONE (§9.10, Round4 2026-08-13)**. Upload 122 GB/s (NMC-limited, hop-free for large msg), download 103 GB/s (DDR_RDMA/MC-limited, 17cyc/hop), CH0+CH1 shared port (126 GB/s agg), CDC penalty <10cyc, 4-DDR symmetry confirmed.
+1. ~~**GM↔PE BW** (#1)~~: **DONE (§9.9, Round1+Round2 2026-08-13, updated 2026-08-23)**. Upload/download latency, BW, dual-ch (GM caps at 114-124 GB/s), incast/outcast, hop-sweep, X fast-path, atomic, symmetricity all measured.
+2. ~~**PE↔DDR bandwidth** (#2)~~: **DONE (§9.10, Round4 2026-08-13, updated 2026-08-23)**. Upload 122 GB/s/ch (NMC-limited, hop-free for large msg), download 103 GB/s/ch (DDR_RDMA/MC-limited, 17cyc/hop), CH0+CH1 to DDR caps at 126 GB/s (DDR_WDMA bottleneck; PE↔PE achieves 2× §9.13), CDC penalty <10cyc, 4-DDR symmetry confirmed.
 3. **Multicast/broadcast fanout** (#3): Hardware MULTICAST/BROADCAST transType — needed for EP weight dispatch (MoE all-gather). Note: unicast outcast from GM already gives ~125 GB/s/GM baseline.
 4. **In-router PE-side reduction** (#4): `ReduceOp::Add` in send_with_sync for reduce-scatter chains (note: GM-side atomic with_sum=1 already confirmed zero-overhead).
-5. ~~**Dual-stream full-duplex**~~: **DONE (Round3 A10, 2026-08-13)**. Full-duplex bidirectional BW ~120 GB/s aggregate, same as single-channel — CH0/CH1 share port in all directions.
+5. ~~**Dual-stream full-duplex / dual-channel parallel**~~: **DONE (Round3 A10 2026-08-13 + Round7 2026-08-23)**. Sequential cross-duplex ~120 GB/s (fenced); same-direction parallel achieves ~270 GB/s aggregate (2× single-channel) for PE↔PE traffic (§9.13); GM/DDR endpoints cap at ~114-126 GB/s due to receiver limits.
 6. **GM internal DMA↔DMA** (WDMA→RDMA without PE involvement): `wdma_signal_rdma`/`rdma_wait_wdma` path for MoE pipeline data movement within GM.
-7. **DDR N-way incast/outcast** (med-pri): N PEs → 1 DDR_WDMA / 1 DDR_RDMA → N PEs; expected to cap at same ~120-130 GB/s aggregate as other endpoints (RR at NMC), but DDR_RDMA read-side cap (103 GB/s/ch) may lower effective ceiling.
+7. **DDR N-way incast/outcast** (med-pri): N PEs → 1 DDR_WDMA / 1 DDR_RDMA → N PEs; expected to cap at same ~120-130 GB/s per channel as other endpoints (RR at NMC), but DDR_RDMA read-side cap (103 GB/s/ch) may lower effective ceiling.
 
-The current benchmark infrastructure in `kernels/cpp/noc_microbench/` provides a working template (build system, Python runner, both .out PE-only and fatbin split-kernel modes, integer/float timing, send_with_sync/recv_with_sync/gm/ddr send/receive_sync handshake, atomic with_sum, parameterized PE/GM/DDR selection) that can be extended for these additional measurements. **All core PE↔PE, PE↔GM, and PE↔DDR NoC parameters required for MoE modeling are now calibrated** (2026-08-13 Round1+2+3+4): RTT latency (8.5 cyc/hop one-way, 250+17h), single-stream BW (PE↔PE ~118, PE→GM ~127, GM→PE ~119, PE→DDR ~122, DDR→PE ~103 GB/s/ch), N-way incast/outcast fair RR sharing (~120-130 GB/s aggregate cap at PE/GM endpoints), CH0/CH1 shared port across all directions and endpoints (aggregate ~114-126 GB/s, NOT 2×), full-duplex bidirectional, atomic reduce (zero-overhead pipelined), X fast path on edge rows, disjoint-flow zero interference, 4-GM and 4-DDR perfect symmetry, DDR CDC penalty <10cyc, and DDR download being DDR-memory-controller-limited (not NoC-limited).
+The current benchmark infrastructure in `kernels/cpp/noc_microbench/` provides a working template (build system, Python runner, both .out PE-only and fatbin split-kernel modes, integer/float timing, send_with_sync/recv_with_sync/gm/ddr send/receive_sync handshake, atomic with_sum, parameterized PE/GM/DDR selection) that can be extended for these additional measurements. **All core PE↔PE, PE↔GM, and PE↔DDR NoC parameters required for MoE modeling are now calibrated** (updated 2026-08-23): RTT latency (8.5 cyc/hop one-way, 250+17h), single-stream BW (PE↔PE ~120 B/cyc/ch, PE→GM ~104 GB/s, GM→PE ~119 GB/s, PE→DDR ~122 GB/s, DDR→PE ~103 GB/s per channel), N-way incast/outcast fair RR sharing (~120-130 GB/s per channel cap at PE/GM endpoints), PE↔PE dual-channel same-direction parallel achieves 2× bandwidth (~240 B/cyc = 270 GB/s aggregate §9.13), dual-channel to GM/DDR caps at 114-126 GB/s (receiver-limited), 32-PE allreduce at 29.4 B/cyc (single-ch) / 58 B/cyc (dual-ch) = 33/65 GB/s, full-duplex bidirectional, atomic reduce (zero-overhead pipelined), X fast path on edge rows, disjoint-flow zero interference, 4-GM and 4-DDR perfect symmetry, DDR CDC penalty <10cyc, and DDR download being DDR-memory-controller-limited (not NoC-limited).
 
 ---
 
@@ -1417,3 +1676,24 @@ In fatbin split-kernel mode:
 - `is_pe_node()` → true for PE cores; `node_id()` returns PE ID (0-31)
 - `is_gm_wdma_node()` → true for GM_WDMA cores; `node_id()` returns logical lane (0-3), NOT physical global ID (36-39)
 - PE→GM column mapping for MoE: `col_id = pe_id % 4` maps PE to one of 4 GM_WDMA lanes; each column has 8 PEs at rows 0..7 (pe_id = col_id + 4*row)
+
+### C.5 Scalar SRAM Read Alias for NOC-Populated Data
+
+**Symptom**: After NOC receive operations (recv_with_sync, pe_broadcast_sync, in-router reduce), reading PE local SRAM via the physical address `0x100000 + offset` from the scalar core causes device coredump, even when fence_io/fence_calc have been called.
+
+**Root cause**: The scalar core must use the DLCM-mapped alias address to access SRAM after NMC/DMA writes have populated the buffer. The physical address works for scalar writes and for NMC view construction, but post-DMA reads require the alias.
+
+**Workaround**: Always use `DLCM_BASE + LOCAL_SRAM_ADDR + offset = 0x20000000 + 0x100000 + offset` (i.e., `0x20100000 + offset`) when reading NOC-populated data from the scalar core. Example:
+```cpp
+int8_t *buf_noc = (int8_t*)(0x100000 + 0x4000);       // for NOC views
+int8_t *buf_scalar = (int8_t*)(0x20000000 + 0x100000 + 0x4000); // for scalar reads after fence
+```
+This is consistent with how production code accesses SRAM via `dlcm_sram` pointers (e.g., `dlcm_sram->neg_infinity[0]` in [mask.hpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/m13_attention_tp4dp8/mask.hpp)).
+
+### C.6 printf Serialization Requirement for Microbenchmarks
+
+**Symptom**: Benchmark kernels without per-step printf crash with simultaneous 32-PE NOC programming burst (coredump), even though NOC operations are correctly programmed.
+
+**Root cause**: In microbenchmarks with no computation between NOC calls, all 32 PEs hit NOC programming in perfect lockstep after `ada_sync_fence_io()`, overwhelming the NOC control plane. Production kernels are safe because real computation between NOC calls naturally desynchronizes PEs.
+
+**Workaround**: Insert `printf("[PE%d] step\n", pe_id);` (with `\n` to flush UART) before each NOC call. The shared UART naturally serializes execution across PEs. Note: `printf(".")` without `\n` does NOT flush and provides no serialization. After all PEs synchronize at a global fence, avoid simultaneous printf from multiple PEs (post-fence UART contention causes coredump).

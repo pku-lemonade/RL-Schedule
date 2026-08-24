@@ -4,6 +4,12 @@
 >
 > Modeling granularity: **flit (512 B)** — phit (128 B) is not modeled explicitly; the 4-cyc/flit serialization is a constant. Resource allocation, buffer management, credit flow control, arbitration, and routing all operate at flit granularity.
 
+> **Implementation status (2026-08-24): Phase 2 complete.** The detailed
+> sub-step text below records the design process. The implemented contracts and
+> calibrated timing are documented in `simulator_detailed/docs/`; the standalone
+> regression suite is `simulator_detailed/tests/test_phase2_noc.py`. Phase 3 is
+> the next implementation phase.
+
 ---
 
 ## Hardware Target Parameters (from silicon measurement, NOC_ARCHITECTURE.md §2.4/§9.7)
@@ -110,7 +116,13 @@
 
 ### Phase 2: NoC Flit-Level Model (core of the change)
 
-**Status:** ⏳ In progress
+**Status:** ✅ Complete (2026-08-24)
+
+The final implementation uses 4.0-cycle serialization, 0.5-cycle wire
+propagation, and 0.3-cycle credit return as separate processes. This produces a
+4.5-cycle first-flit Link latency and a 4.8-cycle steady receive gap. The final
+Link, Router, topology, data-type, and trace contracts are described in
+`simulator_detailed/docs/` and supersede conflicting pseudocode below.
 
 #### noc.py rewrite, broken into sub-steps (each ~50-150 lines, independently testable):
 
@@ -611,7 +623,7 @@ Phase 1: Types & Config          ← DONE ✅
   1b. definitions.py             ← commits 66af38f, 6b3bfae
   1c-1f. failure/mapping/JSON    ← deferred until needed
 
-Phase 2: Flit-Level NoC          ← NEXT (7 sub-steps, ~400 lines total)
+Phase 2: Flit-Level NoC          ← DONE ✅
   2a. Imports & cleanup          (~10 lines)
        - Remove NoCDist/contextlib imports
        - Add definitions imports
@@ -647,7 +659,7 @@ Phase 2: Flit-Level NoC          ← NEXT (7 sub-steps, ~400 lines total)
        - Remove NoCDist import
        - Standalone probe test to verify basic flit routing
 
-Phase 3: Core NMC model          ← AFTER noc.py verified
+Phase 3: Core NMC model          ← NEXT
   3a. core.py NMC dual-channel + SRAM port budget (~100 lines)
   3b. core.py SEND/RECV via flit-level Link (~80 lines)
   3c. core.py startup latency + fail-slow (~20 lines)
@@ -699,3 +711,13 @@ After each sub-step, verify:
 | 4 | DDR download BW (0-hop) | ~103 GB/s §9.10 |
 | 5 (Full) | 4 disjoint PE pairs simultaneous | Each ~119 GB/s, zero interference §9.6 |
 | 5 | N-way incast to 1 PE/WDMA | ~120-125 GB/s aggregate fair RR §9.7 |
+
+Phase 2 regression results (2026-08-24):
+
+- 10/10 standalone tests pass.
+- SINGLE-flit endpoint latency is exactly `8.5*N + 13.0` cycles for 1-10 hops.
+- A three-flit packet over three hops arrives at 38.5, 43.3, and 48.1 cycles.
+- Direct-Link steady receive gap is 4.8 cycles (106.7 B/cycle).
+- Credit backpressure, SA contention, SINGLE/TAIL reservation release, and 2x
+  fail-slow scaling are covered.
+- A combined contention/backpressure probe exercises all 11 `FlitAction` values.

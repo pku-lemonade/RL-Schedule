@@ -1,9 +1,10 @@
 import simpy
-from typing import List, Dict, Optional
+from typing import List
 
 from .utils.mapper import *
 from .utils.dfg import DFGNode
-from .noc import Link, NoC
+from .utils.definitions import PORT_PE, direction_to_port
+from .noc import Link, NoC, NoCTracer
 from .core import Core
 from .configs.schemas.arch_config import *
 from .configs.schemas.failure_configs import *
@@ -21,41 +22,56 @@ class Arch:
         
         # construction
         self.noc = self.build_noc(env=self.env, config=self.config.noc)
-        self.cores = self.build_cores(env=self.env, config=self.config.core, mapper=self.mapper)
+        self.cores = self.build_cores(
+            env=self.env,
+            config=self.config.core,
+            noc_config=self.config.noc,
+            mapper=self.mapper,
+        )
 
         # initialization
         ready_nodes = self.mapper.zero_degree()
         self.initialize(operators=ready_nodes)
 
 
-    def build_cores(self, env, config: CoreConfig, mapper: NetworkMapper, c2r_width=128, c2r_delay=1) -> List[Core]:
+    def build_cores(
+        self,
+        env,
+        config: CoreConfig,
+        noc_config: NoCConfig,
+        mapper: NetworkMapper,
+    ) -> List[Core]:
         cores = []
         for id in range(self.x_size * self.y_size):
             core = Core(env=self.env, core_id=id, config=config, mapper=mapper)
-            link1 = Link(env=self.env, config=LinkConfig(width=c2r_width, delay=c2r_delay))
-            link2 = Link(env=self.env, config=LinkConfig(width=c2r_width, delay=c2r_delay))
+            c2r = Link(
+                env=self.env,
+                config=noc_config.c2r_link,
+                flit_size=noc_config.router.flit.flit_size,
+                tracer=self.noc.tracer,
+                link_name=f"PE{id}->R{id}",
+            )
+            r2c = Link(
+                env=self.env,
+                config=noc_config.c2r_link,
+                flit_size=noc_config.router.flit.flit_size,
+                tracer=self.noc.tracer,
+                link_name=f"R{id}->PE{id}",
+            )
 
-            link1.bind(0, 0, 0, 0, True)
-            link2.bind(0, 0, 0, 0, True)
-            
-            core.bind_with_router(link2, link1, self.noc.routers[id])
-            self.noc.routers[id].bind_link(direction='core', link_in=link1, link_out=link2)
+            core.bind_with_router(r2c, c2r, self.noc.routers[id])
+            self.noc.routers[id].bind_link(PORT_PE, c2r, r2c)
             cores.append(core)
             
         return cores
 
 
     def build_noc(self, env, config: NoCConfig) -> NoC:
-        # print("Building NoC architecture.")
-        if config.type == "Mesh":
-            return NoC(env = env, config = config).build_connection_mesh()
-        elif config.type == "Torus":
-            return NoC(env = env, config = config).build_connection_torus()
-        elif config.type == "RingRoad":
-            return NoC(env = env, config = config).build_connection_ring_road()
-        elif config.type == "Dragonfly":
-            return NoC(env = env, config = config).build_connection_dragonfly()
-        raise ValueError(f"Unknown NoC type: {config.type}")
+        return NoC(
+            env=env,
+            config=config,
+            tracer=NoCTracer(),
+        ).build_connection_mesh()
     
 
     def initialize(self, operators: List[DFGNode]):
@@ -91,19 +107,23 @@ class Arch:
 
     def link_fail(self, fail: LinkFail):
         yield self.env.timeout(fail.start_time)
-        self.noc.routers[fail.router_id].links[fail.direction]['in'].change_delay(fail.times)
-        self.noc.routers[fail.router_id].links[fail.direction]['out'].change_delay(fail.times)
+        port = direction_to_port(fail.direction)
+        link_in = self.noc.routers[fail.router_id].port_in[port]
+        link_out = self.noc.routers[fail.router_id].port_out[port]
+        assert link_in is not None and link_out is not None
+        link_in.scale_link_delay(fail.times)
+        link_out.scale_link_delay(fail.times)
         
         yield self.env.timeout(fail.end_time-fail.start_time)
-        self.noc.routers[fail.router_id].links[fail.direction]['in'].recover_delay(fail.times)
-        self.noc.routers[fail.router_id].links[fail.direction]['out'].recover_delay(fail.times)
+        link_in.scale_link_delay(1 / fail.times)
+        link_out.scale_link_delay(1 / fail.times)
 
 
     def router_fail(self, fail: RouterFail):
         yield self.env.timeout(fail.start_time)
-        self.noc.routers[fail.router_id].router_fail(fail.times)
+        self.noc.routers[fail.router_id].scale_link_delay(fail.times)
         yield self.env.timeout(fail.end_time-fail.start_time)
-        self.noc.routers[fail.router_id].router_recover(fail.times)
+        self.noc.routers[fail.router_id].scale_link_delay(1 / fail.times)
 
 
     def lsu_fail(self, fail: LsuFail):

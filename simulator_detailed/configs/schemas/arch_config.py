@@ -1,6 +1,6 @@
 from typing import List
 from enum import IntEnum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DMAType(IntEnum):
@@ -36,27 +36,17 @@ class LSUConfig(BaseModel):
 
 
 class FlitConfig(BaseModel):
-    """Flit-level NoC transport parameters defining how messages are packetized."""
-    phit_width: int = 128            # B/cycle, physical link width (one phit per cycle)
-    flit_size: int = 512             # B, size of one flit (1 flit = 4 phits on ADA2S)
-    header_bytes: int = 12           # B, routing header overhead in HEAD flit
-    body_overhead: int = 4           # B, per-flit overhead (seq/CRC) in BODY/TAIL flits
-    buffer_depth_flits: int = 1      # flits, input buffer depth per router port (1-flit on ADA2S)
-    serialization_cycles: float = 4.3  # cycles, time to serialize one flit onto the link
-    credit_rtt_cycles: int = 17       # cycles, credit round-trip time for backpressure
+    """Packet format parameters."""
+    flit_size: int = 512
+    header_bytes: int = 12
+    body_overhead: int = 4
 
 
 class RouterPipelineConfig(BaseModel):
-    """Per-hop router pipeline stage latencies for flit traversal."""
-    rc_cycles: float = 1.0         # cycles, Route Compute stage (HEAD flit only)
-    sa_cycles: float = 2.0         # cycles, Switch Allocation / arbitration stage
-    st_cycles: float = 1.0         # cycles, Switch Traversal (crossbar crossing)
-    lt_cycles: float = 0.5         # cycles, Link Traversal (wire propagation, half-cycle)
-    credit_overhead: float = 1.0   # cycles, extra delay on credit return path
-    head_hop_cycles: float = 4.5   # cycles, total HEAD flit per-hop latency (RC+SA+ST+LT)
-    body_hop_cycles: float = 4.3   # cycles, BODY/TAIL flit per-hop latency (no RC, pipelined)
-    x_fast_hop_cycles: float = 5.5  # cycles, X-direction fast-path hop on Y=0/7 rows
-    y_hop_cycles: float = 8.5      # cycles, Y-direction hop latency (no fast path)
+    """Router pipeline stages, in ACI cycles."""
+    rc_cycles: float = 1.0
+    sa_cycles: float = 2.0
+    st_cycles: float = 1.0
 
 
 class RouterConfig(BaseModel):
@@ -64,14 +54,16 @@ class RouterConfig(BaseModel):
     type: str = "XY"                  # routing algorithm, "XY" = X-first deterministic
     vc: int = 1                       # number of virtual channels per port
     arbitration: str = "round_robin"  # arbitration policy, "round_robin" on ADA2S
-    flit: FlitConfig = FlitConfig()           # flit transport parameters
-    pipeline: RouterPipelineConfig = RouterPipelineConfig()  # pipeline stage latencies
+    flit: FlitConfig = Field(default_factory=FlitConfig)
+    pipeline: RouterPipelineConfig = Field(default_factory=RouterPipelineConfig)
 
 
 class LinkConfig(BaseModel):
-    """Inter-router or core-to-router link config."""
-    width: int = 128      # B/cycle, link bandwidth (phit width)
-    delay: float = 0.5    # cycles, wire propagation delay (half-cycle)
+    """Unidirectional phit link and downstream input-buffer parameters."""
+    phit_width: int = 128
+    wire_delay: float = 0.5
+    buffer_depth: int = 1
+    credit_return_cycles: float = 0.3
 
 
 class NMCConfig(BaseModel):
@@ -89,11 +81,11 @@ class CoreConfig(BaseModel):
     y: int = 8                # number of rows in the core mesh
     width: int = 128          # B/cycle, core-to-router link width
     blk_size: int = 128       # B, default block/tile size for tensor partitioning
-    spm: SPMConfig = SPMConfig(size=3145728, delay=1)        # local scratchpad (3 MB)
-    weight_spm: SPMConfig = SPMConfig(size=16777216, delay=1)  # weight scratchpad (16 MB)
-    tpu: TPUConfig = TPUConfig()        # compute unit config
-    lsu: LSUConfig = LSUConfig()        # load-store unit config
-    nmc: NMCConfig = NMCConfig()        # network memory controller config
+    spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=3145728, delay=1))
+    weight_spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=16777216, delay=1))
+    tpu: TPUConfig = Field(default_factory=TPUConfig)
+    lsu: LSUConfig = Field(default_factory=LSUConfig)
+    nmc: NMCConfig = Field(default_factory=NMCConfig)
 
 
 class DMAEngineConfig(BaseModel):
@@ -102,7 +94,7 @@ class DMAEngineConfig(BaseModel):
     instance_id: int           # instance index within dma_type (0-3 for 4 GM/DDR controllers)
     router_id: int             # router ID this DMA is attached to
     channels: int = 1          # number of independent DMA channels (WDMA=2, RDMA=1)
-    local_ports: List[int] = []  # router local port numbers occupied by this DMA
+    local_ports: List[int] = Field(default_factory=list)
     port_bw: float = 106.0     # B/cycle, per-port bandwidth (GM=106, DDR~=91.5)
     clock_scale: float = 1.0   # clock domain ratio relative to NoC (DDR=1.022 for 1150MHz)
     cdc_penalty: int = 0       # cycles, clock-domain-crossing penalty (DDR=5, GM=0)
@@ -123,10 +115,11 @@ class NoCConfig(BaseModel):
     type: str = "Mesh"                                    # topology: Mesh/Torus/RingRoad/Dragonfly
     x: int = 4                                            # mesh columns
     y: int = 8                                            # mesh rows
-    router: RouterConfig = RouterConfig()                  # router microarchitecture
-    link: LinkConfig = LinkConfig()                        # inter-router link parameters
-    dma_engines: List[DMAEngineConfig] = []                # DMA endpoints attached to routers
-    mem_controllers: List[MemoryControllerConfig] = []     # memory controller bandwidth limits
+    router: RouterConfig = Field(default_factory=RouterConfig)
+    link: LinkConfig = Field(default_factory=LinkConfig)
+    c2r_link: LinkConfig = Field(default_factory=LinkConfig)
+    dma_engines: List[DMAEngineConfig] = Field(default_factory=list)
+    mem_controllers: List[MemoryControllerConfig] = Field(default_factory=list)
 
 
 class MemConfig(BaseModel):
@@ -137,9 +130,9 @@ class MemConfig(BaseModel):
 
 class ArchConfig(BaseModel):
     """Top-level architecture config combining core, NoC, and memory subsystems."""
-    core: CoreConfig = CoreConfig()     # PE core array config
-    noc: NoCConfig = NoCConfig()        # Network-on-Chip config
-    mem: MemConfig = MemConfig()        # memory interface config
+    core: CoreConfig = Field(default_factory=CoreConfig)
+    noc: NoCConfig = Field(default_factory=NoCConfig)
+    mem: MemConfig = Field(default_factory=MemConfig)
 
 
 class ScratchpadConfig(BaseModel):

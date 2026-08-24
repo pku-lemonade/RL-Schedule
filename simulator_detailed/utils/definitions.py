@@ -1,9 +1,8 @@
-import json
 from enum import Enum, auto
 from enum import IntEnum
+import math
 from typing import List, Optional
 from pydantic import BaseModel
-from pydantic import ValidationError
 
 
 class OperatorType(Enum):
@@ -23,7 +22,7 @@ io_operator = [OperatorType.LOAD_FEAT, OperatorType.LOAD_WGT, OperatorType.STORE
 
 
 def ceil(a: int, b: float) -> int:
-    return int((a + b - 1) // b)
+    return math.ceil(a / b)
 
 
 class Direction(IntEnum):
@@ -44,9 +43,10 @@ class NodeType(IntEnum):
 
 class FlitType(IntEnum):
     """Flit type in wormhole packetization."""
-    HEAD = 0  # Header flit: carries routing info, establishes crossbar path
-    BODY = 1  # Body flit: carries payload, follows reserved path
-    TAIL = 2  # Tail flit: carries final payload, releases crossbar reservation
+    SINGLE = 0  # Single-flit packet: establishes and releases the path
+    HEAD = 1    # First flit of a multi-flit packet
+    BODY = 2    # Interior flit following an established path
+    TAIL = 3    # Final flit releasing the path
 
 
 class TransType(IntEnum):
@@ -164,6 +164,14 @@ class Flit(BaseModel):
     broadcast_dst_mask: int = 0      # bitmask of destination PE/router IDs for broadcast
     reduce_op: int = -1              # reduce operation type (-1 = none, >=0 = reduce mode)
     sync_mode: int = 0               # sync mode: 0=normal,1=bcast-incl-self,2=reduce-intermediate,3=reduce-last
+
+    @property
+    def is_head(self) -> bool:
+        return self.flit_type in (FlitType.SINGLE, FlitType.HEAD)
+
+    @property
+    def is_tail(self) -> bool:
+        return self.flit_type in (FlitType.SINGLE, FlitType.TAIL)
 
 
 class Message(BaseModel):
