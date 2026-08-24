@@ -198,13 +198,16 @@ The software-visible 32-bit routing word is embedded in a larger hardware header
 | CRC/checksum | 16-32 bits | Per-flit or per-packet integrity |
 | **Total** | **~70-90 bits ≈ 9-12 bytes** | Fits in first phit (128B) |
 
-**Flit payload layout** (512B flit = 4 phits of 128B):
-- **Single-flit packet**: phit0 = ~12B header + ~116B payload; phits 1-3 = 384B payload. Total payload ≈ 500B.
-- **Header flit (multi-flit)**: phit0 = ~12B header + ~116B payload; phits 1-3 = 384B payload. Carries ~500B payload.
-- **Body flit**: ~4B seq/CRC in phit0; rest = 508B payload.
-- **Tail flit**: ~4B tail marker/CRC in last phit; rest = 508B payload.
+**Logical flit payload accounting** (measured):
+- Transfer sizes up to 512B use one SINGLE flit.
+- 1024B uses two flits (HEAD+TAIL), and 2048B uses four flits.
+- The exposed packet count therefore follows `ceil(payload_bytes / 512)`.
+- The estimated 10-12B header and CRC/sequence fields are wire metadata; the
+  measurements do not establish that they reduce software-visible payload
+  capacity. Their exact physical placement or sideband encoding remains TBD.
 
-For large packets (P ≫ 2), overhead is ~4B per 512B flit + (2×12B)/(P×512B) amortized → effective ~120 B/cyc sustained.
+The simulator consequently accounts for 512 logical payload bytes per flit and
+does not subtract the estimated metadata sizes.
 
 ### 3.2 Transfer Types (TransType)
 
@@ -965,7 +968,7 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | DMA instance independence | Independent ports, BW stacks ★ | Mentor-confirmed; 4×GM_WDMA measured 314 GB/s |
 | Multicast replication | In-router single-write multi-read ★ | Mentor-confirmed |
 | XY routing symmetry | Perfect (Manhattan distance only) | All 31 PE pairs tested |
-| Single-flit payload capacity | **~500B** (derived) | Head flit: ~12B header + ~500B payload |
+| Single-flit logical payload capacity | **512B** (measured) | Transfer sizes up to 512B remain one flit; metadata packing is TBD |
 | Serialization-visible threshold | **≥2048B** (measured) | ≤1024B is latency-bound (2-flit H+T hides serialization) |
 | Routing algorithm | XY dimension-order (X-first), deterministic, no adaptive ★ | Mentor-confirmed; verified by symmetry data |
 | Arbitration | Round-robin (uniform BW, no unfairness) | Confirmed by N-way incast/outcast fair sharing (PE↔PE and PE↔GM) |
@@ -1604,10 +1607,10 @@ Hypothesis: NoC runs at 2× PE frequency (2250 MHz) with 512-bit phits.
 
 Given phit = 128 B and wire rate = 128 B/cyc:
 - Ideal flit serialization: 4 cycles (4 phits)
-- Measured effective serialization: ~4.3 cycles (from document: 512B/4.3cyc ≈ 119 B/cyc)
-- Inter-flit bubble: ~0.3 cycles per flit (from arbitration/credit)
-- Payload per body flit: ~508 B (128B - 12B first phit header for H flit; 128B - 4B CRC for body/tail flits)
-- Effective steady-state: 508B / (4 + 0.3)cyc = 118 B/cyc ≈ 120 B/cyc (matches measurement)
+- Measured effective serialization: ~4.27 cycles (512B / 120B/cyc)
+- Effective inter-flit overhead: ~0.27 cycles beyond ideal serialization
+- Logical payload capacity: 512B per flit, from the measured packet counts
+- Effective steady-state: 512B / 4.27cyc = 120 B/cyc (matches measurement)
 
 ### B.5 Header Size Estimate
 
@@ -1626,7 +1629,9 @@ The software-visible `build_info1` routing word is 32 bits (see §3.1). The full
 | MMU/PID/barrier flags | 8 |
 | **Total** | **76–92 bits ≈ 10–12 bytes** |
 
-Header fits entirely in first phit (128B), leaving ~116B for payload in the head flit.
+An inline 10-12B header would leave about 116B in the first physical phit, but
+the measured packet counts still expose 512 logical payload bytes per flit.
+The exact header placement or sideband encoding is therefore not established.
 
 ### B.6 Conclusion (Derived Parameters)
 
@@ -1637,7 +1642,7 @@ Header fits entirely in first phit (128B), leaving ~116B for payload in the head
 | Phits per flit | 4 | High |
 | Router pipeline depth | ~4.5 cycles (RC:1, SA:2, ST:1, LT:0.5) | Medium (not directly measurable, but consistent with 8.5 cyc/hop) |
 | On-wire header size | ~10–12 bytes in first phit | Medium (estimated from field list) |
-| Inter-flit bubble | ~0.3 cycles/flit (~6% overhead) | High (from 4.0 vs 4.3 cyc serialization) |
+| Inter-flit overhead | ~0.27 cycles/flit (~6% overhead) | High (from 4.0 ideal vs ~4.27 measured interval) |
 | Link wire efficiency | ~94% (large messages) | High (120/128 B/cyc) |
 
 These derived values are used in §2.4 and §9.7. They would be confirmed if hardware documentation provides the exact microarchitecture specification.

@@ -23,8 +23,8 @@
 | Flit serialization | 4 cycles ideal, ~4.3 cycles effective (6% bubble) | §2.4 / Appendix B |
 | Packet format | Single-flit: H+payload; Multi-flit: 1 H + P body + 1 T | §2.4 ★ |
 | Header size | ~12 B in first phit; body/tail overhead ~4 B CRC/seq | §3.1 (derived) |
-| Payload per head flit | ~500 B (512 - 12) | Derived |
-| Payload per body/tail flit | ~508 B (512 - 4) | Derived |
+| Logical payload per head flit | 512 B | Measured packet-count behavior (§9.2) |
+| Logical payload per body/tail flit | 512 B | Measured packet-count behavior (§9.2) |
 | Virtual channels | 1 per port | §2.4 ★ |
 | Input buffer depth | 1 flit (512 B) per port | §2.4 ★ |
 | Flow control | Credit-based, credit RTT ≈ 17 cycles (1 hop) | §2.4 ★ |
@@ -697,10 +697,10 @@ After each sub-step, verify:
 | After step | Check | Expected |
 |-----------|-------|----------|
 | 2b (Link) | Single link, 1 flit transmission time | ~4.3 cyc serialization + 0.5 cyc wire = ~4.8 cyc |
-| 2b (Link) | 500B payload (1 flit) → single-flit msg | HEAD flit only (H+payload inline per §2.4), no BODY/TAIL |
-| 2b (Link) | 512B payload (2 flits) → HEAD+TAIL | HEAD carries 500B, TAIL carries 12B; 2 flits total |
+| 2b (Link) | 512B payload (1 flit) -> single-flit msg | SINGLE flit with inline payload |
+| 2b (Link) | 1024B payload (2 flits) -> HEAD+TAIL | Each flit accounts for 512 logical payload bytes |
 | 2e (Router) | 2-router direct, single flit forward | ~4.5 cyc head hop (RC+SA+ST+LT) |
-| 2f (Mesh) | PE0→PE1 1-hop 512B NoC-only latency (no NMC) | ~4.5 + 4.8 + 4.3 ≈ 13.6 cyc (HEAD route + link + TAIL serialization) |
+| 2f (Mesh) | PE0->PE1 1-hop 512B endpoint transport (no NMC) | 21.5 cyc (`8.5 * hops + 13`) |
 | 2f (Mesh) | PE0→PE31 10-hop HEAD flit latency | ~10 × 4.5-8.5 cyc depending on direction; X hops ~4.5, Y hops ~8.5, X-fast (Y=7) ~5.5; total ≈ 75 cyc HEAD-only |
 | 3 (NMC) | PE0↔PE1 512B RTT (with NMC startup) | ~250+17 = 267 cyc (matches §9.1 dynamic-shape) |
 | 3 | PE0→PE1 large-msg asymptotic BW | ~118-120 GB/s (~106 B/cyc) §9.3 |

@@ -37,9 +37,9 @@ class LSUConfig(BaseModel):
 
 class FlitConfig(BaseModel):
     """Packet format parameters."""
-    flit_size: int = 512
-    header_bytes: int = 12
-    body_overhead: int = 4
+    flit_size: int = 512       # B, measured logical payload capacity per flit
+    header_bytes: int = 12     # B, estimated wire metadata; not deducted from payload
+    body_overhead: int = 4     # B, estimated CRC/sequence metadata
 
 
 class RouterPipelineConfig(BaseModel):

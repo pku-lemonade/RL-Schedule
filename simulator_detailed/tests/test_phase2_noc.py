@@ -4,7 +4,14 @@ import simpy
 
 from simulator_detailed.configs.schemas.arch_config import LinkConfig, NoCConfig
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
-from simulator_detailed.utils.definitions import PORT_PE, Flit, FlitType
+from simulator_detailed.utils.definitions import (
+    PORT_PE,
+    DimSlice,
+    Flit,
+    FlitType,
+    Message,
+    compute_flit_count,
+)
 
 
 class MeshHarness:
@@ -94,6 +101,35 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertFalse(tail.is_head)
         self.assertTrue(tail.is_tail)
 
+    def test_flit_count_uses_measured_logical_payload_capacity(self):
+        expected_counts = {
+            0: 1,
+            1: 1,
+            512: 1,
+            513: 2,
+            1024: 2,
+            1025: 3,
+            2048: 4,
+        }
+        for payload_bytes, expected in expected_counts.items():
+            with self.subTest(payload_bytes=payload_bytes):
+                self.assertEqual(compute_flit_count(payload_bytes), expected)
+
+        message = Message(
+            src=0,
+            dst=1,
+            index=1,
+            data=[DimSlice(start=0, end=512)],
+            header_bytes=64,
+        )
+        self.assertEqual(message.payload_bytes(), 512)
+        self.assertEqual(message.flit_count(), 1)
+
+        with self.assertRaises(ValueError):
+            compute_flit_count(-1)
+        with self.assertRaises(ValueError):
+            compute_flit_count(1, flit_size=0)
+
     def test_direct_link_latency_and_steady_gap(self):
         env = simpy.Environment()
         tracer = NoCTracer()
@@ -150,9 +186,9 @@ class Phase2NoCTests(unittest.TestCase):
     def test_three_flit_wormhole_pipeline(self):
         harness = MeshHarness()
         flits = [
-            harness.flit(FlitType.HEAD, 20, 0, 3, 500),
-            harness.flit(FlitType.BODY, 20, 0, 3, 508),
-            harness.flit(FlitType.TAIL, 20, 0, 3, 492),
+            harness.flit(FlitType.HEAD, 20, 0, 3, 512),
+            harness.flit(FlitType.BODY, 20, 0, 3, 512),
+            harness.flit(FlitType.TAIL, 20, 0, 3, 476),
         ]
         arrivals = harness.transfer(0, 3, flits)
         times = [time for _, time in arrivals]

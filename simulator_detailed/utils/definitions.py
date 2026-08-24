@@ -106,20 +106,18 @@ def is_local_port(port: int) -> bool:
     return port < 100
 
 
-def compute_flit_count(payload_bytes: int, header_bytes: int = 12,
-                       body_overhead: int = 4, flit_size: int = 512) -> int:
-    """Compute number of flits needed for a given payload size.
-    Single-flit (payload <= flit_size - header_bytes): 1 flit (header+payload inline).
-    Multi-flit: 1 HEAD + N payload flits (last is TAIL which tears down the reservation).
-    Each BODY/TAIL flit carries (flit_size - body_overhead) bytes of payload.
+def compute_flit_count(payload_bytes: int, flit_size: int = 512) -> int:
+    """Return the measured logical flit count for a payload.
+
+    Header and CRC sizes are estimated wire metadata. Hardware measurements
+    expose 512 logical payload bytes per flit, so they are not deducted here.
+    A zero-byte control message still occupies one flit.
     """
-    head_payload = flit_size - header_bytes
-    if payload_bytes <= head_payload:
-        return 1
-    remaining = payload_bytes - head_payload
-    body_payload = flit_size - body_overhead
-    tail_plus_body = ceil(remaining, body_payload)
-    return 1 + tail_plus_body
+    if payload_bytes < 0:
+        raise ValueError("payload size cannot be negative")
+    if flit_size <= 0:
+        raise ValueError("flit size must be positive")
+    return max(1, ceil(payload_bytes, flit_size))
 
 
 class DimSlice(BaseModel):
@@ -189,11 +187,11 @@ class Message(BaseModel):
     broadcast_dst_mask: int = 0       # destination bitmask for broadcast/multicast
     reduce_op: int = -1               # reduce operation (-1 = none)
     sync_mode: int = 0                # sync mode field
-    header_bytes: int = 12            # B, routing header overhead
+    header_bytes: int = 12            # B, estimated metadata; not deducted from logical payload
 
-    def flit_count(self, flit_size: int = 512, body_overhead: int = 4) -> int:
+    def flit_count(self, flit_size: int = 512) -> int:
         """Number of flits this message is packetized into."""
-        return compute_flit_count(self.payload_bytes(), self.header_bytes, body_overhead, flit_size)
+        return compute_flit_count(self.payload_bytes(), flit_size)
 
     def payload_bytes(self) -> int:
         """Total payload size in bytes."""

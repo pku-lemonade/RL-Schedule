@@ -9,6 +9,11 @@
 
 `is_head` and `is_tail` are derived properties, not stored booleans.
 
+Logical payload accounting follows the measured transfer-size behavior: each
+flit carries up to 512 logical payload bytes. Therefore 512 B uses one flit,
+1024 B uses two, and 2048 B uses four. The estimated header and CRC sizes are
+wire metadata and do not reduce this logical capacity in the simulator.
+
 `Flit` carries payload size, message ID, source/destination router IDs, local
 ports, and future multicast/reduction metadata. Phase 2 routes Flits directly;
 `Message.packetize()` belongs to Phase 3 and must receive `FlitConfig` plus

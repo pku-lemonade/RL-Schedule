@@ -5,7 +5,7 @@ calibrated to the latest hardware measurements. Apply the following fixes in
 order. Each fix must contain a focused code change, its regression tests, and
 the corresponding documentation update.
 
-## Fix 1: Correct flit counting
+## Fix 1: Correct flit counting (complete)
 
 - Change `compute_flit_count()` to match measured payload packing.
 - Required boundaries: 512 B -> 1 flit, 1024 B -> 2 flits, 2048 B -> 4 flits.
