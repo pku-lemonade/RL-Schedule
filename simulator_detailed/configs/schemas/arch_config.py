@@ -1,6 +1,9 @@
-from typing import List
 from enum import IntEnum
-from pydantic import BaseModel, Field
+from typing import List
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from ...utils.definitions import NoCChannel
 
 
 class DMAType(IntEnum):
@@ -36,10 +39,18 @@ class LSUConfig(BaseModel):
 
 
 class FlitConfig(BaseModel):
-    """Packet format parameters."""
-    flit_size: int = 512       # B, measured logical payload capacity per flit
-    header_bytes: int = 12     # B, estimated wire metadata; not deducted from payload
-    body_overhead: int = 4     # B, estimated CRC/sequence metadata
+    """Physical transfer size and confirmed logical payload capacity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    physical_flit_bytes: int = Field(default=512, gt=0)
+    payload_capacity_bytes: int = Field(default=512, gt=0)
+
+    @model_validator(mode="after")
+    def validate_payload_capacity(self) -> "FlitConfig":
+        if self.payload_capacity_bytes > self.physical_flit_bytes:
+            raise ValueError("payload capacity cannot exceed physical flit size")
+        return self
 
 
 class RouterPipelineConfig(BaseModel):
@@ -59,19 +70,51 @@ class RouterConfig(BaseModel):
 
 
 class LinkConfig(BaseModel):
-    """Unidirectional phit link and downstream input-buffer parameters."""
-    phit_width: int = 128
-    wire_delay: float = 0.5
-    buffer_depth: int = 1
-    credit_return_cycles: float = 0.3
+    """Physical link timing and bounded flow-control parameters."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phit_bytes: int = Field(default=128, gt=0)
+    launch_interval_cycles: float = Field(default=512.0 / 120.0, gt=0)
+    wire_delay_cycles: float = Field(default=0.5, ge=0)
+    input_buffer_depth_flits: int = Field(default=1, gt=0)
+    flow_control_window_flits: int = Field(default=1, gt=0)
+
+    def serialization_cycles(self, physical_flit_bytes: int) -> float:
+        """Return ideal physical serialization time for one flit."""
+        if physical_flit_bytes <= 0:
+            raise ValueError("physical flit size must be positive")
+        if physical_flit_bytes % self.phit_bytes != 0:
+            raise ValueError("physical flit size must contain a whole number of phits")
+        return physical_flit_bytes / self.phit_bytes
+
+
+class NMCChannelConfig(BaseModel):
+    """Configuration of one independent, full-duplex PE NMC channel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tx_bytes_per_cycle: float = Field(default=120.0, gt=0)
+    rx_bytes_per_cycle: float = Field(default=120.0, gt=0)
+    descriptor_issue_cycles: float = Field(default=57.0, ge=0)
+    max_outstanding_descriptors: int = Field(default=24, gt=0)
 
 
 class NMCConfig(BaseModel):
-    """Network Memory Controller config: PE-side NoC-to-SRAM interface."""
-    channels: int = 2            # number of NMC channels (CH0/CH1), shared SRAM port
-    sram_port_bw: float = 106.0  # B/cycle, aggregate SRAM port bandwidth shared by both channels
-    startup_static: int = 80     # cycles, static (hot) startup latency for first flit injection
-    startup_dynamic: int = 125   # cycles, dynamic (cold/wakeup) additional startup latency
+    """Two independent PE NMC channels; runtime resources are added in Fix 9."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ch0: NMCChannelConfig = Field(default_factory=NMCChannelConfig)
+    ch1: NMCChannelConfig = Field(default_factory=NMCChannelConfig)
+
+    def channel_config(self, channel: NoCChannel) -> NMCChannelConfig:
+        """Return the configuration for a validated hardware channel."""
+        if channel is NoCChannel.CH0:
+            return self.ch0
+        if channel is NoCChannel.CH1:
+            return self.ch1
+        raise ValueError(f"unsupported NoC channel: {channel!r}")
 
 
 class CoreConfig(BaseModel):
@@ -94,7 +137,7 @@ class DMAEngineConfig(BaseModel):
     instance_id: int           # instance index within dma_type (0-3 for 4 GM/DDR controllers)
     router_id: int             # router ID this DMA is attached to
     channels: int = 1          # number of independent DMA channels (WDMA=2, RDMA=1)
-    local_ports: List[int] = Field(default_factory=list)
+    local_ports: List[int] = Field(default_factory=list[int])
     port_bw: float = 106.0     # B/cycle, per-port bandwidth (GM=106, DDR~=91.5)
     clock_scale: float = 1.0   # clock domain ratio relative to NoC (DDR=1.022 for 1150MHz)
     cdc_penalty: int = 0       # cycles, clock-domain-crossing penalty (DDR=5, GM=0)
@@ -115,11 +158,16 @@ class NoCConfig(BaseModel):
     type: str = "Mesh"                                    # topology: Mesh/Torus/RingRoad/Dragonfly
     x: int = 4                                            # mesh columns
     y: int = 8                                            # mesh rows
+    clock_mhz: float = Field(default=1125.0, gt=0)         # ACI/NoC clock
     router: RouterConfig = Field(default_factory=RouterConfig)
     link: LinkConfig = Field(default_factory=LinkConfig)
     c2r_link: LinkConfig = Field(default_factory=LinkConfig)
-    dma_engines: List[DMAEngineConfig] = Field(default_factory=list)
-    mem_controllers: List[MemoryControllerConfig] = Field(default_factory=list)
+    dma_engines: List[DMAEngineConfig] = Field(
+        default_factory=list[DMAEngineConfig]
+    )
+    mem_controllers: List[MemoryControllerConfig] = Field(
+        default_factory=list[MemoryControllerConfig]
+    )
 
 
 class MemConfig(BaseModel):

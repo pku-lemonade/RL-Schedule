@@ -1,12 +1,14 @@
 import unittest
 
 import simpy
+from pydantic import ValidationError
 
 from simulator_detailed.configs.schemas.arch_config import (
     DMAEngineConfig,
     DMAType,
     FlitConfig,
     LinkConfig,
+    NMCConfig,
     NoCConfig,
 )
 from simulator_detailed.endpoint_registry import EndpointRegistry
@@ -21,6 +23,7 @@ from simulator_detailed.utils.definitions import (
     Flit,
     FlitType,
     Message,
+    NoCChannel,
     NodeType,
     TransType,
     compute_flit_count,
@@ -39,14 +42,14 @@ class MeshHarness:
         c2r = Link(
             self.env,
             self.config.c2r_link,
-            self.config.router.flit.flit_size,
+            self.config.router.flit.physical_flit_bytes,
             self.tracer,
             f"PE{router_id}->R{router_id}",
         )
         r2c = Link(
             self.env,
             self.config.c2r_link,
-            self.config.router.flit.flit_size,
+            self.config.router.flit.physical_flit_bytes,
             self.tracer,
             f"R{router_id}->PE{router_id}",
         )
@@ -93,12 +96,57 @@ class MeshHarness:
 class Phase2NoCTests(unittest.TestCase):
     def test_config_and_mesh_shape(self):
         harness = MeshHarness()
+        flit_config = harness.config.router.flit
+        link_config = harness.config.link
+        nmc_config = NMCConfig()
+
         self.assertEqual((harness.noc.x, harness.noc.y), (4, 8))
         self.assertEqual(len(harness.noc.routers), 32)
         self.assertEqual(len(harness.noc.r2r_links), 104)
+        self.assertEqual(harness.config.clock_mhz, 1125.0)
         self.assertEqual(harness.config.router.vc, 1)
-        self.assertEqual(harness.config.link.phit_width, 128)
-        self.assertEqual(harness.config.link.buffer_depth, 1)
+        self.assertEqual(flit_config.physical_flit_bytes, 512)
+        self.assertEqual(flit_config.payload_capacity_bytes, 512)
+        self.assertEqual(link_config.phit_bytes, 128)
+        self.assertEqual(link_config.serialization_cycles(512), 4.0)
+        self.assertAlmostEqual(link_config.launch_interval_cycles, 512.0 / 120.0)
+        self.assertEqual(link_config.wire_delay_cycles, 0.5)
+        self.assertEqual(link_config.input_buffer_depth_flits, 1)
+        self.assertEqual(link_config.flow_control_window_flits, 1)
+        self.assertIsNot(nmc_config.ch0, nmc_config.ch1)
+        for channel in NoCChannel:
+            channel_config = nmc_config.channel_config(channel)
+            self.assertEqual(channel_config.tx_bytes_per_cycle, 120.0)
+            self.assertEqual(channel_config.rx_bytes_per_cycle, 120.0)
+            self.assertEqual(channel_config.descriptor_issue_cycles, 57.0)
+            self.assertEqual(channel_config.max_outstanding_descriptors, 24)
+
+    def test_hardware_enum_values_and_invalid_channel(self):
+        self.assertEqual(
+            {member.name: member.value for member in TransType},
+            {
+                "SINGLECAST": 0,
+                "FIXPATH": 1,
+                "MULTICAST": 2,
+                "BROADCAST": 3,
+            },
+        )
+        self.assertEqual(
+            {member.name: member.value for member in NoCChannel},
+            {"CH0": 0, "CH1": 1},
+        )
+        with self.assertRaises(ValueError):
+            NoCChannel(2)
+
+    def test_ambiguous_legacy_transport_config_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            FlitConfig.model_validate({"flit_size": 512})
+        with self.assertRaises(ValidationError):
+            FlitConfig(physical_flit_bytes=256, payload_capacity_bytes=512)
+        with self.assertRaises(ValidationError):
+            LinkConfig.model_validate({"phit_width": 128})
+        with self.assertRaises(ValidationError):
+            NMCConfig.model_validate({"channels": 2, "sram_port_bw": 106.0})
 
     def test_single_flit_properties(self):
         single = MeshHarness.flit(FlitType.SINGLE, 1, 0, 1)
@@ -151,7 +199,7 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             compute_flit_count(-1)
         with self.assertRaises(ValueError):
-            compute_flit_count(1, flit_size=0)
+            compute_flit_count(1, payload_capacity_bytes=0)
 
     def test_message_packetize_uses_config_and_preserves_metadata(self) -> None:
         pe_registry = EndpointRegistry(NoCConfig())
@@ -175,14 +223,10 @@ class Phase2NoCTests(unittest.TestCase):
                     dst=pe_registry.resolve(NodeType.PE, 31),
                     index=100 + payload_bytes,
                     data=[DimSlice(start=0, end=payload_bytes)],
-                    trans_type=TransType.BROADCAST,
-                    is_broadcast=True,
-                    broadcast_dst_mask=0b101,
-                    reduce_op=1,
-                    sync_mode=2,
+                    trans_type=TransType.SINGLECAST,
                 )
 
-                flits = message.packetize(FlitConfig(flit_size=512))
+                flits = message.packetize(FlitConfig(payload_capacity_bytes=512))
 
                 self.assertEqual([flit.flit_type for flit in flits], expected_types)
                 self.assertEqual([flit.payload_bytes for flit in flits], expected_payloads)
@@ -193,10 +237,10 @@ class Phase2NoCTests(unittest.TestCase):
                     self.assertEqual(flit.dst_router, 31)
                     self.assertEqual(flit.src_local_port, message.src.local_port)
                     self.assertEqual(flit.dst_local_port, message.dst.local_port)
-                    self.assertEqual(flit.is_broadcast, message.is_broadcast)
-                    self.assertEqual(flit.broadcast_dst_mask, message.broadcast_dst_mask)
-                    self.assertEqual(flit.reduce_op, message.reduce_op)
-                    self.assertEqual(flit.sync_mode, message.sync_mode)
+                    self.assertFalse(flit.is_broadcast)
+                    self.assertEqual(flit.broadcast_dst_mask, 0)
+                    self.assertEqual(flit.reduce_op, -1)
+                    self.assertEqual(flit.sync_mode, 0)
 
         dma_registry = EndpointRegistry(
             NoCConfig(
@@ -228,7 +272,9 @@ class Phase2NoCTests(unittest.TestCase):
             index=7,
             data=[DimSlice(start=0, end=513)],
         )
-        configured_flits = configured_message.packetize(FlitConfig(flit_size=256))
+        configured_flits = configured_message.packetize(
+            FlitConfig(payload_capacity_bytes=256)
+        )
         self.assertEqual(
             [flit.flit_type for flit in configured_flits],
             [FlitType.HEAD, FlitType.BODY, FlitType.TAIL],
@@ -261,6 +307,28 @@ class Phase2NoCTests(unittest.TestCase):
                 index=9,
                 data=[DimSlice(start=0, end=1)],
             )
+
+    def test_unsupported_transfer_types_stop_at_packetization_boundary(self):
+        registry = EndpointRegistry(NoCConfig())
+        for trans_type in (
+            TransType.FIXPATH,
+            TransType.MULTICAST,
+            TransType.BROADCAST,
+        ):
+            with self.subTest(trans_type=trans_type):
+                message = Message(
+                    src=registry.resolve(NodeType.PE, 0),
+                    dst=registry.resolve(NodeType.PE, 1),
+                    index=trans_type.value,
+                    data=[DimSlice(start=0, end=512)],
+                    trans_type=trans_type,
+                )
+                self.assertEqual(message.trans_type, trans_type)
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    f"does not implement {trans_type.name}",
+                ):
+                    message.packetize(FlitConfig())
 
     def test_endpoint_registry_rejects_ambiguous_or_invalid_mappings(self) -> None:
         registry = EndpointRegistry(
@@ -403,8 +471,8 @@ class Phase2NoCTests(unittest.TestCase):
         done = env.process(receiver())
         env.run(until=done)
         self.assertAlmostEqual(arrivals[0], 4.5)
-        self.assertAlmostEqual(arrivals[1] - arrivals[0], 4.8)
-        self.assertAlmostEqual(arrivals[2] - arrivals[1], 4.8)
+        self.assertAlmostEqual(arrivals[1] - arrivals[0], 4.5)
+        self.assertAlmostEqual(arrivals[2] - arrivals[1], 4.5)
 
     def test_single_flit_latency_for_one_to_ten_hops(self):
         for hops in range(1, 11):
@@ -440,7 +508,7 @@ class Phase2NoCTests(unittest.TestCase):
         ]
         arrivals = harness.transfer(0, 3, flits)
         times = [time for _, time in arrivals]
-        for actual, expected in zip(times, (38.5, 43.3, 48.1)):
+        for actual, expected in zip(times, (38.5, 43.0, 47.5)):
             self.assertAlmostEqual(actual, expected)
         self.assertFalse(harness.noc.routers[0].reservation)
         self.assertFalse(harness.noc.routers[3].reservation)

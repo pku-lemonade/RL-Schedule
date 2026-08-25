@@ -25,9 +25,10 @@ independent node, router, and port fields that could contradict one another.
 
 `Message.packetize(flit_config)` converts an addressed message into
 payload-bearing flits. It copies routing from the stored endpoint addresses and
-uses `FlitConfig.flit_size` as payload capacity. The source route is simulator
-metadata used for injection tracing; the documented hardware routing word carries
-only the destination route and local port.
+uses `FlitConfig.payload_capacity_bytes` as payload capacity. The independent
+`physical_flit_bytes` field describes link transfer cost. The source route is
+simulator metadata used for injection tracing; the documented hardware routing
+word carries only the destination route and local port.
 
 Addresses should come from the architecture-owned `EndpointRegistry`. It rejects
 out-of-topology routers, invalid type/port combinations, duplicate physical port
@@ -39,9 +40,11 @@ Payload direction is also validated: PE and RDMA endpoints may inject data, whil
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
 work are not payload `Message` objects and belong to the later endpoint model.
 
-`TransType` is not serialized or interpreted by Phase 2. Its current internal
-values therefore must not be treated as the hardware on-wire encoding; that
-encoding must be reconciled with `NOC_ARCHITECTURE.md` before multicast work.
+`NoCChannel` uses the hardware channel values `CH0=0` and `CH1=1`.
+`TransType` uses the routing-word encoding `SINGLECAST=0`, `FIXPATH=1`,
+`MULTICAST=2`, and `BROADCAST=3`. Phase 2 currently executes only SINGLECAST;
+packetization raises `NotImplementedError` for the other representable types so
+they cannot silently follow the unicast path.
 
 `FlitEvent` uses explicit `out_port` and `link_name` fields. It intentionally
 does not duplicate flit type or tail state. Callers inspect `NoCTracer.events`

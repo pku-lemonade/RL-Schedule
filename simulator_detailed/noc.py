@@ -3,6 +3,7 @@ from enum import IntEnum
 from typing import Dict, List, Optional
 
 import simpy
+from simpy.resources.resource import Request as SimpyRequest
 
 from .configs.schemas.arch_config import LinkConfig, NoCConfig, RouterConfig
 from .utils.definitions import (
@@ -122,24 +123,30 @@ class Link:
         self,
         env: simpy.Environment,
         config: LinkConfig,
-        flit_size: int,
+        physical_flit_bytes: int,
         tracer: NoCTracer,
         link_name: str = "",
     ):
         self.env = env
         self.config = config
-        self.flit_size = flit_size
+        self.physical_flit_bytes = physical_flit_bytes
         self.tracer = tracer
         self.link_name = link_name
-        self.serialization_cycles = flit_size / config.phit_width
-        self.wire_delay = config.wire_delay
+        self.serialization_cycles = config.serialization_cycles(physical_flit_bytes)
+        if config.launch_interval_cycles < self.serialization_cycles:
+            raise ValueError("launch interval cannot be shorter than serialization")
+        self.launch_interval_cycles = config.launch_interval_cycles
+        self.wire_delay_cycles = config.wire_delay_cycles
         self.delay_factor = 1.0
 
-        self.flit_buffer = simpy.Store(env, capacity=config.buffer_depth)
+        self.flit_buffer = simpy.Store(
+            env,
+            capacity=config.input_buffer_depth_flits,
+        )
         self.credits = simpy.Container(
             env,
-            init=config.buffer_depth,
-            capacity=config.buffer_depth,
+            init=config.flow_control_window_flits,
+            capacity=config.flow_control_window_flits,
         )
         self._out_queue = simpy.Store(env, capacity=1)
         self.env.process(self._transmit_loop())
@@ -184,9 +191,12 @@ class Link:
             flit = yield self._out_queue.get()
             yield self.env.timeout(self.serialization_cycles * self.delay_factor)
             self.env.process(self._wire_deliver(flit))
+            launch_gap = self.launch_interval_cycles - self.serialization_cycles
+            if launch_gap > 0:
+                yield self.env.timeout(launch_gap * self.delay_factor)
 
     def _wire_deliver(self, flit: Flit):
-        yield self.env.timeout(self.wire_delay * self.delay_factor)
+        yield self.env.timeout(self.wire_delay_cycles * self.delay_factor)
         yield self.flit_buffer.put(flit)
         self.tracer.log(
             self.env.now,
@@ -196,9 +206,6 @@ class Link:
         )
 
     def _return_credit(self):
-        yield self.env.timeout(
-            self.config.credit_return_cycles * self.delay_factor
-        )
         yield self.credits.put(1)
         self.tracer.log(
             self.env.now,
@@ -247,7 +254,7 @@ class Router:
         }
         self.out_channels: Dict[int, simpy.Resource] = {}
         self.reservation: Dict[int, int] = {}
-        self._sa_reqs: Dict[int, simpy.events.Event] = {}
+        self._sa_reqs: Dict[int, SimpyRequest] = {}
         self._forwarder_started: Dict[int, bool] = {}
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
@@ -414,7 +421,7 @@ class NoC:
         self.x = config.x
         self.y = config.y
         self.tracer = tracer
-        self.flit_size = config.router.flit.flit_size
+        self.physical_flit_bytes = config.router.flit.physical_flit_bytes
         self.r2r_links: List[Link] = []
         self.routers: List[Router] = []
 
@@ -464,14 +471,14 @@ class NoC:
         link_ab = Link(
             self.env,
             self.config.link,
-            self.flit_size,
+            self.physical_flit_bytes,
             self.tracer,
             f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
         )
         link_ba = Link(
             self.env,
             self.config.link,
-            self.flit_size,
+            self.physical_flit_bytes,
             self.tracer,
             f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
         )

@@ -56,14 +56,14 @@ class Arch:
             c2r = Link(
                 env=self.env,
                 config=noc_config.c2r_link,
-                flit_size=noc_config.router.flit.flit_size,
+                physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                 tracer=self.noc.tracer,
                 link_name=f"PE{id}->R{id}",
             )
             r2c = Link(
                 env=self.env,
                 config=noc_config.c2r_link,
-                flit_size=noc_config.router.flit.flit_size,
+                physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                 tracer=self.noc.tracer,
                 link_name=f"R{id}->PE{id}",
             )
