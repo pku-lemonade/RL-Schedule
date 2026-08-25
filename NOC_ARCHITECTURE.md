@@ -1072,6 +1072,12 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | **Dual-channel full-duplex (2ch × 2dir) bulk** | **~468 B/cyc = 527 GB/s** | 2 NoCs × 2 dir × ~117 B/cyc = 97.5% efficiency; §9.19 |
 | **Dual-channel full-duplex @ 32KB batch** | **~340 B/cyc = 382 GB/s** | MoE tile granularity; 97.5% of 4×87 B/cyc; §9.19 |
 | **SRAM port contention (NMC + Matrix, mtx-first)** | **≤7% worst-case (NMC-bound), ≤3% (matrix-bound)** | Local & Weight SRAM are independent banks; §9.18-9.19 |
+| **SRAM port contention (Matrix + Vector)** | **~19% wall slowdown, Vec @80% BW** | Write-port bottleneck (Matrix C writes + vec_write); §9.21 |
+| **SRAM port contention (NMC + Vector)** | **~26-29% wall slowdown, both @77% BW** | Both read+write ports shared; fair RR; §9.21 |
+| **SRAM port contention (NMC + Matrix + Vector)** | **~44-48% wall slowdown, NMC @66%, Vec @65%** | Severe three-way contention; avoid full three-way overlap; §9.21 |
+| **Local SRAM write port aggregate BW** | **~190-200 B/cyc (sustainable)** | Combined NMC RX + vec_write + Matrix C writes saturate at ~194 B/cyc; §9.21 |
+| **Local SRAM read port aggregate BW** | **~260-290 B/cyc (sustainable)** | vec_read alone achieves 260 B/cyc; §9.20, §9.21 |
+| **Weight SRAM independence** | **Fully separate ports, zero contention** | Matrix B reads from Weight SRAM don't interfere with Local SRAM traffic; §9.18, §9.21 |
 | **bmm command queue depth** | **~4 tiles** | Issuing >4 bmm() back-to-back stalls scalar core; single tile ~2120 cyc; §9.18 |
 | **Optimal command ordering** | **mtx-first**: fire bmm → post DMA → continue bmm → fence | NMC-first ordering 34% slower at mtx=8,N=32; §9.18 |
 | **Vector vec_read BW (Local SRAM, bulk)** | **~260 B/cyc = 292 GB/s**, ~88 cyc overhead | Single TPC DMA; 146 B/cyc @ 32KB (56% of asymptote); §9.20 |
@@ -1937,7 +1943,90 @@ This achieves:
 1. **Activation gather**: ~90 B/cyc (101 GB/s) at 32 KB, comparable to NMC bandwidth (~98 GB/s/ch at 32 KB). Gather is not the bottleneck when overlapped with NMC/Matrix.
 2. **Element-wise ops (SiLU/gating)**: ~670 cyc (1-TPC) or ~170 cyc (4-TPC) for 32 KB, negligible vs BMM (~2120 cyc/tile) and NMC (~2000+ cyc).
 3. **Pipeline stage costs** (32 KB batch): gather ~364 cyc -> compute ~670 cyc -> write ~360 cyc = ~1400 cyc total (1-TPC) or ~900 cyc (4-TPC).
-4. **Port contention**: Vector DMA uses independent SRAM ports; expected <=7% overhead when overlapped with NMC+Matrix (consistent with 9.18/9.19 findings).
+4. **Port contention**: Vector, NMC, and Matrix DO share Local SRAM read/write ports. Three-way contention is significant (see §9.21); Vector+NMC two-way contention is ~25% wall slowdown (77% per-engine BW retention), not ≤7% as previously estimated from NMC+Matrix-only measurements.
+
+---
+
+### 9.21 Three-Way SRAM Port Contention (Vector + NMC + Matrix) (2026-08-25)
+
+**Benchmark**: [noc_rb60.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb60.cpp). PE0 runs three workloads concurrently (mtx-first ordering): (1) fp8e4m3 bmm tiles reading A from Local SRAM, B from Weight SRAM, writing C to Local SRAM; (2) NMC fulldup echo with PE1 (32 KB batched messages, CH0 and/or CH1); (3) Vector rd+wr DMA (ada_native_to_vmem from Local SRAM → VMEM, then ada_vmem_to_native from VMEM → Local SRAM, 60 KB/iter = 480 VMEM entries). PE1 acts as echo partner. Workloads are balanced to ~6200-6450 cyc alone (mtx=3 tiles, n=16 msgs, vec=8 iters) so all engines finish near-simultaneously, enabling accurate per-engine BW measurement.
+
+**Buffer layout** (non-overlapping, verified): bmm A @0x4000, C @0xC000; CH0 send @0x50000 (512KB), recv @0xD0000 (512KB); CH1 send @0x150000 (512KB), recv @0x1D0000 (512KB); Vector read src @0x250000 (64KB), write dst @0x270000 (64KB); bmm B+A_scale in Weight SRAM @0/0x20000.
+
+#### 9.21.1 Isolated Baselines (32 KB batched, PE0↔PE1 single-hop)
+
+| Workload | Cycles | NMC agg B/cyc | Vec agg B/cyc | GB/s |
+|----------|--------|---------------|---------------|------|
+| NMC CH0 fulldup (16×32KB TX+RX) | 6218 | 168.6 | — | 190 |
+| NMC dual-ch fulldup (16×32KB × 2ch) | 6355 | 330.0 | — | 371 |
+| Matrix bmm (3 tiles, 256×256×128 fp8) | 6454 | — | — | — |
+| Vector rd+wr (8 iters × 60KB ea. dir) | 6126 | — | 160.4 | 180 |
+
+Alone times are balanced within ±5% (6126-6454 cyc), enabling fair overlap measurement.
+
+#### 9.21.2 Two-Way Contention Results (32 KB batched, mtx-first)
+
+| Combination | Mode | Wall cyc | Wall slowdown | NMC agg B/cyc | NMC vs alone | Vec agg B/cyc | Vec vs alone |
+|-------------|------|----------|---------------|---------------|-------------|---------------|-------------|
+| M+N0 (Matrix + CH0 fulldup) | 5 | 6699 | **+3.8%** | 156.5 | 92.8% | — | — |
+| M+N0+N1 (Matrix + dual-ch fulldup) | 7 | 7144 | **+10.7%** | 293.5 | 88.9% | — | — |
+| M+V (Matrix + Vector rd+wr) | 12 | 7691 | **+19.2%** | — | — | 127.8 | 79.7% |
+| N0+V (CH0 fulldup + Vector) | 9 | 8010 | **+28.8%** | 130.9 | 77.6% | 122.7 | 76.5% |
+| N0+N1+V (dual-ch fulldup + Vector) | 11 | 8018 | **+26.2%** | 261.5 | 79.2% | 122.6 | 76.4% |
+
+#### 9.21.3 Three-Way Contention Results (32 KB batched, mtx-first)
+
+| Combination | Mode | Wall cyc | Wall slowdown | NMC agg B/cyc | NMC vs alone | Vec agg B/cyc | Vec vs alone | Aggregate vs ideal sum |
+|-------------|------|----------|---------------|---------------|-------------|---------------|-------------|----------------------|
+| M+N0+V (all three, single-ch) | 13 | 9274 | **+43.7%** | 113.0 | 67.0% | 105.9 | 66.0% | **66.6%** |
+| M+N0+N1+V (all three, dual-ch) | 15 | 9570 | **+48.3%** | 219.1 | 66.4% | 102.7 | 64.0% | **65.6%** |
+
+Ideal sum for three-way single-ch = N0_alone(168.6) + V_alone(160.4) = 329 B/cyc; achieved 218.9 B/cyc.
+
+#### 9.21.4 Analysis and Microarchitectural Interpretation
+
+The three engines **share Local SRAM read and write ports** (or a common interconnect to SRAM banks), causing measurable throughput degradation when running concurrently. The dominant bottleneck varies by combination:
+
+1. **M+N (Matrix + NMC) — minimal contention (4-11%)**: Matrix consumes very little SRAM read bandwidth (~15 B/cyc for A matrix, with B fetched from independent Weight SRAM) but writes C at ~122 B/cyc. NMC reads ~84 B/cyc (TX) and writes ~84 B/cyc (RX). The write port (Matrix C + NMC RX) is the main contention point, but Matrix C writes are bursty (one 256KB tile every ~2120 cyc), allowing NMC to fill gaps. This confirms §9.18 findings of ≤7% wall overhead in NMC-bound regimes.
+
+2. **M+V (Matrix + Vector) — moderate contention (19%)**: Vector vec_write is a continuous SRAM write stream at ~80-129 B/cyc average, which directly competes with Matrix C writes (~122 B/cyc) on the write port. The write port is the bottleneck; vec_read (~80 B/cyc average) barely competes with Matrix A reads (~15 B/cyc) on the read port. Vector throughput drops to ~80% of alone.
+
+3. **N+V (NMC + Vector) — significant contention (26-29%)**: Both engines access both read and write ports continuously. NMC TX (~84 B/cyc read) competes with vec_read (~80 B/cyc read); NMC RX (~84 B/cyc write) competes with vec_write (~80 B/cyc write). Both ports are shared roughly equally, giving ~77% throughput retention per engine — consistent with fair round-robin arbitration on SRAM ports.
+
+4. **M+N+V (three-way) — severe contention (44-48%)**: All three engines compete for both SRAM ports simultaneously. NMC aggregate BW drops to ~66% of alone, Vec BW drops to ~65% of alone, and wall time increases by 44-48% over the longest alone baseline. Aggregate SRAM throughput is ~66% of the ideal zero-contention sum. Dual-channel NMC makes contention slightly worse (3-5% additional) due to doubled NMC SRAM traffic.
+
+5. **Dual-channel vs single-ch NMC**: Adding a second NMC channel adds marginally more contention (~3-5% additional wall slowdown) because the second channel's TX/RX doubles the SRAM read/write demand from NMC. However, the incremental penalty is sub-linear because the port bandwidth isn't fully saturated at single-ch NMC+V loads.
+
+#### 9.21.5 MoE Kernel Design Implications
+
+This finding **revises** the earlier §9.20.5 assumption that Vector uses independent SRAM ports with ≤7% overhead. The corrected model:
+
+1. **Avoid three-way overlap**: Schedule NMC transfers and Vector compute/gather to NOT run simultaneously with Matrix bmm writes, or accept ~44-48% wall slowdown.
+2. **Two-way overlaps are cheaper**: NMC+Matrix (4-11%) and Matrix+Vector (19%) are viable; NMC+Vector (26-29%) is acceptable but not free.
+3. **Write port is the critical resource**: Matrix C writes (256 KB per tile at ~122 B/cyc) dominate SRAM write traffic. Overlapping vec_write or NMC RX with active bmm tiles will be write-port-limited.
+4. **Activation pipeline scheduling**: For MoE token dispatch/gather + compute + reduce pipeline, the optimal double-buffering strategy should:
+   - Overlap NMC dispatch (TX) with current-tile bmm (cheap: ~4% overhead)
+   - Serialize Vector activation post-processing (gather+SiLU+write) AFTER bmm completes, or overlap only NMC TX (not RX) with vec_write to avoid write-port saturation
+   - Avoid overlapping NMC fulldup (both TX+RX) + Vector rd+wr + Matrix bmm simultaneously (48% slowdown)
+5. **Overlap model** (32 KB batched, mtx-first, rough):
+   ```
+   T_total ≈ max(T_nmc, T_mtx, T_vec) × (1 + α)
+   α ≈ 0.04  for M+N
+   α ≈ 0.19  for M+V
+   α ≈ 0.28  for N+V
+   α ≈ 0.46  for M+N+V (three-way)
+   ```
+   Add 0.03 for dual-ch NMC vs single-ch in all cases.
+
+#### 9.21.6 Revised SRAM Port Model
+
+Based on contention data, the Local SRAM likely provides:
+- **Read port**: ~260-290 B/cyc (2048-2304 bits) sustainable aggregate; vec_read achieves 260 B/cyc alone, and combined NMC TX + vec_read + Matrix A achieves ~120 B/cyc (below capacity due to write-port backpressure and burst patterns)
+- **Write port**: ~190-200 B/cyc (1536-1600 bits) sustainable aggregate; combined NMC RX + vec_write + Matrix C writes achieve ~194 B/cyc in three-way tests (near saturation)
+- Weight SRAM is fully independent (separate physical memory), with its own ports; Matrix B reads from Weight SRAM do not contend with anything on Local SRAM
+- Arbitration appears to be round-robin (fair) across engines when ports are contended
+
+---
 
 ## 10. Remaining TBD Parameters (What We Still Lack)
 
@@ -1958,7 +2047,7 @@ Parameters marked **[TBD]** in this document that require additional measurement
 | 9 | ~~**Link contention & arbitration**~~ | **DONE (§9.15)** |
 | 10 | ~~**Packetization/per-hop latency/credit return**~~ | **DONE (§9.16)** |
 | 11 | ~~**Vector engine load/store/gather/compute BW**~~ | **DONE (§9.20)** |
-| 12 | **Vector + NMC + Matrix three-way SRAM contention** | Vector DMA added to NMC+Matrix overlap; expected ≤10% worst-case but unmeasured. Needed for accurate MoE activation pipeline modeling. |
+| 12 | ~~**Vector + NMC + Matrix three-way SRAM contention**~~ | **DONE (§9.21)**: NMC+M 4-11% wall, M+V 19%, N+V 26-29%, three-way 44-48%. SRAM write port is the critical bottleneck. |
 | 13 | **Matrix bmm with small M latency profile** (M=8/16/32/64/128/256) | MoE expert GEMMs have small M dimensions; single-tile latency ~2120 cyc at M=256, but smaller M may have different efficiency curves. Critical for MFU estimation. |
 | 14 | **Vector scatter (VMEM→SRAM indexed write)** BAUA performance | vec_write_scatter bandwidth for MoE combine/scatter phase; symmetric to gather expected but unmeasured. |
 
@@ -1994,7 +2083,7 @@ Parameters marked **[TBD]** in this document that require additional measurement
 
 To complete the MoE kernel performance model:
 
-1. **Vector + NMC + Matrix three-way SRAM contention** (#12): Extend noc_rb58 pattern to include vec_read/gather DMA concurrent with NMC fulldup + bmm.
+1. ~~**Vector + NMC + Matrix three-way SRAM contention** (#12)~~: **DONE (§9.21)**
 2. **Matrix bmm small-M profiling** (#13): Sweep M=8/16/32/64/128/256 for fp8e4m3 bmm tiles to get latency vs M curves.
 3. **Vector scatter + element-wise ops** (#14, #21): vec_write_scatter bandwidth; SiLU (vexp+vadd+vdiv+vmul) pipeline throughput on real activation shapes.
 4. **GM internal DMA↔DMA** (#19): wdma_signal_rdma path for direct GM→GM data movement bypassing PEs.
@@ -2003,7 +2092,7 @@ To complete the MoE kernel performance model:
 **Current calibration status (updated 2026-08-25)**: All core NoC transport parameters are calibrated:
 - **Latency**: RTT = 204 + 17×hops cyc; 8.5 cyc/hop one-way; 57 cyc/NMC-descriptor; 40 cyc/GM-descriptor; ~100 cyc fixed overhead per vector op.
 - **Bandwidth**: PE↔PE ~134 GB/s/ch/dir bulk, ~98 GB/s @32KB; dual-ch same-dir ~270 GB/s; dual-ch fulldup ~527 GB/s bulk / ~382 GB/s @32KB; GM/DDR caps ~124 GB/s aggregate (receiver-limited); Vector read ~292 GB/s, write ~145 GB/s, gather ~144 GB/s, compute ~18 GFLOPS/TPC; Matrix bmm ~2120 cyc/256×256×128 tile.
-- **Contention**: ≤7% SRAM port contention worst-case (mtx-first ordering); RR arbitration with 92% link utilization under saturation; zero contention for ≤8 KB messages.
+- **Contention**: NMC+Matrix 4-11% wall (§9.18); NMC+Vector 26-29% wall; Matrix+Vector 19% wall; **three-way 44-48% wall** (§9.21); RR arbitration with 92% link utilization under saturation; zero contention for ≤8 KB messages. SRAM write port is the critical bottleneck when Matrix C writes overlap with vec_write/NMC RX.
 - **Programming model**: Dual NoC (NoC0/NoC1) fully independent; per-channel full-duplex; DLCM alias required for 64-bit scalar writes; all PEs must participate in global fences; mtx-first command ordering optimal.
 
 ---
