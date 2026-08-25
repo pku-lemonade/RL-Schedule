@@ -15,8 +15,8 @@ class HeteroTemporalModel(nn.Module):
                  gru_hidden: int = 64,
                  gru_hidden2: int = 32,
                  gru_layers: int = 1,
-                 core_count: int = 64,
-                 link_count: int = 112,
+                 core_count: int = 32,
+                 link_count: int = 208,
                  # 池化参数
                  pool_to_length: int = 5,       # 池化后序列长度(None表示不池化)
                  pool_threshold: int = 5):      # 池化阈值,只有当原始长度 > 此阈值时才池化

@@ -476,6 +476,7 @@ class TraceItem(BaseModel):
     ultilization: float  # utilization ratio [0,1]
     op_num: int        # number of operations in this slice
     node_type: int = NodeType.PE  # node type: PE/GM_RDMA/GM_WDMA/DDR_RDMA/DDR_WDMA
+    fabric_id: NoCChannel | None = None
 
 
 class TimeSlice(BaseModel):
@@ -494,8 +495,8 @@ class Event(BaseModel):
     """A single recorded event (message transfer or compute operation) for tracing."""
     type: OperatorType = OperatorType.SEND  # operator type
     index: int = -1        # message/task index
-    start_time: int = -1   # cycles, event start time
-    end_time: int = -1     # cycles, event end time
+    start_time: float = -1.0  # ACI cycles, event start time
+    end_time: float = -1.0    # ACI cycles, event end time
     pe_id: int = -1        # PE/core ID where event occurred
     src_id: int = -1       # source node ID
     dst_id: int = -1       # destination node ID
@@ -504,3 +505,4 @@ class Event(BaseModel):
     flit_count: int = 0    # number of flits in this message
     is_dma: bool = False   # whether this is a DMA (non-PE) event
     node_type: int = NodeType.PE  # source/destination node type
+    fabric_id: NoCChannel = NoCChannel.CH0

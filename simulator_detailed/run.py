@@ -1,10 +1,10 @@
 import json
 import time
-import simpy
 import logging
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Protocol, Tuple, cast
 from pydantic import ValidationError
 
 if __name__ == '__main__' and __package__ is None:
@@ -13,21 +13,36 @@ if __name__ == '__main__' and __package__ is None:
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
     __package__ = 'simulator_detailed'
 
-from .architecture import Arch, NoC
-from .tracing import process_events
+from .architecture import Arch, NoCFabrics
+from .noc import NoCLinkIdentity
+from .tracing import collect_noc_link_events, process_events
 from .utils.mapper import NetworkMapper, parse_mapping
-from .utils.definitions import Trace
+from .utils.definitions import Event, Trace
 from .configs.schemas.arch_config import ArchConfig
 from .configs.schemas.failure_configs import FailSlow
+
+JsonEvent = Dict[str, object]
+DetectionScores = Sequence[Sequence[float]]
+
+
+class Detector(Protocol):
+    def __call__(
+        self,
+        env_time: float,
+        slice_num: int,
+        arch_config: ArchConfig,
+        core_events_json: List[JsonEvent],
+        link_events_json: List[JsonEvent],
+    ) -> Tuple[DetectionScores, DetectionScores]: ...
+
+
+detect: Detector | None
 try:
-    from .predictor.predict import detect
-    from .embedding.hw_encoder import build_hardware_graph, HardwareEmbedding
-    _HAS_DETECTOR = True
+    from .predictor.predict import detect as imported_detect
+
+    detect = cast(Detector, imported_detect)
 except ImportError:
     detect = None
-    build_hardware_graph = None
-    HardwareEmbedding = None
-    _HAS_DETECTOR = False
 from .utils.timing_logger import log_timing
 
 _INSTANCE_CONFIG_DIR = Path(__file__).resolve().parent / "configs" / "instances"
@@ -68,7 +83,43 @@ def setup_logging(filename: str, level: int):
     )
 
 
-def simulate_old() -> Tuple[int, Trace, NoC]:
+def _collect_simulation_events(
+    arch: Arch,
+) -> Tuple[
+    float,
+    List[List[Event]],
+    List[List[Event]],
+    List[NoCLinkIdentity],
+    List[JsonEvent],
+    List[JsonEvent],
+]:
+    core_events: List[List[Event]] = [core.events for core in arch.cores]
+    link_events, link_identities = collect_noc_link_events(arch.nocs)
+    core_events_json: List[JsonEvent] = []
+    link_events_json: List[JsonEvent] = []
+    maxtime = 0.0
+
+    for event_stream in core_events:
+        for event in event_stream:
+            maxtime = max(maxtime, event.end_time)
+            core_events_json.append(event.model_dump(mode="json"))
+
+    for event_stream in link_events:
+        for event in event_stream:
+            maxtime = max(maxtime, event.end_time)
+            link_events_json.append(event.model_dump(mode="json"))
+
+    return (
+        maxtime,
+        core_events,
+        link_events,
+        link_identities,
+        core_events_json,
+        link_events_json,
+    )
+
+
+def simulate_old() -> Tuple[float, Trace, NoCFabrics]:
     print("Start simulation.")
     # === Step 1: Load configuration files ===
     print("Step 1: Load configuration files...")
@@ -110,7 +161,7 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     # === Step 4: Run simulation ===
     print("Step 4: Run simulation...")
     start_time = time.time()
-    result = arch.execute()
+    arch.execute()
     end_time = time.time()
 
     simulation_time = end_time - start_time
@@ -119,23 +170,14 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     # === Step 5: Generate trace data ===
     print("Step 5: Generate trace data...")
 
-    maxtime = 0
-    
-    core_events = [arch.cores[idx].events for idx in range(arch.x_size * arch.y_size)]
-    link_events = [arch.noc.r2r_links[idx].events for idx in range(len(arch.noc.r2r_links))]
-
-    core_events_json = []
-    link_events_json = []
-
-    for single_core_events in core_events:
-        for event in single_core_events:
-            maxtime = max(maxtime, event.end_time)
-            core_events_json.append(event.model_dump())
-
-    for single_link_events in link_events:
-        for event in single_link_events:
-            maxtime = max(maxtime, event.end_time)
-            link_events_json.append(event.model_dump())
+    (
+        maxtime,
+        core_events,
+        link_events,
+        link_identities,
+        core_events_json,
+        link_events_json,
+    ) = _collect_simulation_events(arch)
 
     # with open("core.json", "w") as file:
     #     print(core_events_json, file=file)
@@ -145,8 +187,9 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     # === Step 6: Failslow detection ===
     print("Step 6: Failslow detection...")
 
-    if _HAS_DETECTOR:
-        assert detect is not None
+    core_probs: DetectionScores | None
+    link_probs: DetectionScores | None
+    if detect is not None:
         core_probs, link_probs = detect(env_time=maxtime,
                                         slice_num=args.slice,
                                         arch_config=arch_config,
@@ -158,7 +201,13 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     # === Step 7: Generate execution statistics ===
     print("Step 7: Generate execution statistics...")
 
-    traces = process_events(maxtime, args.slice, core_events, link_events)
+    traces = process_events(
+        maxtime,
+        args.slice,
+        core_events,
+        link_events,
+        link_identities,
+    )
 
     if core_probs is None or link_probs is None:
         core_probs = [[0.0] * len(ts.cores) for ts in traces.time_slices]
@@ -177,10 +226,15 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     
     # print(f"Cycles {maxtime}")
     print("Simulation finished.")
-    return maxtime , traces, arch.noc
+    return maxtime, traces, arch.nocs
 
 
-def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: bool = False) -> Tuple[int, Trace, NoC]:
+def simulate(
+    arch_path: str,
+    failure_path: str,
+    mapper: NetworkMapper,
+    verbose: bool = False,
+) -> Tuple[float, Trace, NoCFabrics]:
     # === Step 0: Parameter definition ===
     log_path = "logs/simulation.log"
     level = "debug"
@@ -235,7 +289,7 @@ def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: 
     if verbose: print("Step 4: Run simulation...")
     start_time = time.time()
     execute_started = time.perf_counter()
-    result = arch.execute()
+    arch.execute()
     end_time = time.time()
     execute_duration_ms = round((time.perf_counter() - execute_started) * 1000, 3)
 
@@ -246,23 +300,14 @@ def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: 
     if verbose: print("Step 5: Generate trace data...")
     event_build_started = time.perf_counter()
 
-    maxtime = 0
-    
-    core_events = [arch.cores[idx].events for idx in range(arch.x_size * arch.y_size)]
-    link_events = [arch.noc.r2r_links[idx].events for idx in range(len(arch.noc.r2r_links))]
-
-    core_events_json = []
-    link_events_json = []
-
-    for single_core_events in core_events:
-        for event in single_core_events:
-            maxtime = max(maxtime, event.end_time)
-            core_events_json.append(event.model_dump())
-
-    for single_link_events in link_events:
-        for event in single_link_events:
-            maxtime = max(maxtime, event.end_time)
-            link_events_json.append(event.model_dump())
+    (
+        maxtime,
+        core_events,
+        link_events,
+        link_identities,
+        core_events_json,
+        link_events_json,
+    ) = _collect_simulation_events(arch)
     event_build_duration_ms = round((time.perf_counter() - event_build_started) * 1000, 3)
 
     # === Step 6: Failslow detection ===
@@ -275,8 +320,9 @@ def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: 
     # print(f"link_events_json: {link_events_json}")
 
     detect_started = time.perf_counter()
-    if _HAS_DETECTOR:
-        assert detect is not None
+    core_probs: DetectionScores | None
+    link_probs: DetectionScores | None
+    if detect is not None:
         core_probs, link_probs = detect(env_time=maxtime,
                                         slice_num=slice_num,
                                         arch_config=arch_config,
@@ -290,7 +336,13 @@ def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: 
     if verbose: print("Step 7: Generate execution statistics...")
     trace_started = time.perf_counter()
 
-    traces = process_events(maxtime, slice_num, core_events, link_events)
+    traces = process_events(
+        maxtime,
+        slice_num,
+        core_events,
+        link_events,
+        link_identities,
+    )
 
     if core_probs is None or link_probs is None:
         core_probs = [[0.0] * len(ts.cores) for ts in traces.time_slices]
@@ -328,7 +380,7 @@ def simulate(arch_path: str, failure_path: str, mapper: NetworkMapper, verbose: 
         trace_duration_ms=trace_duration_ms,
         total_duration_ms=total_duration_ms,
     )
-    return maxtime , traces, arch.noc
+    return maxtime, traces, arch.nocs
 
 
 if __name__ == '__main__':

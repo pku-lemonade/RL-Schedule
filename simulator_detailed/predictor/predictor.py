@@ -10,6 +10,7 @@ from torch_geometric.data import HeteroData
 
 from .data_loader import ManycoreDatasetBuilder, TimeWindowConfig, build_sequences
 from .model_hetero import HeteroTemporalModel
+from ..utils.definitions import NoCChannel
 
 
 class FailurePredictor:
@@ -76,9 +77,11 @@ class FailurePredictor:
             'link': 7,  # 7维特征
         }
         core_count = self.mesh_x * self.mesh_y
-        # 计算link数量: 网格内部连接 + DRAM连接
-        # link_count = 2 * self.mesh_x * self.mesh_y - self.mesh_x - self.mesh_y + core_count
-        link_count = 2 * ((self.mesh_x - 1) * self.mesh_y + self.mesh_x * (self.mesh_y - 1))
+        directional_links_per_fabric = 2 * (
+            (self.mesh_x - 1) * self.mesh_y
+            + self.mesh_x * (self.mesh_y - 1)
+        )
+        link_count = len(NoCChannel) * directional_links_per_fabric
         
         model = HeteroTemporalModel(
             in_dims=in_dims,
@@ -87,7 +90,14 @@ class FailurePredictor:
         )
         
         # 加载权重
-        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=self.device))
+        except RuntimeError as exc:
+            raise RuntimeError(
+                "predictor checkpoint is incompatible with the dual-fabric "
+                f"topology ({core_count} cores, {link_count} directional links); "
+                "retrain or migrate the checkpoint"
+            ) from exc
         model = model.to(self.device)
         
         # print(f"模型加载成功: core_count={core_count}, link_count={link_count}")
@@ -154,6 +164,7 @@ class FailurePredictor:
                         core_pair = self.builder.mesh.link_to_core_pair.get(link_id, (-1, -1))
                         window_result['link_failures'].append({
                             'link_id': int(link_id),
+                            'fabric_id': self.builder.mesh.link_to_fabric[link_id].name,
                             'core_pair': core_pair,
                             'probability': float(prob)
                         })
@@ -257,6 +268,7 @@ class FailurePredictor:
                         core_pair = self.builder.mesh.link_to_core_pair.get(link_id, (-1, -1))
                         window_result['link_failures'].append({
                             'link_id': int(link_id),
+                            'fabric_id': self.builder.mesh.link_to_fabric[link_id].name,
                             'core_pair': core_pair,
                             'probability': float(prob)
                         })
@@ -302,9 +314,10 @@ class FailurePredictor:
             print(f"  Link故障 ({len(window_result['link_failures'])} 个):")
             for failure in window_result['link_failures']:
                 link_id = failure['link_id']
+                fabric_id = failure['fabric_id']
                 core_pair = failure['core_pair']
                 prob = failure['probability']
-                print(f"    - Link {link_id} (连接 Core {core_pair[0]} ↔ Core {core_pair[1]}): 概率 {prob:.4f}")
+                print(f"    - {fabric_id} Link {link_id} (连接 Core {core_pair[0]} ↔ Core {core_pair[1]}): 概率 {prob:.4f}")
     
     def _summarize_predictions(self, all_predictions: List[Dict[str, Any]]) -> Dict[str, Any]:
         """汇总所有窗口的预测结果"""
@@ -350,6 +363,7 @@ class FailurePredictor:
             'suspected_link_failures': [
                 {
                     'link_id': link_id,
+                    'fabric_id': self.builder.mesh.link_to_fabric[link_id].name,
                     'core_pair': self.builder.mesh.link_to_core_pair.get(link_id, (-1, -1)),
                     'frequency': count,
                     'max_probability': float(link_failure_max_prob[link_id])
@@ -382,8 +396,9 @@ class FailurePredictor:
             print(f"\n疑似Link故障 (按出现频率排序):")
             for item in summary['suspected_link_failures']:
                 link_id = item['link_id']
+                fabric_id = item['fabric_id']
                 core_pair = item['core_pair']
-                print(f"  - Link {link_id} (连接 Core {core_pair[0]} ↔ Core {core_pair[1]}): "
+                print(f"  - {fabric_id} Link {link_id} (连接 Core {core_pair[0]} ↔ Core {core_pair[1]}): "
                       f"出现 {item['frequency']} 次, "
                       f"最高概率 {item['max_probability']:.4f}")
         
@@ -456,4 +471,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

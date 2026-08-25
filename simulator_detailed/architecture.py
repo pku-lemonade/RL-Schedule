@@ -1,5 +1,5 @@
 import simpy
-from typing import List
+from typing import Dict, List
 
 from .utils.mapper import *
 from .utils.dfg import DFGNode
@@ -9,6 +9,8 @@ from .core import Core
 from .endpoint_registry import EndpointRegistry
 from .configs.schemas.arch_config import *
 from .configs.schemas.failure_configs import *
+
+NoCFabrics = Dict[NoCChannel, NoC]
 
 
 class Arch:
@@ -23,7 +25,7 @@ class Arch:
         self.endpoint_registry = EndpointRegistry(arch.noc)
         
         # construction
-        self.noc = self.build_noc(env=self.env, config=self.config.noc)
+        self.nocs = self.build_nocs(env=self.env, config=self.config.noc)
         self.cores = self.build_cores(
             env=self.env,
             config=self.config.core,
@@ -38,12 +40,12 @@ class Arch:
 
     def build_cores(
         self,
-        env,
+        env: simpy.Environment,
         config: CoreConfig,
         noc_config: NoCConfig,
         mapper: NetworkMapper,
     ) -> List[Core]:
-        cores = []
+        cores: List[Core] = []
         for id in range(self.x_size * self.y_size):
             core = Core(
                 env=self.env,
@@ -57,12 +59,13 @@ class Arch:
                 ),
                 endpoint_registry=self.endpoint_registry,
             )
+            noc = self.nocs[core.address.fabric_id]
             c2r = Link(
                 env=self.env,
                 config=noc_config.c2r_link,
                 physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                 fabric_id=core.address.fabric_id,
-                tracer=self.noc.tracer,
+                tracer=noc.tracer,
                 link_name=f"PE{id}->R{id}",
                 noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
             )
@@ -71,25 +74,32 @@ class Arch:
                 config=noc_config.c2r_link,
                 physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                 fabric_id=core.address.fabric_id,
-                tracer=self.noc.tracer,
+                tracer=noc.tracer,
                 link_name=f"R{id}->PE{id}",
                 noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
             )
 
-            core.bind_with_router(r2c, c2r, self.noc.routers[id])
-            self.noc.routers[id].bind_link(PORT_PE, c2r, r2c)
+            core.bind_with_router(r2c, c2r, noc.routers[id])
+            noc.routers[id].bind_link(PORT_PE, c2r, r2c)
             cores.append(core)
             
         return cores
 
 
-    def build_noc(self, env, config: NoCConfig) -> NoC:
-        return NoC(
-            env=env,
-            config=config,
-            fabric_id=NoCChannel.CH0,
-            tracer=NoCTracer(NoCChannel.CH0),
-        ).build_connection_mesh()
+    @staticmethod
+    def build_nocs(
+        env: simpy.Environment,
+        config: NoCConfig,
+    ) -> NoCFabrics:
+        return {
+            fabric_id: NoC(
+                env=env,
+                config=config,
+                fabric_id=fabric_id,
+                tracer=NoCTracer(fabric_id),
+            ).build_connection_mesh()
+            for fabric_id in NoCChannel
+        }
     
 
     def initialize(self, operators: List[DFGNode]):
@@ -99,7 +109,7 @@ class Arch:
         
         # initialize each core's spm
         for id in range(self.x_size * self.y_size):
-            core_list = []
+            core_list: List[Core | None] = []
             for core in self.cores:
                 if core.id == id:
                     core_list.append(None)
@@ -109,7 +119,7 @@ class Arch:
             self.cores[id].scheduler.bind_with_core(core_list)
 
     # change failslow times easily
-    def preprocess_fail(self, times=10):
+    def preprocess_fail(self, times: int = 10):
         for link_fail in self.fail_slow.link:
             link_fail.times = times
 
@@ -146,12 +156,7 @@ class Arch:
         noc.routers[fail.router_id].scale_link_delay(1 / fail.times)
 
     def _noc_for_fabric(self, fabric_id: NoCChannel) -> NoC:
-        if self.noc.fabric_id is not fabric_id:
-            raise ValueError(
-                f"{fabric_id.name} failure target is unavailable; "
-                f"the current architecture only constructs {self.noc.fabric_id.name}"
-            )
-        return self.noc
+        return self.nocs[fabric_id]
 
 
     def lsu_fail(self, fail: LsuFail):

@@ -33,7 +33,7 @@ def _resolve_log_path() -> pathlib.Path:
     return pathlib.Path(path)
 
 
-def log_timing(event: str, **fields):
+def log_timing(event: str, **fields: object) -> None:
     log_path = _resolve_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
 

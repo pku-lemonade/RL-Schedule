@@ -106,7 +106,7 @@ class Scheduler:
         self.ready_io_tasks: List[Task] = []
     
 
-    def bind_with_core(self, cores: List['Core']):
+    def bind_with_core(self, cores: List['Core | None']):
         self.cores = cores
 
     # update the global dfg
@@ -128,7 +128,9 @@ class Scheduler:
                     heapq.heappush(self.ready_tasks, Task(node=child_node))
                 else:
                     logger.debug(f"    push task {child_node.index} into Core {child_node.core_id}")
-                    heapq.heappush(self.cores[child_node.core_id].scheduler.ready_tasks, Task(node=child_node))
+                    target_core = self.cores[child_node.core_id]
+                    assert target_core is not None
+                    heapq.heappush(target_core.scheduler.ready_tasks, Task(node=child_node))
 
 
     def schedule(self):
@@ -184,8 +186,8 @@ class Core:
         self.tpu = TPU(env=self.env, config=config.tpu)
 
         # data collection
-        self.events = []
-        self.index2id = {}
+        self.events: List[Event] = []
+        self.index2id: Dict[int, int] = {}
 
         # begin simulation
         self.env.process(self.execute())

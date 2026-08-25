@@ -53,5 +53,5 @@ and port IDs on NoC0 and NoC1 are separate hardware attachments.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be
-explicit. Until Fix 4 builds the second mesh, the runtime rejects a CH1 failure
-target instead of applying it to CH0.
+explicit. The runtime resolves each target through `Arch.nocs`, so a CH0 failure
+cannot alter CH1 router or link state and vice versa.

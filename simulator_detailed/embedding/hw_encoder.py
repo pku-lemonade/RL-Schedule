@@ -1,38 +1,53 @@
+from collections.abc import Mapping
+
 import torch
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 from ..noc import NoC
+from ..utils.definitions import NoCChannel
 
 
-def build_hardware_graph(noc_instance: NoC):
+def build_hardware_graph(
+    noc_instances: Mapping[NoCChannel, NoC],
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     return: 
         node_feature: (N_c + N_l, feature_dim)
         edge_feature: (2, num_edges)
     """
-    routers = noc_instance.routers
-    links = noc_instance.r2r_links
-    
-    num_routers = len(routers) # 16 for 4x4
-    num_links = len(links)     # 48 for 4x4
-    total_nodes = num_routers + num_links
+    if set(noc_instances) != set(NoCChannel):
+        raise ValueError("hardware graph requires both CH0 and CH1 NoC fabrics")
+
+    routers = [
+        (fabric_id, router)
+        for fabric_id in NoCChannel
+        for router in noc_instances[fabric_id].routers
+    ]
+    links = [
+        (fabric_id, link)
+        for fabric_id in NoCChannel
+        for link in noc_instances[fabric_id].r2r_links
+    ]
+    num_routers = len(routers)
 
     node_features = []
+    router_indices = {}
     
     # router node feature
-    for r in routers:
-        r_x, r_y = r.to_xy(r.id)
-        node_features.append([0, r_x, r_y]) 
+    for router_index, (fabric_id, router) in enumerate(routers):
+        r_x, r_y = router.to_xy(router.id)
+        node_features.append([0, fabric_id.value, r_x, r_y])
+        router_indices[(fabric_id, router.id)] = router_index
         
     # link node feature
-    for i, link in enumerate(links):
-        src_id = link.corefromid
-        src_x = src_id % noc_instance.x
-        src_y = src_id // noc_instance.x
-        node_features.append([1, src_x, src_y])
+    for fabric_id, link in links:
+        identity = link.identity
+        noc = noc_instances[fabric_id]
+        src_x = identity.src_router % noc.x
+        src_y = identity.src_router // noc.x
+        node_features.append([1, fabric_id.value, src_x, src_y])
 
     x = torch.tensor(node_features, dtype=torch.float)
 
@@ -40,10 +55,11 @@ def build_hardware_graph(noc_instance: NoC):
     source_nodes = []
     target_nodes = []
     
-    for i, link in enumerate(links):
+    for i, (fabric_id, link) in enumerate(links):
+        identity = link.identity
         link_node_idx = num_routers + i
-        src_router_idx = link.corefromid
-        dst_router_idx = link.coretoid
+        src_router_idx = router_indices[(fabric_id, identity.src_router)]
+        dst_router_idx = router_indices[(fabric_id, identity.dst_router)]
         
         # Router -> Link
         source_nodes.append(src_router_idx)
@@ -59,7 +75,7 @@ def build_hardware_graph(noc_instance: NoC):
 
 
 class HardwareEmbedding(nn.Module):
-    def __init__(self, num_nodes, input_dim=3, hidden_dim=16, output_dim=1):
+    def __init__(self, num_nodes, input_dim=4, hidden_dim=16, output_dim=1):
         super(HardwareEmbedding, self).__init__()
         
         self.conv1 = GCNConv(input_dim, hidden_dim)

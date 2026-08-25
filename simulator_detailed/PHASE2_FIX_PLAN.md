@@ -239,6 +239,12 @@ Tests:
 
 ## Fix 4: Build Two Complete Mesh Instances
 
+Status: implemented. `Arch.nocs` now owns two independent meshes; architecture
+traces, simulation return values, hardware embeddings, and predictor identities
+all preserve the data-fabric identity. PE endpoint binding remains CH0-only until
+Fix 5. Predictor checkpoints from the single-fabric topology require retraining
+or migration for the 208-link output shape.
+
 Code changes:
 
 - Keep `NoC` as one self-contained 32-router fabric.

@@ -7,6 +7,9 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
+from ..utils.definitions import NoCChannel
+from .topology import Mesh, parse_fabric_id
+
 w_link, w_core = 1.0, 0.2  # 可调超参
 
 @dataclass
@@ -14,94 +17,6 @@ class TimeWindowConfig:
     window_size: int = 1_000_000
     overlap_size: int = 200_000
     min_events_per_window: int = 1
-
-
-class Mesh:
-    def __init__(self, x: int, y: int):
-        self.x = x
-        self.y = y
-        self.core_count = x * y
-
-        # Link indexing between cores and DRAM (-1 denotes DRAM endpoint)
-        self.to_link_index: Dict[Tuple[int, int], int] = {}
-        self.link_to_core_pair: Dict[int, Tuple[int, int]] = {}
-
-        # Physical bipartite connectivity: core<->link
-        self.core_link: List[List[int]] = [[], []]
-        self.link_core: List[List[int]] = [[], []]
-
-        self.link_count = 0
-        self._build_links()
-
-    def _core_id(self, i: int, j: int) -> int:
-        return j * self.x + i
-
-    def _register_link(self, a: int, b: int):
-        key = (a, b)
-        if key in self.to_link_index:
-            return self.to_link_index[key]
-        idx = self.link_count
-        self.to_link_index[key] = idx
-        self.link_to_core_pair[idx] = key
-        self.core_link[0].append(key[0])
-        self.core_link[1].append(idx)
-        self.link_core[0].append(idx)
-        self.link_core[1].append(key[0])
-
-        self.core_link[0].append(key[1])
-        self.core_link[1].append(idx)
-        self.link_core[0].append(idx)
-        self.link_core[1].append(key[1])
-
-        self.link_count += 1
-        return idx
-
-    def _build_links(self):
-        for i in range(self.x):
-            for j in range(self.y):
-                cur = self._core_id(i, j)
-                if i < self.x - 1:
-                    east = self._core_id(i + 1, j)
-                    self._register_link(east, cur)
-                    self._register_link(cur, east)
-                if j < self.y - 1:
-                    north = self._core_id(i, j + 1)
-                    self._register_link(north, cur)
-                    self._register_link(cur, north)
-
-        # DRAM links: connect each core to a virtual DRAM node id = core_count
-        # dram_id = self.core_count
-        # for core in range(self.core_count):
-        #     self._register_link(core, dram_id)
-
-    def manhattan_path_nodes(self, src: int, dst: int) -> List[Tuple[str, int]]:
-        nodes: List[Tuple[str, int]] = []
-        if src == dst:
-            return nodes
-        sx = src % self.x
-        sy = src // self.x
-        dx = dst % self.x
-        dy = dst // self.x
-        curx, cury = sx, sy
-        while curx != dx:
-            nextx = curx + 1 if dx > curx else curx - 1
-            cur = cury * self.x + curx
-            nxt = cury * self.x + nextx
-            link_idx = self.to_link_index[(min(cur, nxt), max(cur, nxt))]
-            nodes.append(('link', link_idx))
-            if nxt != dst:
-                nodes.append(('core', nxt))
-            curx = nextx
-        while cury != dy:
-            nexty = cury + 1 if dy > cury else cury - 1
-            cur = cury * self.x + curx
-            nxt = nexty * self.x + curx
-            link_idx = self.to_link_index[(min(cur, nxt), max(cur, nxt))]
-            nodes.append(('link', link_idx))
-            if nxt != dst:
-                nodes.append(('core', nxt))
-            cury = nexty
-        return nodes
 
 
 def _load_json(path: str) -> Any:
@@ -176,8 +91,13 @@ class ManycoreDatasetBuilder:
             case _:
                 return -1
 
-    def _get_link_id_from_core_pair(self, core1: int, core2: int) -> int:
-        key = (min(core1, core2), max(core1, core2))
+    def _get_link_id_from_core_pair(
+        self,
+        core1: int,
+        core2: int,
+        fabric_id: NoCChannel,
+    ) -> int:
+        key = (fabric_id, core1, core2)
         return self.mesh.to_link_index.get(key, -1)
     
 
@@ -339,8 +259,6 @@ class ManycoreDatasetBuilder:
         # Initialize features (7-dim by assumption per user spec list)
         core_feat = np.zeros((mesh.core_count, 7), dtype=np.float32)
         link_feat = np.zeros((mesh.link_count, 7), dtype=np.float32)
-        link_cnt  = np.zeros((mesh.link_count,), dtype=np.float32)  # 用于均值统计
-
         # Aggregate comp inst per core
         comp_by_core: Dict[int, List[Dict[str, Any]]] = {}
         for inst in comp_win:
@@ -384,6 +302,9 @@ class ManycoreDatasetBuilder:
         for inst in comm_win:
             src = int(inst.get('src_id', -1))
             dst = int(inst.get('dst_id', -1))
+            fabric_id = parse_fabric_id(
+                inst.get('fabric_id', NoCChannel.CH0)
+            )
             size = float(inst.get('data_size', 0.0))
             duration = max(0.0, float(inst.get('end_time', 0.0)) - float(inst.get('start_time', 0.0)))
 
@@ -392,17 +313,17 @@ class ManycoreDatasetBuilder:
             
             if src == -1 and dst >= 0:
                 # DRAM -> core
-                key = (min(dst, mesh.core_count), max(dst, mesh.core_count))
+                key = (fabric_id, mesh.core_count, dst)
                 if key in mesh.to_link_index:
                     traversed.append(('link', mesh.to_link_index[key]))
                     num_hops = 1
             elif dst == -1 and src >= 0:
-                key = (min(src, mesh.core_count), max(src, mesh.core_count))
+                key = (fabric_id, src, mesh.core_count)
                 if key in mesh.to_link_index:
                     traversed.append(('link', mesh.to_link_index[key]))
                     num_hops = 1
             elif 0 <= src < mesh.core_count and 0 <= dst < mesh.core_count:
-                traversed = mesh.manhattan_path_nodes(src, dst)
+                traversed = mesh.manhattan_path_nodes(src, dst, fabric_id)
                 # 计算hop数（只计算link）
                 num_hops = sum(1 for kind, _ in traversed if kind == 'link')
 
@@ -416,8 +337,7 @@ class ManycoreDatasetBuilder:
 
             # 基于通信模型：tcomm = ts + l*th + m*tw
             # 对于每个经过的link，我们记录统计信息
-            L = len(touched_links)
-            if L > 0 and duration > 0:
+            if touched_links and duration > 0:
                 # 平均每hop延迟（粗略估计）
                 per_hop_delay = duration / max(1, num_hops)
                 # 有效吞吐率（考虑所有hop的平均）
@@ -430,7 +350,6 @@ class ManycoreDatasetBuilder:
                         link_stats[idx]['hops'].append(float(num_hops))
                         link_stats[idx]['per_hop_delays'].append(per_hop_delay)
                         link_stats[idx]['throughputs'].append(throughput)
-                        touched_links.append(idx)
             
             #同次 comm：link-link 全连接（双向）
             for i in range(len(touched_links)):
@@ -534,6 +453,9 @@ class ManycoreDatasetBuilder:
                 fail_end = item.get('end_time', float('inf'))
                 router_id = item.get('router_id', -1)
                 direction = item.get('direction', -1)
+                fabric_id = parse_fabric_id(
+                    item.get('fabric_id', NoCChannel.CH0)
+                )
                 print("link failure", fail_start, fail_end)
                 # 检查故障时间是否与当前时间窗口重叠
                 if (window_start_time < fail_end and window_end_time > fail_start and 
@@ -547,7 +469,11 @@ class ManycoreDatasetBuilder:
                     print("dst_core", dst_core)
                     if dst_core >= 0:
                         # 获取link id并设置标签
-                        link_id = self._get_link_id_from_core_pair(router_id, dst_core)
+                        link_id = self._get_link_id_from_core_pair(
+                            router_id,
+                            dst_core,
+                            fabric_id,
+                        )
                         # print("link_id", link_id)
                         if link_id >= 0:
                             link_match = True
@@ -576,6 +502,9 @@ class ManycoreDatasetBuilder:
                 fail_start = item.get('start_time', 0)
                 fail_end = item.get('end_time', float('inf'))
                 router_id = item.get('router_id', -1)
+                fabric_id = parse_fabric_id(
+                    item.get('fabric_id', NoCChannel.CH0)
+                )
                 
                 # 检查故障时间是否与当前时间窗口重叠
                 if (window_start_time < fail_end and window_end_time > fail_start and 
@@ -584,6 +513,8 @@ class ManycoreDatasetBuilder:
                     # router故障影响该core连接的所有links
                     # 这里需要遍历所有与该core相关的links
                     for link_id in range(self.mesh.link_count):
+                        if self.mesh.link_to_fabric[link_id] is not fabric_id:
+                            continue
                         core1, core2 = self.mesh.link_to_core_pair[link_id]
                         if core1 == router_id or core2 == router_id:
                             link_labels[link_id, 0] = 1.0

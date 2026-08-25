@@ -1,4 +1,5 @@
 import time
+from typing import Dict, List, Tuple, cast
 
 from .predictor import FailurePredictor
 from ..configs.schemas.arch_config import ArchConfig
@@ -12,6 +13,9 @@ lookback = 2
 device = "cuda"
 threshold = 0.5
 _PREDICTOR_CACHE = {}
+
+JsonEvent = Dict[str, object]
+DetectionScores = List[List[float]]
 
 
 def _get_predictor(mesh_x: int, mesh_y: int):
@@ -33,7 +37,13 @@ def _get_predictor(mesh_x: int, mesh_y: int):
     return predictor, cache_hit
 
 
-def detect(env_time: int, slice_num: int, arch_config: ArchConfig, core_events_json, link_events_json) -> tuple:
+def detect(
+    env_time: float,
+    slice_num: int,
+    arch_config: ArchConfig,
+    core_events_json: List[JsonEvent],
+    link_events_json: List[JsonEvent],
+) -> Tuple[DetectionScores, DetectionScores]:
     detect_started = time.perf_counter()
     log_timing(
         "detect.start",
@@ -82,4 +92,7 @@ def detect(env_time: int, slice_num: int, arch_config: ArchConfig, core_events_j
         predict_duration_ms=predict_duration_ms,
         total_duration_ms=total_duration_ms,
     )
-    return core_probs, link_probs
+    return cast(
+        Tuple[DetectionScores, DetectionScores],
+        (core_probs, link_probs),
+    )

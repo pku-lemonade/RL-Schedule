@@ -1,3 +1,4 @@
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Dict, List, Optional, cast
@@ -14,6 +15,7 @@ from .utils.definitions import (
     DIR_WEST,
     PORT_PE,
     Direction,
+    Event,
     Flit,
     NoCChannel,
     NoCPlane,
@@ -46,10 +48,21 @@ class FlitEvent:
     router_id: int = -1
     port: int = -1
     msg_id: int = -1
+    payload_bytes: int = 0
     src_router: int = -1
     dst_router: int = -1
     out_port: int = -1
     link_name: str = ""
+
+
+@dataclass(frozen=True)
+class NoCLinkIdentity:
+    """Fabric-qualified identity of one directional inter-router link."""
+
+    fabric_id: NoCChannel
+    link_id: int
+    src_router: int
+    dst_router: int
 
 
 class NoCTracer:
@@ -95,6 +108,7 @@ class NoCTracer:
                 router_id=router_id,
                 port=port,
                 msg_id=-1 if flit is None else flit.msg_id,
+                payload_bytes=0 if flit is None else flit.payload_bytes,
                 src_router=-1 if flit is None else flit.src_router,
                 dst_router=-1 if flit is None else flit.dst_router,
                 out_port=out_port,
@@ -147,6 +161,9 @@ class Link:
         link_name: str = "",
         *,
         noc_cycles_per_aci_cycle: float,
+        link_id: int | None = None,
+        src_router: int | None = None,
+        dst_router: int | None = None,
     ):
         if tracer.fabric_id is not fabric_id:
             raise ValueError(
@@ -158,6 +175,23 @@ class Link:
         self.fabric_id = fabric_id
         self.tracer = tracer
         self.link_name = f"{fabric_id.name}:{link_name or 'unnamed-link'}"
+        identity_fields = (link_id, src_router, dst_router)
+        if any(field is None for field in identity_fields) and not all(
+            field is None for field in identity_fields
+        ):
+            raise ValueError(
+                "inter-router link identity requires link, source, and destination IDs"
+            )
+        self._identity = (
+            None
+            if link_id is None or src_router is None or dst_router is None
+            else NoCLinkIdentity(
+                fabric_id=fabric_id,
+                link_id=link_id,
+                src_router=src_router,
+                dst_router=dst_router,
+            )
+        )
         self.serialization_noc_cycles = config.serialization_noc_cycles(
             physical_flit_bytes
         )
@@ -196,6 +230,46 @@ class Link:
     def ack_credit(self) -> Process:
         return self.env.process(self._return_credit())
 
+    @property
+    def identity(self) -> NoCLinkIdentity:
+        """Return the identity of an inter-router link."""
+        if self._identity is None:
+            raise ValueError(f"{self.link_name} is not an inter-router link")
+        return self._identity
+
+    def utilization_events(self) -> list[Event]:
+        """Build non-duplicated link occupancy intervals from tracer events."""
+        pending: dict[int, deque[FlitEvent]] = defaultdict(deque)
+        intervals: list[Event] = []
+        for trace_event in self.tracer.events:
+            if trace_event.link_name != self.link_name:
+                continue
+            if trace_event.action is FlitAction.LINK_SEND:
+                pending[trace_event.msg_id].append(trace_event)
+                continue
+            if trace_event.action is not FlitAction.LINK_RECV:
+                continue
+            starts = pending.get(trace_event.msg_id)
+            if not starts:
+                raise RuntimeError(
+                    f"{self.link_name} received message {trace_event.msg_id} "
+                    "without a matching send event"
+                )
+            start_event = starts.popleft()
+            intervals.append(
+                Event(
+                    index=trace_event.msg_id,
+                    start_time=start_event.time,
+                    end_time=trace_event.time,
+                    src_id=self.identity.src_router,
+                    dst_id=self.identity.dst_router,
+                    data_size=trace_event.payload_bytes,
+                    flit_count=1,
+                    fabric_id=self.fabric_id,
+                )
+            )
+        return intervals
+
     def scale_link_delay(self, factor: float):
         if factor <= 0:
             raise ValueError("link delay scale factor must be positive")
@@ -217,12 +291,6 @@ class Link:
             )
         yield self.credits.get(1)
         yield self._out_queue.put(flit)
-        self.tracer.log(
-            self.env.now,
-            FlitAction.LINK_SEND,
-            flit=flit,
-            link_name=self.link_name,
-        )
 
     def _recv_flit(self) -> ProcessGenerator:
         flit = cast(Flit, (yield self.flit_buffer.get()))
@@ -231,6 +299,12 @@ class Link:
     def _transmit_loop(self) -> ProcessGenerator:
         while True:
             flit = cast(Flit, (yield self._out_queue.get()))
+            self.tracer.log(
+                self.env.now,
+                FlitAction.LINK_SEND,
+                flit=flit,
+                link_name=self.link_name,
+            )
             yield self.env.timeout(
                 self.serialization_aci_cycles * self.delay_factor
             )
@@ -566,6 +640,9 @@ class NoC:
             tracer=self.tracer,
             link_name=f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
             noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
+            link_id=len(self.r2r_links),
+            src_router=router_a,
+            dst_router=router_b,
         )
         link_ba = Link(
             env=self.env,
@@ -575,6 +652,9 @@ class NoC:
             tracer=self.tracer,
             link_name=f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
             noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
+            link_id=len(self.r2r_links) + 1,
+            src_router=router_b,
+            dst_router=router_a,
         )
         self.routers[router_a].bind_link(port_a, link_ba, link_ab)
         self.routers[router_b].bind_link(port_b, link_ab, link_ba)
@@ -584,6 +664,7 @@ class NoC:
 __all__ = [
     "FlitAction",
     "FlitEvent",
+    "NoCLinkIdentity",
     "NoCTracer",
     "TraceMessageKey",
     "Link",

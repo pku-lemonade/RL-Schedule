@@ -4,6 +4,7 @@ from pathlib import Path
 import simpy
 from pydantic import ValidationError
 
+from simulator_detailed.architecture import Arch
 from simulator_detailed.configs.schemas.arch_config import (
     DMAEngineConfig,
     DMAType,
@@ -17,6 +18,7 @@ from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterF
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
+from simulator_detailed.tracing import collect_noc_link_events, process_events
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
     PORT_DDR_RDMA_LOC,
@@ -120,6 +122,188 @@ class MeshHarness:
 
 
 class Phase2NoCTests(unittest.TestCase):
+    def test_arch_builds_two_independent_data_meshes(self):
+        env = simpy.Environment()
+        nocs = Arch.build_nocs(env, NoCConfig())
+
+        self.assertEqual(set(nocs), set(NoCChannel))
+        self.assertEqual(sum(len(noc.routers) for noc in nocs.values()), 64)
+        self.assertEqual(sum(len(noc.r2r_links) for noc in nocs.values()), 208)
+        self.assertEqual(len({id(noc.tracer) for noc in nocs.values()}), 2)
+
+        routers = [router for noc in nocs.values() for router in noc.routers]
+        links = [link for noc in nocs.values() for link in noc.r2r_links]
+        self.assertEqual(len({id(router) for router in routers}), 64)
+        self.assertEqual(len({id(router.reservation) for router in routers}), 64)
+        self.assertEqual(len({id(link) for link in links}), 208)
+        self.assertEqual(len({id(link.flit_buffer) for link in links}), 208)
+        self.assertEqual(len({id(link.credits) for link in links}), 208)
+        self.assertEqual(len({id(link._out_queue) for link in links}), 208)
+
+        arbiters = [
+            arbiter
+            for router in routers
+            for arbiter in router.out_channels.values()
+        ]
+        self.assertEqual(len({id(arbiter) for arbiter in arbiters}), len(arbiters))
+        for fabric_id, noc in nocs.items():
+            self.assertTrue(
+                all(router.fabric_id is fabric_id for router in noc.routers)
+            )
+            self.assertEqual(
+                [link.identity.link_id for link in noc.r2r_links],
+                list(range(104)),
+            )
+
+    def test_router_failure_is_isolated_to_its_fabric(self):
+        env = simpy.Environment()
+        nocs = Arch.build_nocs(env, NoCConfig())
+        arch = object.__new__(Arch)
+        arch.env = env
+        arch.nocs = nocs
+        failure = RouterFail(
+            start_time=1,
+            end_time=3,
+            fabric_id=NoCChannel.CH0,
+            router_id=0,
+            times=2,
+        )
+
+        env.process(arch.router_fail(failure))
+        env.run(until=1.5)
+        self.assertEqual(nocs[NoCChannel.CH0].r2r_links[0].delay_factor, 2.0)
+        self.assertEqual(nocs[NoCChannel.CH1].r2r_links[0].delay_factor, 1.0)
+
+        env.run(until=3.5)
+        self.assertEqual(nocs[NoCChannel.CH0].r2r_links[0].delay_factor, 1.0)
+        self.assertEqual(nocs[NoCChannel.CH1].r2r_links[0].delay_factor, 1.0)
+
+    def test_dual_fabric_trace_collection_has_stable_link_identity(self):
+        harness = MeshHarness(NoCChannel.CH0)
+        ch1_noc = NoC(
+            harness.env,
+            harness.config,
+            NoCChannel.CH1,
+            NoCTracer(NoCChannel.CH1),
+        ).build_connection_mesh()
+        nocs = {
+            NoCChannel.CH0: harness.noc,
+            NoCChannel.CH1: ch1_noc,
+        }
+        harness.transfer(
+            0,
+            1,
+            [harness.flit(FlitType.SINGLE, 81, 0, 1)],
+        )
+
+        link_events, identities = collect_noc_link_events(nocs)
+        qualified_ids = {
+            (identity.fabric_id, identity.link_id) for identity in identities
+        }
+        self.assertEqual(len(link_events), 208)
+        self.assertEqual(len(identities), 208)
+        self.assertEqual(len(qualified_ids), 208)
+        self.assertEqual(len(link_events[0]), 1)
+        self.assertEqual(link_events[104], [])
+        self.assertIs(link_events[0][0].fabric_id, NoCChannel.CH0)
+        self.assertEqual(
+            (identities[0].src_router, identities[0].dst_router),
+            (0, 1),
+        )
+
+        trace = process_events(
+            harness.env.now,
+            1,
+            [],
+            link_events,
+            identities,
+        )
+        trace_links = trace.time_slices[0].links
+        self.assertEqual(len(trace_links), 208)
+        self.assertEqual(
+            {(item.fabric_id, item.id) for item in trace_links},
+            qualified_ids,
+        )
+
+    def test_predictor_topology_matches_both_noc_fabrics(self):
+        from simulator_detailed.predictor.topology import Mesh
+
+        env = simpy.Environment()
+        nocs = Arch.build_nocs(env, NoCConfig())
+        mesh = Mesh(4, 8)
+        expected_links = [
+            (
+                link.identity.fabric_id,
+                link.identity.src_router,
+                link.identity.dst_router,
+            )
+            for fabric_id in NoCChannel
+            for link in nocs[fabric_id].r2r_links
+        ]
+        actual_links = [
+            (
+                mesh.link_to_fabric[link_id],
+                *mesh.link_to_core_pair[link_id],
+            )
+            for link_id in range(mesh.link_count)
+        ]
+        self.assertEqual(mesh.link_count, 208)
+        self.assertEqual(actual_links, expected_links)
+        self.assertNotEqual(
+            mesh.to_link_index[(NoCChannel.CH0, 0, 1)],
+            mesh.to_link_index[(NoCChannel.CH0, 1, 0)],
+        )
+        self.assertNotEqual(
+            mesh.to_link_index[(NoCChannel.CH0, 0, 1)],
+            mesh.to_link_index[(NoCChannel.CH1, 0, 1)],
+        )
+
+    def test_optional_predictor_labels_and_embedding_use_both_fabrics(self):
+        try:
+            from torch_geometric.data import HeteroData
+
+            from simulator_detailed.embedding.hw_encoder import build_hardware_graph
+            from simulator_detailed.predictor.data_loader import (
+                ManycoreDatasetBuilder,
+                TimeWindowConfig,
+            )
+        except ImportError as exc:
+            self.skipTest(f"optional predictor dependencies unavailable: {exc}")
+
+        env = simpy.Environment()
+        nocs = Arch.build_nocs(env, NoCConfig())
+        builder = ManycoreDatasetBuilder(
+            4,
+            8,
+            "Mesh",
+            TimeWindowConfig(),
+        )
+        labeled = builder._apply_failure_labels(
+            HeteroData(),
+            {
+                "link": [
+                    {
+                        "start_time": 0,
+                        "end_time": 10,
+                        "fabric_id": "CH1",
+                        "router_id": 0,
+                        "direction": Direction.EAST,
+                    }
+                ]
+            },
+            0,
+            10,
+        )
+        ch0_link = builder.mesh.to_link_index[(NoCChannel.CH0, 0, 1)]
+        ch1_link = builder.mesh.to_link_index[(NoCChannel.CH1, 0, 1)]
+        self.assertEqual(float(labeled["link"].y[ch0_link, 0]), 0.0)
+        self.assertEqual(float(labeled["link"].y[ch1_link, 0]), 1.0)
+        self.assertEqual(float(labeled["link"].y.sum()), 1.0)
+
+        node_features, edge_index = build_hardware_graph(nocs)
+        self.assertEqual(tuple(node_features.shape), (272, 4))
+        self.assertEqual(tuple(edge_index.shape), (2, 416))
+
     def test_config_and_mesh_shape(self):
         harness = MeshHarness()
         flit_config = harness.config.router.flit
