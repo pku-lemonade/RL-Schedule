@@ -1,0 +1,84 @@
+{
+  "core": {
+    "type": "Simple",
+    "x": 4,
+    "y": 8,
+    "width": 128,
+    "blk_size": 128,
+    "spm": {
+      "size": 4194304,
+      "delay": 1
+    },
+    "weight_spm": {
+      "size": 16777216,
+      "delay": 1
+    },
+    "tpu": {
+      "size": 1,
+      "flops": 4096
+    },
+    "lsu": {
+      "size": 1,
+      "width": 106.0
+    },
+    "nmc": {
+      "ch0": {
+        "tx_bytes_per_cycle": 120.0,
+        "rx_bytes_per_cycle": 120.0,
+        "descriptor_issue_cycles": 57.0,
+        "max_outstanding_descriptors": 24
+      },
+      "ch1": {
+        "tx_bytes_per_cycle": 120.0,
+        "rx_bytes_per_cycle": 120.0,
+        "descriptor_issue_cycles": 57.0,
+        "max_outstanding_descriptors": 24
+      }
+    }
+  },
+  "noc": {
+    "type": "Mesh",
+    "x": 4,
+    "y": 8,
+    "aci_clock_mhz": 1125.0,
+    "noc_clock_mhz": 2250.0,
+    "router": {
+      "type": "XY",
+      "vc": 1,
+      "arbitration": "round_robin",
+      "flit": {
+        "physical_flit_bytes": 512,
+        "payload_capacity_bytes": 512
+      },
+      "pipeline": {
+        "effective_rc_aci_cycles": 1.0,
+        "effective_sa_aci_cycles": 2.0,
+        "effective_st_aci_cycles": 1.0
+      }
+    },
+    "link": {
+      "wire_bits_per_noc_cycle": 579,
+      "payload_bits_per_noc_cycle": 512,
+      "launch_interval_aci_cycles": 4.266666666666667,
+      "effective_link_stage_aci_cycles": 0.5,
+      "sync_credit_return_aci_cycles": 0.0,
+      "input_buffer_depth_flits": 1,
+      "flow_control_window_flits": 1
+    },
+    "c2r_link": {
+      "wire_bits_per_noc_cycle": 579,
+      "payload_bits_per_noc_cycle": 512,
+      "launch_interval_aci_cycles": 4.266666666666667,
+      "effective_link_stage_aci_cycles": 0.5,
+      "sync_credit_return_aci_cycles": 0.0,
+      "input_buffer_depth_flits": 1,
+      "flow_control_window_flits": 1
+    },
+    "dma_engines": [],
+    "mem_controllers": []
+  },
+  "mem": {
+    "width": 128,
+    "delay": 5
+  }
+}

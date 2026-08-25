@@ -13,7 +13,8 @@ unidirectional Links. Every neighbor pair is explicitly bound in both
 directions. X-first XY routing first resolves the column and then the row.
 Each `NoC` object owns exactly one `NoCChannel`; all of its routers, links,
 tracer events, and flits must carry that same fabric identity. Link diagnostics
-are prefixed with `CH0:` or `CH1:`.
+are prefixed with `CH0:` or `CH1:`. Flit movement is traced on `NoCPlane.DATA`;
+credit returns are traced on `NoCPlane.SYNC` while retaining the data fabric ID.
 
 PE links are not created by `NoC.build_connection_mesh()`. `Arch.build_cores()`
 creates one PE-to-router and one router-to-PE Link for each PE and binds them to
@@ -36,5 +37,5 @@ For a SINGLE flit crossing `N` inter-router hops, the current calibrated
 NoC-only endpoint latency is:
 
 ```text
-latency = 8.5 * N + 13.0 cycles
+latency = 8.5 * N + 13.0 ACI cycles
 ```

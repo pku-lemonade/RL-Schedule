@@ -3,6 +3,7 @@ import time
 import simpy
 import logging
 import argparse
+from pathlib import Path
 from typing import List, Tuple
 from pydantic import ValidationError
 
@@ -28,6 +29,10 @@ except ImportError:
     HardwareEmbedding = None
     _HAS_DETECTOR = False
 from .utils.timing_logger import log_timing
+
+_INSTANCE_CONFIG_DIR = Path(__file__).resolve().parent / "configs" / "instances"
+DEFAULT_ARCH_PATH = str(_INSTANCE_CONFIG_DIR / "ada2s32.json")
+DEFAULT_FAILURE_PATH = str(_INSTANCE_CONFIG_DIR / "normal.json")
 
 
 def fail_analyzer(filename: str) -> FailSlow:
@@ -70,8 +75,8 @@ def simulate_old() -> Tuple[int, Trace, NoC]:
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--mapping", type=str, default="workloads/darknet19-4-4.json")
-    parser.add_argument("--arch", type=str, default="configs/instances/gemini4_4.json")
-    parser.add_argument("--fail", type=str, default="configs/instances/normal.json")
+    parser.add_argument("--arch", type=str, default=DEFAULT_ARCH_PATH)
+    parser.add_argument("--fail", type=str, default=DEFAULT_FAILURE_PATH)
     parser.add_argument("--log", type=str, default="logs/simulation.log")
     parser.add_argument("--level", type=str, default="info")
     parser.add_argument("--slice", type=int, default=11)
@@ -331,8 +336,8 @@ if __name__ == '__main__':
     mapper = NetworkMapper(network=network)
     mapper.gen_dfg()
 
-    simulate(arch_path="configs/instances/gemini4_4.json",
-             failure_path="configs/instances/normal.json",
+    simulate(arch_path=DEFAULT_ARCH_PATH,
+             failure_path=DEFAULT_FAILURE_PATH,
              mapper=mapper,
              verbose=True)
     

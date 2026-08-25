@@ -9,33 +9,42 @@ listed below.
 
 Phase 2 must treat the following as its architectural baseline:
 
-- The chip has two physically independent 4-column by 8-row meshes. NoC0 and
-  NoC1 each contain 32 routers and 104 directional inter-router links.
+- The data plane has two physically independent 4-column by 8-row meshes. NoC0
+  and NoC1 each contain 32 routers and 104 directional inter-router links.
+  Separate `cfg_noc` and `sync_noc` control planes are not data channels.
 - PE NMC CH0 selects NoC0 and CH1 selects NoC1. Router IDs 0-31 are local to a
   fabric; the route ID does not select the fabric.
 - Each NMC channel has independent TX and RX datapaths. One channel is
   full-duplex, and the two channels can operate independently.
-- A physical flit is mentor-confirmed as 512 B. A 128 B phit and four-cycle
-  physical serialization are high-confidence derived parameters, while
-  effective bulk throughput of approximately 117-120 B/cycle per fabric and
-  direction is measured.
+- A physical flit is 512 B. One native data-NoC beat is 579 wire bits containing
+  512 payload bits, so one flit serializes over eight 64 B payload beats at
+  2250 MHz. This is four ACI cycles because `noc_clk` is twice `aci_clk`.
+- Effective bulk throughput is approximately 117-120 B per ACI cycle per data
+  fabric and direction. The 128 B/ACI-cycle raw rate is an effective rate, not a
+  1024-bit native physical phit.
 - Every SINGLE/HEAD/BODY/TAIL flit carries up to 512 B of payload. Header, CRC,
   sequence, and tail metadata do not reduce this confirmed payload capacity.
-- NoC timing is expressed in the 1125 MHz ACI clock domain. Conversion to
-  seconds or GB/s must use that configured clock rather than an implicit host
-  or DDR clock.
+- Simulator time is expressed in 1125 MHz ACI cycles because task, NMC, and all
+  measured benchmark timestamps use that domain. Native NoC facts use 2250 MHz
+  NoC cycles and must be converted explicitly at two NoC cycles per ACI cycle.
+- The measured PE-to-PE distance slope remains 8.5 ACI cycles one-way per hop.
+  Native router-stage decomposition is not yet self-consistent in
+  `NOC_ARCHITECTURE.md`, so Phase 2 must calibrate to the measured slope instead
+  of presenting an inferred RC/SA/ST/LT split as confirmed hardware timing.
 - Routing is deterministic X-first XY, with one VC per port and round-robin
   output arbitration.
 - PE endpoints use local port 0. GM and DDR endpoints have the fixed router and
   local-port mappings documented in `NOC_ARCHITECTURE.md`.
 - `TransType` uses the hardware encoding `SINGLECAST=0`, `FIXPATH=1`,
   `MULTICAST=2`, and `BROADCAST=3`.
-- NMC descriptor issue costs approximately 57 cycles and the measured
+- NMC descriptor issue costs approximately 57 ACI cycles and the measured
   outstanding depth is approximately 24 descriptors per channel.
 
-Measured behavior and inferred microarchitecture must remain separate. In
-particular, credit-return implementation, default burst length, and detailed
-FIFO depths are not directly established by the available measurements.
+Vendor-confirmed facts supersede older derived hypotheses in the architecture
+document. Measured behavior and inferred microarchitecture must remain separate.
+The `sync_noc` credit path is established, but its exact topology, arbitration,
+and latency decomposition are not. Default burst length and detailed FIFO depths
+also remain unresolved.
 
 ## Phase 2 Scope
 
@@ -44,36 +53,66 @@ Phase 2 owns:
 - Dual-fabric PE-to-PE flit transport.
 - Fabric-aware endpoint addressing and routing.
 - Link serialization, bounded backpressure, wormhole flow, and arbitration.
+- A calibrated `sync_noc` credit-return abstraction that does not consume data
+  NoC payload bandwidth.
 - PE NMC channel selection, full-duplex resources, descriptor limits, and
   calibrated PE-to-PE latency profiles.
 - End-to-end integration of PE SEND and RECV tasks.
 - Fabric, packet, and operation latency tracing.
 
-Phase 2 does not implement GM/DDR memory-controller behavior, multicast tree
-replication, in-router reduction, or FIXPATH routing. Their encodings and
-attachments must be representable, but an unsupported operation must fail
-explicitly instead of silently using unicast or PE timing. Those behaviors stay
-in their later endpoint and collective phases.
+Phase 2 does not implement `cfg_noc` register traffic, general `sync_noc`
+synchronization/fence protocols, GM/DDR memory-controller behavior, multicast
+tree replication, in-router reduction, or FIXPATH routing. Their encodings and
+attachments must be representable where relevant, but an unsupported operation
+must fail explicitly instead of silently using unicast or PE timing. Those
+behaviors stay in their later endpoint and collective phases.
+
+## Effect on Completed Fixes
+
+- Fix 1 needs a focused correction: `clock_mhz=1125` must no longer mean both
+  ACI and NoC, and `phit_bytes=128` must no longer be described as native wire
+  width. The replacement is Fix 3A below.
+- Fix 2 remains correct. Endpoint addresses select CH0 or CH1 data fabrics;
+  `cfg_noc` and `sync_noc` must not be added to `NoCChannel`.
+- Fix 3's fabric propagation, frozen Flits, ownership checks, trace keys, and
+  failure targeting remain correct. Link constructors and trace events will need
+  the timing/plane additions in Fixes 3A and 3B, but fabric behavior does not
+  need redesign.
+- Existing four-ACI-cycle serialization, approximately 4.267-ACI-cycle launch
+  interval, and 8.5-ACI-cycle hop acceptance values remain numerically valid.
+  Their configuration names and physical explanation need correction.
+- The current 3 MiB `CoreConfig.spm` default and legacy 4x4/2 GiB architecture
+  JSON used by `simulator_detailed.run` do not match ADA2S-32. Fix 3C creates a
+  canonical hardware configuration without rewriting unrelated legacy topology
+  fixtures.
+- The new Matrix/Vector throughput and SRAM-contention measurements are outside
+  Phase 2. They expose limitations in the generic `TPUConfig.flops` model, but
+  that compute-model redesign must remain a separate phase.
 
 ## Fix 1: Correct Hardware Types and Configuration Semantics
+
+Historical status: the original version is implemented; the revised clock and
+wire semantics are applied as the small compatibility fix in Fix 3A.
 
 Code changes:
 
 - Correct `TransType` to the hardware values 0/1/2/3 and restore `FIXPATH`.
 - Add a strongly typed `NoCChannel` with `CH0=0` and `CH1=1`.
-- Split ambiguous flit configuration into physical flit bytes, phit bytes,
-  logical payload capacity, measured launch interval, wire delay, input-buffer
-  depth, and effective flow-control window.
-- Add the 1125 MHz NoC/ACI clock explicitly for unit conversion.
-- Replace the NMC configuration's incorrect shared 106 B/cycle channel budget
+- Split logical flit capacity from native wire width, native payload bits per NoC
+  cycle, effective ACI-cycle launch timing, input-buffer depth, and the effective
+  flow-control window.
+- Represent `aci_clock_mhz=1125` and `noc_clock_mhz=2250` independently and make
+  native-NoC-to-ACI conversion explicit.
+- Replace the NMC configuration's incorrect shared 106 B/ACI-cycle channel budget
   with per-channel TX/RX and descriptor parameters.
 - Reject unsupported transfer types at the Phase 2 transport boundary.
 
 Tests:
 
 - Exact enum values and invalid channel rejection.
-- Default physical values: 512 B/flit, 128 B/phit, four serialization cycles,
-  two channels, one VC, and one-flit input buffer.
+- Default physical values: 512 B/flit, 579 wire bits with 512 payload bits per
+  NoC cycle, eight NoC serialization cycles/four ACI serialization cycles, two
+  data channels, one VC, and one-flit input buffer.
 
 ## Fix 2: Make Endpoint Attachments Fabric-Aware
 
@@ -116,11 +155,95 @@ Tests:
 - Link binding rejects a different tracer even when its fabric ID matches.
 - Trace records distinguish the same router and link IDs on NoC0 and NoC1.
 
+## Fix 3A: Correct Native NoC and ACI Timing Semantics
+
+Code changes:
+
+- Replace the ambiguous `NoCConfig.clock_mhz` with `aci_clock_mhz=1125` and
+  `noc_clock_mhz=2250`; expose a validated two-to-one clock ratio.
+- Replace `LinkConfig.phit_bytes=128` with native wire/payload fields:
+  `wire_bits_per_noc_cycle=579` and `payload_bits_per_noc_cycle=512`.
+- Rename `launch_interval_cycles`, `wire_delay_cycles`, and the current router
+  pipeline cycle fields to state that their units and values are effective ACI
+  timing. Do not describe this calibrated split as native wire/router timing.
+- Compute 512 B flit serialization as eight NoC cycles and convert it to four
+  ACI cycles before scheduling SimPy events. Keep SimPy's global timebase in ACI
+  cycles so core, NMC, and measured operation profiles remain composable.
+- Reject ambiguous legacy `clock_mhz`, `phit_bytes`, and unqualified cycle fields
+  rather than silently assigning them to one clock domain.
+- Update configuration and link documentation to distinguish native wire facts,
+  effective ACI timing, and measured launch throughput.
+
+Tests:
+
+- Defaults report 1125 MHz ACI, 2250 MHz NoC, 579 wire bits, and 512 payload bits
+  per NoC cycle.
+- A 512 B flit serializes in exactly eight NoC cycles and four ACI cycles.
+- Native/effective conversion preserves the existing direct-link and 8.5-cycle
+  per-hop ACI timing tests.
+- Legacy combined-clock, 128 B native-phit, and unqualified timing fields are
+  rejected.
+
+## Fix 3B: Separate Data Channels from the Sync Credit Path
+
+Code changes:
+
+- Keep `NoCChannel` restricted to CH0 and CH1 data meshes. Add a separate plane
+  identity for DATA, SYNC, and CFG only where timing or tracing needs it.
+- Represent flow-control credit return with a `sync_noc` control-path
+  abstraction rather than a reverse data flit or consumption of data-link
+  payload bandwidth.
+- Keep the one-flit downstream buffer and bounded effective credit window. Use a
+  calibrated ACI-cycle credit-return parameter until native sync-router timing
+  is documented; do not add the measured 17-cycle RTT slope a second time.
+- Add plane identity to trace events. A SYNC credit event retains the CH0/CH1
+  data channel whose capacity it returns, while data flit events use the DATA
+  plane. CFG traffic and general synchronization protocol execution stay outside
+  Phase 2.
+
+Tests:
+
+- Returning a credit does not enqueue a data flit or consume CH0/CH1 link
+  bandwidth.
+- Credit backpressure and recovery preserve the calibrated single-flit-window
+  behavior without double-counting hop latency.
+- Credit traces identify both the SYNC plane and owning CH0/CH1 data channel;
+  flit traces identify the DATA plane and channel.
+
+## Fix 3C: Add a Canonical ADA2S-32 Configuration Snapshot
+
+Code changes:
+
+- Change the hardware default PE Local SRAM capacity from 3 MiB to 4 MiB and keep
+  Weight SRAM at 16 MiB.
+- Create one canonical ADA2S-32 detailed-simulator configuration with a 4x8
+  topology, the Fix 3A clock/wire fields, and no 2 GiB scratchpad override.
+- Point `simulator_detailed.run` defaults and Phase 2 integration tests at that
+  canonical file. Preserve legacy 4x4 topology fixtures for unrelated baseline
+  workflows instead of silently reinterpreting them as ADA2S-32.
+- Replace the ambiguous DMA `clock_scale` comment/field with explicit endpoint
+  clock metadata where it is needed: GM 900 MHz and DDR 1200 MHz relative to the
+  1125 MHz ACI simulation timebase. Endpoint bandwidth execution remains outside
+  Phase 2.
+- Describe the PE-to-router 128 B/ACI-cycle value as an effective interface rate,
+  not a native 1024-bit NoC phit.
+
+Tests:
+
+- The canonical configuration validates as 4x8 with 4 MiB Local SRAM and 16 MiB
+  Weight SRAM.
+- The CLI and architecture-level Phase 2 tests load the canonical configuration,
+  while legacy topology fixtures retain their original meanings.
+- Clock metadata names its domain explicitly and cannot be mistaken for the
+  native 2250 MHz NoC clock.
+
 ## Fix 4: Build Two Complete Mesh Instances
 
 Code changes:
 
 - Keep `NoC` as one self-contained 32-router fabric.
+- Construct exactly the two data meshes here. Do not turn `cfg_noc` or
+  `sync_noc` into additional `NoCChannel` mesh instances.
 - Change `Arch` to construct `nocs[NoCChannel.CH0]` and
   `nocs[NoCChannel.CH1]` with separate routers, links, arbiters, buffers, and
   tracers.
@@ -186,20 +309,24 @@ Tests:
 
 Code changes:
 
-- Keep 4-cycle physical serialization and 0.5-cycle wire propagation separate.
-- Add a calibrated launch interval of `512 / 120`, approximately 4.267 cycles,
-  rather than adding credit delay to every zero-load flit.
+- Keep eight-NoC-cycle/four-ACI-cycle native serialization separate from the
+  effective ACI-cycle router/link delay needed to reproduce the measured
+  8.5-ACI-cycle one-way hop slope. Do not claim the effective split is the native
+  physical stage decomposition.
+- Add a calibrated launch interval of `512 / 120`, approximately 4.267 ACI
+  cycles, rather than adding credit delay to every zero-load flit.
 - Model the one-flit downstream input buffer separately from a bounded effective
   in-flight/credit window. The window includes pipeline occupancy and must not
   be presented as a measured FIFO depth.
 - Stop launching when the bounded window is exhausted and return capacity when
-  downstream progress permits it.
+  downstream progress permits it through the Fix 3B sync credit path.
 - Preserve deterministic delivery and fail-slow scaling.
 
 Tests:
 
-- First direct-link arrival retains physical serialization plus wire delay.
-- Sustained zero-load arrivals approach 120 B/cycle.
+- First direct-link arrival retains four-ACI-cycle serialization plus the
+  configured effective ACI link-stage delay.
+- Sustained zero-load arrivals approach 120 B per ACI cycle.
 - A slow receiver causes bounded credit stalls without loss or unbounded
   in-flight processes.
 - Recovery from backpressure restores the calibrated launch interval.
@@ -241,21 +368,23 @@ Code changes:
 
 Tests:
 
-- Single-channel simplex reaches approximately 117-120 B/cycle bulk.
+- Single-channel simplex reaches approximately 117-120 B/ACI-cycle bulk.
 - Same-channel full duplex approaches twice simplex throughput.
-- Dual-channel same-direction traffic approaches 234-240 B/cycle aggregate.
-- Dual-channel full duplex approaches 468 B/cycle aggregate for bulk traffic.
+- Dual-channel same-direction traffic approaches 234-240 B/ACI-cycle aggregate.
+- Dual-channel full duplex approaches 468 B/ACI-cycle aggregate for bulk
+  traffic.
 
 ## Fix 10: Add Descriptor Limits and Explicit Latency Profiles
 
 Code changes:
 
-- Model approximately 57 cycles of descriptor programming and a configurable
+- Model approximately 57 ACI cycles of descriptor programming and a configurable
   24-entry outstanding queue per NMC channel.
 - Represent static, dynamic, and `send_with_sync` timing as distinct operation
   profiles.
 - Keep fabric timing separate from endpoint timing and preserve the measured
-  8.5-cycle one-way hop slope.
+  8.5-ACI-cycle one-way hop slope. Convert native NoC stages before composing
+  them with these ACI-domain profiles.
 - Support two mutually exclusive calibration modes:
   - Empirical mode applies the measured operation-level RTT intercept directly.
   - Compositional mode accounts for descriptor and endpoint stages explicitly.
@@ -266,12 +395,12 @@ Tests:
 
 - Descriptor issue is linear before queue saturation and backpressures after the
   configured depth.
-- Profile-level RTT follows `159 + 17*hops` for static,
+- Profile-level RTT in ACI cycles follows `159 + 17*hops` for static,
   `250 + 17*hops` for dynamic, and `204 + 17*hops` for the measured
   `send_with_sync` benchmark profile.
 - Under the benchmark-equivalent 32 KB batched schedule, effective throughput
-  approaches approximately 87 B/cycle per channel and approximately
-  340 B/cycle for dual-channel full duplex.
+  approaches approximately 87 B/ACI-cycle per channel and approximately
+  340 B/ACI-cycle for dual-channel full duplex.
 - Fabric-only traces do not include descriptor or endpoint setup time.
 
 ## Fix 11: Repair SEND/RECV Integration
@@ -301,6 +430,9 @@ Code changes:
 
 - Define separate timestamps for operation submission, descriptor acceptance,
   fabric injection, fabric ejection, and operation completion.
+- Record each timestamp's ACI-cycle timebase and distinguish CH0/CH1 DATA events
+  from SYNC credit events; native NoC-cycle diagnostics must be explicitly
+  converted rather than mixed into the same numeric field.
 - Report first-flit fabric latency, packet fabric completion latency, and
   end-to-end operation latency under distinct names.
 - Update `docs/`, `ADAPTATION_PLAN.md`, and calibration comments to remove the
@@ -309,10 +441,10 @@ Code changes:
 
 Tests and checks:
 
-- Hop slope: 8.5 cycles per one-way router hop for first-flit fabric latency.
-- Per-fabric bulk throughput: approximately 117-120 B/cycle/direction.
-- Dual-fabric same-direction throughput: approximately 234-240 B/cycle.
-- Full aggregate PE capability: approximately 468 B/cycle in dual-channel
+- Hop slope: 8.5 ACI cycles per one-way router hop for first-flit fabric latency.
+- Per-fabric bulk throughput: approximately 117-120 B/ACI-cycle/direction.
+- Dual-fabric same-direction throughput: approximately 234-240 B/ACI-cycle.
+- Full aggregate PE capability: approximately 468 B/ACI-cycle in dual-channel
   full-duplex bulk traffic.
 - Saturated shared-link traffic is fair and approaches the measured aggregate
   utilization without a hard-coded packet-size exemption.
@@ -328,7 +460,8 @@ Phase 2 is complete when PE-to-PE communication selects the correct physical
 fabric, both meshes remain structurally and behaviorally independent, each
 fabric is full-duplex, packet and link timing match calibrated measurements,
 backpressure is bounded, arbitration is fair, endpoint latency is not
-double-counted, and the real SEND/RECV execution path uses the flit model.
+double-counted, native NoC timing is converted consistently into the ACI
+simulation timebase, and the real SEND/RECV execution path uses the flit model.
 
 Completion of Phase 2 does not imply calibrated GM/DDR, multicast, broadcast,
 FIXPATH, reduction, or compute/SRAM-contention behavior. Those paths must remain
@@ -339,16 +472,19 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 
 | Architecture requirement | Plan coverage | Phase 2 status |
 |---|---|---|
-| Two independent NoC0/NoC1 meshes (§2.1) | Fixes 2-5 | Implement fully |
+| Two independent data NoC0/NoC1 meshes (§2.1) | Fixes 2-5 | Implement fully |
+| Separate CFG, SYNC, and dual-DATA planes (§2.0) | Fixes 3B and 4 | SYNC credit abstraction only; CFG and general sync deferred |
 | 4x8 coordinates and fixed endpoint routers (§2.2-2.3) | Fixes 2 and 4 | Implement fully |
-| Confirmed 512 B payload/flit and derived 128 B phit (§2.4, Appendix B) | Fixes 1, 6, and 7 | Payload-accurate; metadata placement abstracted |
+| 579-bit wire/512-bit payload native NoC beat (§2.4) | Fixes 1, 3A, and 7 | Preserve native facts and schedule in converted ACI cycles |
+| Confirmed 512 B payload/flit with sideband metadata (§2.4, §3.1) | Fixes 1 and 6 | Implement fully |
 | Fixed endpoint local-port modes (§2.5) | Fix 2 | Represent and validate |
 | Hardware `TransType` encoding (§3.2) | Fix 1 | Encode all; execute unicast only |
 | Deterministic XY and one VC (§3.3) | Fixes 1, 4, and 8 | Implement fully |
 | Round-robin and burst behavior (§3.5, §9.15-9.16) | Fix 8 | RR implemented; default burst remains configurable |
 | Shared-buffer priority (§3.6) | Fix 8 | Priority classes plus RR within a class |
-| One-flit input buffering and credit flow (§3.7) | Fix 7 | Bounded calibrated model; exact FIFO internals unresolved |
-| 1125 MHz NoC/ACI clock (§2.4, §8) | Fix 1 | Explicit unit-conversion parameter |
+| One-flit input buffering and sync credit flow (§2.0, §3.7) | Fixes 3B and 7 | Bounded calibrated model; exact sync topology/FIFO internals unresolved |
+| 1125 MHz ACI and 2250 MHz NoC clocks (§1.3, §2.4) | Fix 3A | Explicit two-domain conversion; ACI simulation timebase |
+| 4 MiB PE Local SRAM and explicit GM/DDR clocks (§1.2-1.3) | Fix 3C | Canonical config only; endpoint execution deferred |
 | Two independent, full-duplex NMC channels (§4.1-4.2, §9.19) | Fixes 5 and 9 | Implement fully for PE-to-PE |
 | NMC descriptor cost and depth (§9.14) | Fix 10 | Implement measured effective behavior |
 | Static, dynamic, and rb54 latency models (§9.1, §9.16) | Fix 10 | Separate profiles; no double counting |

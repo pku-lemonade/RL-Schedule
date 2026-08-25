@@ -4,35 +4,43 @@ The relevant configuration objects are:
 
 - `FlitConfig`: `physical_flit_bytes=512` and
   `payload_capacity_bytes=512`.
-- `RouterPipelineConfig`: RC=1, SA=2, ST=1 cycles.
+- `RouterPipelineConfig`: effective RC=1, SA=2, and ST=1 ACI cycles.
 - `RouterConfig`: XY routing, one VC, FIFO round-robin arbitration.
-- `LinkConfig`: `phit_bytes=128`, `launch_interval_cycles=512/120`,
-  `wire_delay_cycles=0.5`, `input_buffer_depth_flits=1`, and
-  `flow_control_window_flits=1`.
-- `NMCChannelConfig`: independent TX/RX rates of 120 B/cycle, a 57-cycle
+- `LinkConfig`: `wire_bits_per_noc_cycle=579`,
+  `payload_bits_per_noc_cycle=512`,
+  `launch_interval_aci_cycles=512/120`,
+  `effective_link_stage_aci_cycles=0.5`, one-flit input/flow-control limits,
+  and a separately calibrated `sync_credit_return_aci_cycles`.
+- `NMCChannelConfig`: independent TX/RX rates of 120 B/ACI-cycle, a 57-ACI-cycle
   descriptor issue cost, and 24 outstanding descriptors.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
   106 B/cycle channel budget.
-- `NoCConfig`: X=4, Y=8, `clock_mhz=1125`, and separate r2r `link` and PE-side
-  `c2r_link` configs.
+- `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated
+  2:1 clock ratio, and separate r2r `link` and PE-side `c2r_link` configs.
 - `DMAEngineConfig`: a type-qualified DMA instance, attached router, channel
   count, and corresponding local ports used by `EndpointRegistry`.
 
 Header, CRC, sequence, and tail fields are control metadata. They do not reduce
 the confirmed 512 B logical payload capacity used by `Message.flit_count()`.
 
-The Link derives physical serialization as
-`physical_flit_bytes / phit_bytes = 4` cycles. The measured launch interval is
-a separate calibrated value of approximately 4.267 cycles. Wire delay, the
-confirmed one-flit downstream input buffer, and the effective bounded
-flow-control window are also separate configuration concepts. The window is a
-simulator parameter, not a claim about an additional hardware FIFO.
+The Link derives native serialization as `512 B * 8 / 512 bits = 8` NoC cycles,
+then divides by the validated 2:1 clock ratio to schedule four ACI cycles. The
+measured launch interval is a separate calibrated value of approximately 4.267
+ACI cycles. The 0.5-ACI-cycle link stage is an effective calibration term, not a
+claim about physical wire propagation. The confirmed one-flit downstream input
+buffer and effective bounded flow-control window are also separate concepts.
+The window is a simulator parameter, not a claim about another hardware FIFO.
+
+Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
+whose capacity they return. The default effective credit-return delay is zero
+because the current 8.5-ACI-cycle hop calibration already absorbs unresolved
+`sync_noc` timing; a nonzero value is available for isolated calibration.
 
 Phase 2 accepts only `Mesh`, `XY`, one VC, and `TransType.SINGLECAST`. The
 hardware encodings for FIXPATH, MULTICAST, and BROADCAST are representable, but
 packetization rejects their execution until their transport behavior is
-implemented. Ambiguous legacy transport field names are rejected rather than
-silently interpreted.
+implemented. Ambiguous legacy fields such as `clock_mhz`, `phit_bytes`, and
+unqualified cycle names are rejected rather than silently interpreted.
 
 `EndpointRegistry` additionally requires each configured DMA to have one local
 port per declared channel. Router IDs must match the fixed hardware attachment

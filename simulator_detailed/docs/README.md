@@ -6,10 +6,12 @@ the Phase 3 PE NMC command and packetization path and all Phase 4 DMA nodes.
 
 The Phase 2 model is deterministic:
 
-- 512-byte flits and 128-byte phits;
+- 512-byte payload flits serialized as eight native NoC cycles/four ACI cycles;
+- 579 wire bits carrying 512 payload bits per native 2250 MHz NoC cycle;
 - one VC and one-flit input buffers;
-- credit-based flow control;
-- independent serialization and wire propagation;
+- credit-based flow control with credit events on the separate SYNC plane;
+- native serialization converted into the 1125 MHz ACI simulation timebase;
+- an effective calibrated ACI link stage kept separate from physical wire facts;
 - deterministic X-first XY routing;
 - wormhole switch reservation from HEAD through TAIL;
 - FIFO switch allocation using `simpy.Resource`;

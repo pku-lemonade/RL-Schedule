@@ -16,6 +16,7 @@ from .utils.definitions import (
     Direction,
     Flit,
     NoCChannel,
+    NoCPlane,
     direction_to_port,
 )
 
@@ -41,6 +42,7 @@ class FlitEvent:
     time: float
     action: FlitAction
     fabric_id: NoCChannel
+    plane: NoCPlane
     router_id: int = -1
     port: int = -1
     msg_id: int = -1
@@ -75,6 +77,7 @@ class NoCTracer:
         flit: Optional[Flit] = None,
         out_port: int = -1,
         link_name: str = "",
+        plane: NoCPlane = NoCPlane.DATA,
     ):
         if not self._enabled:
             return
@@ -88,6 +91,7 @@ class NoCTracer:
                 time=time,
                 action=action,
                 fabric_id=self.fabric_id,
+                plane=plane,
                 router_id=router_id,
                 port=port,
                 msg_id=-1 if flit is None else flit.msg_id,
@@ -131,7 +135,7 @@ class NoCTracer:
 
 
 class Link:
-    """Unidirectional, credit-controlled phit pipeline."""
+    """Unidirectional data path with credit return on the sync plane."""
 
     def __init__(
         self,
@@ -141,6 +145,8 @@ class Link:
         fabric_id: NoCChannel,
         tracer: NoCTracer,
         link_name: str = "",
+        *,
+        noc_cycles_per_aci_cycle: float,
     ):
         if tracer.fabric_id is not fabric_id:
             raise ValueError(
@@ -152,11 +158,20 @@ class Link:
         self.fabric_id = fabric_id
         self.tracer = tracer
         self.link_name = f"{fabric_id.name}:{link_name or 'unnamed-link'}"
-        self.serialization_cycles = config.serialization_cycles(physical_flit_bytes)
-        if config.launch_interval_cycles < self.serialization_cycles:
+        self.serialization_noc_cycles = config.serialization_noc_cycles(
+            physical_flit_bytes
+        )
+        self.serialization_aci_cycles = config.serialization_aci_cycles(
+            physical_flit_bytes,
+            noc_cycles_per_aci_cycle,
+        )
+        if config.launch_interval_aci_cycles < self.serialization_aci_cycles:
             raise ValueError("launch interval cannot be shorter than serialization")
-        self.launch_interval_cycles = config.launch_interval_cycles
-        self.wire_delay_cycles = config.wire_delay_cycles
+        self.launch_interval_aci_cycles = config.launch_interval_aci_cycles
+        self.effective_link_stage_aci_cycles = (
+            config.effective_link_stage_aci_cycles
+        )
+        self.sync_credit_return_aci_cycles = config.sync_credit_return_aci_cycles
         self.delay_factor = 1.0
 
         self.flit_buffer = simpy.Store(
@@ -216,14 +231,20 @@ class Link:
     def _transmit_loop(self) -> ProcessGenerator:
         while True:
             flit = cast(Flit, (yield self._out_queue.get()))
-            yield self.env.timeout(self.serialization_cycles * self.delay_factor)
+            yield self.env.timeout(
+                self.serialization_aci_cycles * self.delay_factor
+            )
             self.env.process(self._wire_deliver(flit))
-            launch_gap = self.launch_interval_cycles - self.serialization_cycles
+            launch_gap = (
+                self.launch_interval_aci_cycles - self.serialization_aci_cycles
+            )
             if launch_gap > 0:
                 yield self.env.timeout(launch_gap * self.delay_factor)
 
     def _wire_deliver(self, flit: Flit) -> ProcessGenerator:
-        yield self.env.timeout(self.wire_delay_cycles * self.delay_factor)
+        yield self.env.timeout(
+            self.effective_link_stage_aci_cycles * self.delay_factor
+        )
         yield self.flit_buffer.put(flit)
         self.tracer.log(
             self.env.now,
@@ -233,11 +254,14 @@ class Link:
         )
 
     def _return_credit(self) -> ProcessGenerator:
+        if self.sync_credit_return_aci_cycles > 0:
+            yield self.env.timeout(self.sync_credit_return_aci_cycles)
         yield self.credits.put(1)
         self.tracer.log(
             self.env.now,
             FlitAction.CREDIT_RETURN,
             link_name=self.link_name,
+            plane=NoCPlane.SYNC,
         )
 
 
@@ -353,7 +377,9 @@ class Router:
                     flit=flit,
                     out_port=out_port,
                 )
-                yield self.env.timeout(self.config.pipeline.rc_cycles)
+                yield self.env.timeout(
+                    self.config.pipeline.effective_rc_aci_cycles
+                )
 
                 out_channel = self.out_channels.get(out_port)
                 if out_channel is None:
@@ -380,7 +406,9 @@ class Router:
                     out_port=out_port,
                 )
                 self._sa_reqs[in_port] = sa_req
-                yield self.env.timeout(self.config.pipeline.sa_cycles)
+                yield self.env.timeout(
+                    self.config.pipeline.effective_sa_aci_cycles
+                )
 
             in_link.ack_credit()
             self.tracer.log(
@@ -391,7 +419,9 @@ class Router:
                 flit=flit,
                 out_port=out_port,
             )
-            yield self.env.timeout(self.config.pipeline.st_cycles)
+            yield self.env.timeout(
+                self.config.pipeline.effective_st_aci_cycles
+            )
 
             out_link = self.port_out.get(out_port)
             if out_link is None:
@@ -535,6 +565,7 @@ class NoC:
             fabric_id=self.fabric_id,
             tracer=self.tracer,
             link_name=f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
+            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
         )
         link_ba = Link(
             env=self.env,
@@ -543,6 +574,7 @@ class NoC:
             fabric_id=self.fabric_id,
             tracer=self.tracer,
             link_name=f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
+            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
         )
         self.routers[router_a].bind_link(port_a, link_ba, link_ab)
         self.routers[router_b].bind_link(port_b, link_ab, link_ba)

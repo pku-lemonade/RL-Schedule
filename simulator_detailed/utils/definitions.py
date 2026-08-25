@@ -61,6 +61,14 @@ class NoCChannel(IntEnum):
     CH1 = 1
 
 
+class NoCPlane(Enum):
+    """Physical NoC plane; values are labels, not hardware encodings."""
+
+    DATA = "data"
+    SYNC = "sync"
+    CFG = "cfg"
+
+
 class DMAAttachmentMode(Enum):
     """Physical attachment mode selected for a DMA endpoint."""
 

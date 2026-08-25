@@ -1,5 +1,10 @@
 # simulator_detailed ADA2S-32 Flit-Level Adaptation Plan
 
+> **Historical design record.** Native phit, clock, credit-delay, and bandwidth
+> assumptions below predate the updated vendor architecture and are not valid
+> executable configuration. `PHASE2_FIX_PLAN.md`, `docs/`, and
+> `configs/instances/ada2s32.json` define the current implementation contract.
+
 > Goal: Adapt `simulator_detailed/` from the current abstract 4×4 message-level model to a flit-level wormhole model matching ADA2S-32 silicon characteristics (8×4 mesh, 128 B/cyc links, 512 B flits, credit-based flow control, 16 DMA nodes).
 >
 > Modeling granularity: **flit (512 B)** — phit (128 B) is not modeled explicitly; the 4-cyc/flit serialization is a constant. Resource allocation, buffer management, credit flow control, arbitration, and routing all operate at flit granularity.

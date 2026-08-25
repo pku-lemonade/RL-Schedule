@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import simpy
 from pydantic import ValidationError
@@ -10,10 +11,12 @@ from simulator_detailed.configs.schemas.arch_config import (
     LinkConfig,
     NMCConfig,
     NoCConfig,
+    RouterPipelineConfig,
 )
 from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
+from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
     PORT_DDR_RDMA_LOC,
@@ -35,6 +38,7 @@ from simulator_detailed.utils.definitions import (
     FlitType,
     Message,
     NoCChannel,
+    NoCPlane,
     NodeType,
     DMAAttachmentMode,
     TransType,
@@ -64,6 +68,7 @@ class MeshHarness:
             self.fabric_id,
             self.tracer,
             f"PE{router_id}->R{router_id}",
+            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
         )
         r2c = Link(
             self.env,
@@ -72,6 +77,7 @@ class MeshHarness:
             self.fabric_id,
             self.tracer,
             f"R{router_id}->PE{router_id}",
+            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
         )
         self.noc.routers[router_id].bind_link(PORT_PE, c2r, r2c)
         self.endpoints[router_id] = (c2r, r2c)
@@ -133,14 +139,28 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertTrue(
             all(link.fabric_id is NoCChannel.CH0 for link in harness.noc.r2r_links)
         )
-        self.assertEqual(harness.config.clock_mhz, 1125.0)
+        self.assertEqual(harness.config.aci_clock_mhz, 1125.0)
+        self.assertEqual(harness.config.noc_clock_mhz, 2250.0)
+        self.assertEqual(harness.config.noc_cycles_per_aci_cycle, 2.0)
         self.assertEqual(harness.config.router.vc, 1)
         self.assertEqual(flit_config.physical_flit_bytes, 512)
         self.assertEqual(flit_config.payload_capacity_bytes, 512)
-        self.assertEqual(link_config.phit_bytes, 128)
-        self.assertEqual(link_config.serialization_cycles(512), 4.0)
-        self.assertAlmostEqual(link_config.launch_interval_cycles, 512.0 / 120.0)
-        self.assertEqual(link_config.wire_delay_cycles, 0.5)
+        self.assertEqual(link_config.wire_bits_per_noc_cycle, 579)
+        self.assertEqual(link_config.payload_bits_per_noc_cycle, 512)
+        self.assertEqual(link_config.serialization_noc_cycles(512), 8)
+        self.assertEqual(
+            link_config.serialization_aci_cycles(
+                512,
+                harness.config.noc_cycles_per_aci_cycle,
+            ),
+            4.0,
+        )
+        self.assertAlmostEqual(
+            link_config.launch_interval_aci_cycles,
+            512.0 / 120.0,
+        )
+        self.assertEqual(link_config.effective_link_stage_aci_cycles, 0.5)
+        self.assertEqual(link_config.sync_credit_return_aci_cycles, 0.0)
         self.assertEqual(link_config.input_buffer_depth_flits, 1)
         self.assertEqual(link_config.flow_control_window_flits, 1)
         self.assertIsNot(nmc_config.ch0, nmc_config.ch1)
@@ -195,7 +215,62 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             LinkConfig.model_validate({"phit_width": 128})
         with self.assertRaises(ValidationError):
+            LinkConfig.model_validate({"phit_bytes": 128})
+        with self.assertRaises(ValidationError):
+            LinkConfig.model_validate({"launch_interval_cycles": 4.0})
+        with self.assertRaises(ValidationError):
+            LinkConfig.model_validate({"wire_delay_cycles": 0.5})
+        with self.assertRaises(ValidationError):
+            RouterPipelineConfig.model_validate({"rc_cycles": 1.0})
+        with self.assertRaises(ValidationError):
+            NoCConfig.model_validate({"clock_mhz": 1125.0})
+        with self.assertRaises(ValidationError):
+            NoCConfig(aci_clock_mhz=1125.0, noc_clock_mhz=1125.0)
+        with self.assertRaises(ValidationError):
+            LinkConfig(
+                wire_bits_per_noc_cycle=511,
+                payload_bits_per_noc_cycle=512,
+            )
+        with self.assertRaises(ValidationError):
             NMCConfig.model_validate({"channels": 2, "sram_port_bw": 106.0})
+
+    def test_canonical_ada2s32_config(self) -> None:
+        config = arch_analyzer(DEFAULT_ARCH_PATH)
+
+        self.assertEqual(Path(DEFAULT_ARCH_PATH).name, "ada2s32.json")
+        self.assertEqual((config.core.x, config.core.y), (4, 8))
+        self.assertEqual((config.noc.x, config.noc.y), (4, 8))
+        self.assertEqual(config.core.spm.size, 4 * 1024 * 1024)
+        self.assertEqual(config.core.weight_spm.size, 16 * 1024 * 1024)
+        self.assertEqual(config.noc.aci_clock_mhz, 1125.0)
+        self.assertEqual(config.noc.noc_clock_mhz, 2250.0)
+
+        gm_dma = DMAEngineConfig(
+            dma_type=DMAType.GM_RDMA,
+            instance_id=0,
+            router_id=28,
+            local_ports=[PORT_GM_RDMA],
+        )
+        ddr_dma = DMAEngineConfig(
+            dma_type=DMAType.DDR_RDMA,
+            instance_id=0,
+            router_id=0,
+            local_ports=[PORT_DDR_RDMA],
+        )
+        self.assertEqual(gm_dma.endpoint_clock_mhz, 900.0)
+        self.assertEqual(ddr_dma.endpoint_clock_mhz, 1200.0)
+        self.assertEqual(gm_dma.model_dump()["endpoint_clock_mhz"], 900.0)
+        self.assertEqual(ddr_dma.model_dump()["endpoint_clock_mhz"], 1200.0)
+        with self.assertRaises(ValidationError):
+            DMAEngineConfig.model_validate(
+                {
+                    "dma_type": DMAType.GM_RDMA,
+                    "instance_id": 0,
+                    "router_id": 28,
+                    "local_ports": [PORT_GM_RDMA],
+                    "clock_scale": 1.0,
+                }
+            )
 
     def test_single_flit_properties(self):
         harness = MeshHarness()
@@ -763,6 +838,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             tracer,
             "probe",
+            noc_cycles_per_aci_cycle=2.0,
         )
         flits = [
             self._standalone_flit(FlitType.HEAD, 10),
@@ -788,6 +864,40 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertAlmostEqual(arrivals[1] - arrivals[0], 4.5)
         self.assertAlmostEqual(arrivals[2] - arrivals[1], 4.5)
 
+    def test_credit_return_uses_sync_plane_without_data_traffic(self) -> None:
+        env = simpy.Environment()
+        tracer = NoCTracer(NoCChannel.CH1)
+        link = Link(
+            env,
+            LinkConfig(sync_credit_return_aci_cycles=2.0),
+            512,
+            NoCChannel.CH1,
+            tracer,
+            "credit-probe",
+            noc_cycles_per_aci_cycle=2.0,
+        )
+
+        consumed = link.credits.get(1)
+        env.run(until=consumed)
+        returned = link.ack_credit()
+        env.run(until=returned)
+
+        self.assertEqual(env.now, 2.0)
+        self.assertEqual(link.credits.level, 1)
+        self.assertFalse(link._out_queue.items)
+        self.assertFalse(link.flit_buffer.items)
+        self.assertFalse(
+            any(
+                event.action in (FlitAction.LINK_SEND, FlitAction.LINK_RECV)
+                for event in tracer.events
+            )
+        )
+        self.assertEqual(len(tracer.events), 1)
+        credit_event = tracer.events[0]
+        self.assertIs(credit_event.action, FlitAction.CREDIT_RETURN)
+        self.assertIs(credit_event.fabric_id, NoCChannel.CH1)
+        self.assertIs(credit_event.plane, NoCPlane.SYNC)
+
     def test_cross_fabric_injection_is_rejected_before_state_changes(self):
         env = simpy.Environment()
         tracer = NoCTracer(NoCChannel.CH0)
@@ -798,6 +908,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             tracer,
             "probe",
+            noc_cycles_per_aci_cycle=2.0,
         )
         foreign_flit = Flit(
             flit_type=FlitType.SINGLE,
@@ -829,6 +940,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             tracer,
             "router-ingress",
+            noc_cycles_per_aci_cycle=2.0,
         )
         egress = Link(
             env,
@@ -837,6 +949,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             tracer,
             "router-egress",
+            noc_cycles_per_aci_cycle=2.0,
         )
         router.bind_link(PORT_PE, ingress, egress)
         ingress.flit_buffer.put(foreign_flit)
@@ -863,6 +976,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             link_tracer,
             "foreign-tracer-in",
+            noc_cycles_per_aci_cycle=2.0,
         )
         link_out = Link(
             env,
@@ -871,6 +985,7 @@ class Phase2NoCTests(unittest.TestCase):
             NoCChannel.CH0,
             link_tracer,
             "foreign-tracer-out",
+            noc_cycles_per_aci_cycle=2.0,
         )
 
         router = noc.routers[0]
@@ -892,6 +1007,17 @@ class Phase2NoCTests(unittest.TestCase):
 
             self.assertTrue(
                 all(event.fabric_id is fabric_id for event in harness.tracer.events)
+            )
+            self.assertTrue(
+                all(
+                    event.plane
+                    is (
+                        NoCPlane.SYNC
+                        if event.action is FlitAction.CREDIT_RETURN
+                        else NoCPlane.DATA
+                    )
+                    for event in harness.tracer.events
+                )
             )
             self.assertIn(f"fabric={fabric_id.name}", harness.tracer.summary(harness.env.now))
             latencies.update(harness.tracer.per_msg_latency())

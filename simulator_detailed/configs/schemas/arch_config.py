@@ -1,7 +1,8 @@
+import math
 from enum import IntEnum
 from typing import List
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from ...utils.definitions import NoCChannel
 
@@ -54,10 +55,13 @@ class FlitConfig(BaseModel):
 
 
 class RouterPipelineConfig(BaseModel):
-    """Router pipeline stages, in ACI cycles."""
-    rc_cycles: float = 1.0
-    sa_cycles: float = 2.0
-    st_cycles: float = 1.0
+    """Effective router-stage timing in the simulator's ACI-cycle domain."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    effective_rc_aci_cycles: float = Field(default=1.0, ge=0)
+    effective_sa_aci_cycles: float = Field(default=2.0, ge=0)
+    effective_st_aci_cycles: float = Field(default=1.0, ge=0)
 
 
 class RouterConfig(BaseModel):
@@ -70,23 +74,50 @@ class RouterConfig(BaseModel):
 
 
 class LinkConfig(BaseModel):
-    """Physical link timing and bounded flow-control parameters."""
+    """Native data-NoC width and effective ACI-domain link timing."""
 
     model_config = ConfigDict(extra="forbid")
 
-    phit_bytes: int = Field(default=128, gt=0)
-    launch_interval_cycles: float = Field(default=512.0 / 120.0, gt=0)
-    wire_delay_cycles: float = Field(default=0.5, ge=0)
+    wire_bits_per_noc_cycle: int = Field(default=579, gt=0)
+    payload_bits_per_noc_cycle: int = Field(default=512, gt=0)
+    launch_interval_aci_cycles: float = Field(default=512.0 / 120.0, gt=0)
+    effective_link_stage_aci_cycles: float = Field(default=0.5, ge=0)
+    # Zero preserves measured ACI hop timing until sync_noc latency is isolated.
+    sync_credit_return_aci_cycles: float = Field(default=0.0, ge=0)
     input_buffer_depth_flits: int = Field(default=1, gt=0)
     flow_control_window_flits: int = Field(default=1, gt=0)
 
-    def serialization_cycles(self, physical_flit_bytes: int) -> float:
-        """Return ideal physical serialization time for one flit."""
+    @model_validator(mode="after")
+    def validate_native_width(self) -> "LinkConfig":
+        if self.payload_bits_per_noc_cycle > self.wire_bits_per_noc_cycle:
+            raise ValueError("payload bits cannot exceed physical wire bits")
+        if self.payload_bits_per_noc_cycle % 8 != 0:
+            raise ValueError("payload width must contain a whole number of bytes")
+        return self
+
+    def serialization_noc_cycles(self, physical_flit_bytes: int) -> int:
+        """Return native NoC cycles needed to serialize one logical flit."""
         if physical_flit_bytes <= 0:
             raise ValueError("physical flit size must be positive")
-        if physical_flit_bytes % self.phit_bytes != 0:
-            raise ValueError("physical flit size must contain a whole number of phits")
-        return physical_flit_bytes / self.phit_bytes
+        flit_bits = physical_flit_bytes * 8
+        if flit_bits % self.payload_bits_per_noc_cycle != 0:
+            raise ValueError(
+                "physical flit size must contain a whole number of native NoC beats"
+            )
+        return flit_bits // self.payload_bits_per_noc_cycle
+
+    def serialization_aci_cycles(
+        self,
+        physical_flit_bytes: int,
+        noc_cycles_per_aci_cycle: float,
+    ) -> float:
+        """Convert native serialization time to the simulator's ACI timebase."""
+        if noc_cycles_per_aci_cycle <= 0:
+            raise ValueError("NoC-to-ACI clock ratio must be positive")
+        return (
+            self.serialization_noc_cycles(physical_flit_bytes)
+            / noc_cycles_per_aci_cycle
+        )
 
 
 class NMCChannelConfig(BaseModel):
@@ -122,9 +153,9 @@ class CoreConfig(BaseModel):
     type: str = "Simple"      # core type identifier
     x: int = 4                # number of columns in the core mesh
     y: int = 8                # number of rows in the core mesh
-    width: int = 128          # B/cycle, core-to-router link width
+    width: int = 128          # effective B/ACI-cycle at the PE-to-router interface
     blk_size: int = 128       # B, default block/tile size for tensor partitioning
-    spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=3145728, delay=1))
+    spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=4194304, delay=1))
     weight_spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=16777216, delay=1))
     tpu: TPUConfig = Field(default_factory=TPUConfig)
     lsu: LSUConfig = Field(default_factory=LSUConfig)
@@ -133,15 +164,25 @@ class CoreConfig(BaseModel):
 
 class DMAEngineConfig(BaseModel):
     """DMA engine config: GM/DDR read/write endpoints attached to router local ports."""
+
+    model_config = ConfigDict(extra="forbid")
+
     dma_type: DMAType          # DMA direction: GM_RDMA/GM_WDMA/DDR_RDMA/DDR_WDMA
     instance_id: int           # instance index within dma_type (0-3 for 4 GM/DDR controllers)
     router_id: int             # router ID this DMA is attached to
     channels: int = 1          # number of independent DMA channels (WDMA=2, RDMA=1)
     local_ports: List[int] = Field(default_factory=list[int])
-    port_bw: float = 106.0     # B/cycle, per-port bandwidth (GM=106, DDR~=91.5)
-    clock_scale: float = 1.0   # clock domain ratio relative to NoC (DDR=1.022 for 1150MHz)
-    cdc_penalty: int = 0       # cycles, clock-domain-crossing penalty (DDR=5, GM=0)
-    dispatch_interval: int = 1  # cycles, scalar-core dispatch serialization between channels
+    port_bw: float = 106.0     # effective B/ACI-cycle (GM=106, DDR~=91.5)
+    cdc_penalty: int = 0       # effective ACI cycles (DDR=5, GM=0)
+    dispatch_interval: int = 1  # ACI cycles between scalar-core dispatches
+
+    @computed_field
+    @property
+    def endpoint_clock_mhz(self) -> float:
+        """Return the fixed hardware clock for the endpoint's memory domain."""
+        if self.dma_type in (DMAType.GM_RDMA, DMAType.GM_WDMA):
+            return 900.0
+        return 1200.0
 
 
 class MemoryControllerConfig(BaseModel):
@@ -155,10 +196,14 @@ class MemoryControllerConfig(BaseModel):
 
 class NoCConfig(BaseModel):
     """Network-on-Chip topology and component config."""
+
+    model_config = ConfigDict(extra="forbid")
+
     type: str = "Mesh"                                    # topology: Mesh/Torus/RingRoad/Dragonfly
     x: int = 4                                            # mesh columns
     y: int = 8                                            # mesh rows
-    clock_mhz: float = Field(default=1125.0, gt=0)         # ACI/NoC clock
+    aci_clock_mhz: float = Field(default=1125.0, gt=0)
+    noc_clock_mhz: float = Field(default=2250.0, gt=0)
     router: RouterConfig = Field(default_factory=RouterConfig)
     link: LinkConfig = Field(default_factory=LinkConfig)
     c2r_link: LinkConfig = Field(default_factory=LinkConfig)
@@ -168,6 +213,22 @@ class NoCConfig(BaseModel):
     mem_controllers: List[MemoryControllerConfig] = Field(
         default_factory=list[MemoryControllerConfig]
     )
+
+    @model_validator(mode="after")
+    def validate_clock_ratio(self) -> "NoCConfig":
+        if not math.isclose(
+            self.noc_cycles_per_aci_cycle,
+            2.0,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("ADA2S-32 requires noc_clk to be exactly 2x aci_clk")
+        return self
+
+    @property
+    def noc_cycles_per_aci_cycle(self) -> float:
+        """Return native NoC cycles elapsed during one ACI simulation cycle."""
+        return self.noc_clock_mhz / self.aci_clock_mhz
 
 
 class MemConfig(BaseModel):

@@ -1,18 +1,22 @@
 # Link Model
 
-`Link` is a unidirectional phit pipeline with a downstream flit buffer.
+`Link` is a unidirectional data path with a downstream flit buffer.
 
-For the calibrated defaults, one 512-byte flit needs four serialization cycles
-on a 128-byte/cycle link. Wire propagation adds 0.5 cycles. Serialization is
-serialized by `_out_queue`, while wire delivery runs as a separate SimPy
-process, allowing propagation to overlap with serialization of the next flit.
+The native data NoC carries 512 payload bits on a 579-bit wire beat at 2250 MHz.
+A 512-byte flit therefore needs eight native NoC cycles. `Link` converts that to
+four cycles in the simulator's 1125 MHz ACI timebase. A separate effective
+0.5-ACI-cycle link stage preserves the measured latency calibration without
+claiming that value is the physical wire delay. `_out_queue` serializes launches
+while delivery runs as a separate SimPy process.
 
 Each downstream buffer slot owns one credit. `send_flit()` consumes a credit
 before enqueueing a flit. The receiver calls `ack_credit()` only when the flit
-has departed its input buffer. Credit return takes 0.3 cycles. With immediate
-consumption, the steady-state receive gap is therefore 4.8 cycles, or about
-106.7 bytes/cycle.
+has departed its input buffer. Credit return is a SYNC-plane event and never
+enqueues a data flit or consumes data-link bandwidth. Its effective delay is
+configurable; the default is zero because unresolved sync-path latency is
+already absorbed by the calibrated 8.5-ACI-cycle per-hop behavior.
 
-`scale_link_delay(factor)` scales serialization, wire, and credit-return delay.
-Recovery uses the reciprocal factor. The tracer is mandatory and records link
-sends, receives, credit stalls, and credit returns.
+`scale_link_delay(factor)` scales data serialization and the effective data-link
+stage. It does not scale the physically separate sync credit path. Recovery uses
+the reciprocal factor. The tracer records DATA-plane sends/receives/stalls and
+SYNC-plane credit returns with the owning CH0/CH1 fabric identity.

@@ -64,6 +64,7 @@ class Arch:
                 fabric_id=core.address.fabric_id,
                 tracer=self.noc.tracer,
                 link_name=f"PE{id}->R{id}",
+                noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
             )
             r2c = Link(
                 env=self.env,
@@ -72,6 +73,7 @@ class Arch:
                 fabric_id=core.address.fabric_id,
                 tracer=self.noc.tracer,
                 link_name=f"R{id}->PE{id}",
+                noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
             )
 
             core.bind_with_router(r2c, c2r, self.noc.routers[id])
