@@ -198,7 +198,11 @@ class Task:
                     # print("-" * 20)
                     message = Message(
                         src=core.address,
-                        dst=core.endpoint_registry.resolve(NodeType.PE, node.core_id),
+                        dst=core.endpoint_registry.resolve(
+                            NodeType.PE,
+                            node.core_id,
+                            fabric_id=core.address.fabric_id,
+                        ),
                         index=self.index,
                         data=node.input_slice().tensor_slice,
                     )
