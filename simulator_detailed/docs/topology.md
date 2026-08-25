@@ -11,6 +11,9 @@ y = id // 4
 There are 32 routers and 52 undirected neighbor pairs, represented as 104
 unidirectional Links. Every neighbor pair is explicitly bound in both
 directions. X-first XY routing first resolves the column and then the row.
+Each `NoC` object owns exactly one `NoCChannel`; all of its routers, links,
+tracer events, and flits must carry that same fabric identity. Link diagnostics
+are prefixed with `CH0:` or `CH1:`.
 
 PE links are not created by `NoC.build_connection_mesh()`. `Arch.build_cores()`
 creates one PE-to-router and one router-to-PE Link for each PE and binds them to
@@ -26,7 +29,8 @@ local port; callers do not select a raw port.
 The current `Arch` runtime still constructs one mesh and temporarily binds its
 PE links to NoC0 addresses. Separate NoC0/NoC1 router and link instances are
 introduced by the later dual-fabric runtime fix; endpoint identity is already
-fabric-safe so that step does not require another addressing rewrite.
+fabric-safe, and transport now rejects a foreign-fabric flit before consuming
+credit or reserving router state.
 
 For a SINGLE flit crossing `N` inter-router hops, the current calibrated
 NoC-only endpoint latency is:

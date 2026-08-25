@@ -61,6 +61,7 @@ class Arch:
                 env=self.env,
                 config=noc_config.c2r_link,
                 physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
+                fabric_id=core.address.fabric_id,
                 tracer=self.noc.tracer,
                 link_name=f"PE{id}->R{id}",
             )
@@ -68,6 +69,7 @@ class Arch:
                 env=self.env,
                 config=noc_config.c2r_link,
                 physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
+                fabric_id=core.address.fabric_id,
                 tracer=self.noc.tracer,
                 link_name=f"R{id}->PE{id}",
             )
@@ -83,7 +85,8 @@ class Arch:
         return NoC(
             env=env,
             config=config,
-            tracer=NoCTracer(),
+            fabric_id=NoCChannel.CH0,
+            tracer=NoCTracer(NoCChannel.CH0),
         ).build_connection_mesh()
     
 
@@ -119,10 +122,11 @@ class Arch:
 
 
     def link_fail(self, fail: LinkFail):
+        noc = self._noc_for_fabric(fail.fabric_id)
         yield self.env.timeout(fail.start_time)
         port = direction_to_port(fail.direction)
-        link_in = self.noc.routers[fail.router_id].port_in[port]
-        link_out = self.noc.routers[fail.router_id].port_out[port]
+        link_in = noc.routers[fail.router_id].port_in[port]
+        link_out = noc.routers[fail.router_id].port_out[port]
         assert link_in is not None and link_out is not None
         link_in.scale_link_delay(fail.times)
         link_out.scale_link_delay(fail.times)
@@ -133,10 +137,19 @@ class Arch:
 
 
     def router_fail(self, fail: RouterFail):
+        noc = self._noc_for_fabric(fail.fabric_id)
         yield self.env.timeout(fail.start_time)
-        self.noc.routers[fail.router_id].scale_link_delay(fail.times)
+        noc.routers[fail.router_id].scale_link_delay(fail.times)
         yield self.env.timeout(fail.end_time-fail.start_time)
-        self.noc.routers[fail.router_id].scale_link_delay(1 / fail.times)
+        noc.routers[fail.router_id].scale_link_delay(1 / fail.times)
+
+    def _noc_for_fabric(self, fabric_id: NoCChannel) -> NoC:
+        if self.noc.fabric_id is not fabric_id:
+            raise ValueError(
+                f"{fabric_id.name} failure target is unavailable; "
+                f"the current architecture only constructs {self.noc.fabric_id.name}"
+            )
+        return self.noc
 
 
     def lsu_fail(self, fail: LsuFail):

@@ -205,6 +205,16 @@ class Core:
         
 
     def bind_with_router(self, data_in: Link, data_out: Link, router: Router):
+        if router.fabric_id is not self.address.fabric_id:
+            raise ValueError(
+                f"core {self.id} address uses {self.address.fabric_id.name}, "
+                f"not {router.fabric_id.name}"
+            )
+        for link in (data_in, data_out):
+            if link.fabric_id is not self.address.fabric_id:
+                raise ValueError(
+                    f"core {self.id} cannot bind {link.link_name} from another fabric"
+                )
         if router.id != self.address.router_id:
             raise ValueError(
                 f"core {self.id} address maps to router {self.address.router_id}, "

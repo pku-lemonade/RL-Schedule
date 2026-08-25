@@ -11,6 +11,7 @@ from simulator_detailed.configs.schemas.arch_config import (
     NMCConfig,
     NoCConfig,
 )
+from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
 from simulator_detailed.utils.definitions import (
@@ -27,6 +28,7 @@ from simulator_detailed.utils.definitions import (
     PORT_GM_WDMA_CH1,
     PORT_GM_WDMA_LOC,
     PORT_PE,
+    Direction,
     DimSlice,
     EndpointAddress,
     Flit,
@@ -41,11 +43,17 @@ from simulator_detailed.utils.definitions import (
 
 
 class MeshHarness:
-    def __init__(self):
+    def __init__(self, fabric_id=NoCChannel.CH0):
         self.env = simpy.Environment()
         self.config = NoCConfig()
-        self.tracer = NoCTracer()
-        self.noc = NoC(self.env, self.config, self.tracer).build_connection_mesh()
+        self.fabric_id = fabric_id
+        self.tracer = NoCTracer(fabric_id)
+        self.noc = NoC(
+            self.env,
+            self.config,
+            fabric_id,
+            self.tracer,
+        ).build_connection_mesh()
         self.endpoints = {}
 
     def attach(self, router_id):
@@ -53,6 +61,7 @@ class MeshHarness:
             self.env,
             self.config.c2r_link,
             self.config.router.flit.physical_flit_bytes,
+            self.fabric_id,
             self.tracer,
             f"PE{router_id}->R{router_id}",
         )
@@ -60,18 +69,19 @@ class MeshHarness:
             self.env,
             self.config.c2r_link,
             self.config.router.flit.physical_flit_bytes,
+            self.fabric_id,
             self.tracer,
             f"R{router_id}->PE{router_id}",
         )
         self.noc.routers[router_id].bind_link(PORT_PE, c2r, r2c)
         self.endpoints[router_id] = (c2r, r2c)
 
-    @staticmethod
-    def flit(flit_type, msg_id, src, dst, payload=512):
+    def flit(self, flit_type, msg_id, src, dst, payload=512):
         return Flit(
             flit_type=flit_type,
             payload_bytes=payload,
             msg_id=msg_id,
+            fabric_id=self.fabric_id,
             src_router=src,
             dst_router=dst,
         )
@@ -113,6 +123,16 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual((harness.noc.x, harness.noc.y), (4, 8))
         self.assertEqual(len(harness.noc.routers), 32)
         self.assertEqual(len(harness.noc.r2r_links), 104)
+        self.assertIs(harness.noc.fabric_id, NoCChannel.CH0)
+        self.assertTrue(
+            all(
+                router.fabric_id is NoCChannel.CH0
+                for router in harness.noc.routers
+            )
+        )
+        self.assertTrue(
+            all(link.fabric_id is NoCChannel.CH0 for link in harness.noc.r2r_links)
+        )
         self.assertEqual(harness.config.clock_mhz, 1125.0)
         self.assertEqual(harness.config.router.vc, 1)
         self.assertEqual(flit_config.physical_flit_bytes, 512)
@@ -148,6 +168,25 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             NoCChannel(2)
 
+    def test_failure_targets_are_fabric_qualified(self):
+        legacy_router_failure = RouterFail(
+            start_time=1,
+            end_time=2,
+            router_id=0,
+            times=2,
+        )
+        ch1_link_failure = LinkFail(
+            start_time=1,
+            end_time=2,
+            fabric_id=NoCChannel.CH1,
+            router_id=0,
+            direction=Direction.NORTH,
+            times=2,
+        )
+
+        self.assertIs(legacy_router_failure.fabric_id, NoCChannel.CH0)
+        self.assertIs(ch1_link_failure.fabric_id, NoCChannel.CH1)
+
     def test_ambiguous_legacy_transport_config_is_rejected(self):
         with self.assertRaises(ValidationError):
             FlitConfig.model_validate({"flit_size": 512})
@@ -159,10 +198,11 @@ class Phase2NoCTests(unittest.TestCase):
             NMCConfig.model_validate({"channels": 2, "sram_port_bw": 106.0})
 
     def test_single_flit_properties(self):
-        single = MeshHarness.flit(FlitType.SINGLE, 1, 0, 1)
-        head = MeshHarness.flit(FlitType.HEAD, 2, 0, 1)
-        body = MeshHarness.flit(FlitType.BODY, 2, 0, 1)
-        tail = MeshHarness.flit(FlitType.TAIL, 2, 0, 1)
+        harness = MeshHarness()
+        single = harness.flit(FlitType.SINGLE, 1, 0, 1)
+        head = harness.flit(FlitType.HEAD, 2, 0, 1)
+        body = harness.flit(FlitType.BODY, 2, 0, 1)
+        tail = harness.flit(FlitType.TAIL, 2, 0, 1)
         self.assertTrue(single.is_head)
         self.assertTrue(single.is_tail)
         self.assertTrue(head.is_head)
@@ -249,6 +289,7 @@ class Phase2NoCTests(unittest.TestCase):
                 self.assertEqual(sum(flit.payload_bytes for flit in flits), payload_bytes)
                 for flit in flits:
                     self.assertEqual(flit.msg_id, message.index)
+                    self.assertIs(flit.fabric_id, NoCChannel.CH0)
                     self.assertEqual(flit.src_router, 28)
                     self.assertEqual(flit.dst_router, 31)
                     self.assertEqual(flit.src_local_port, message.src.local_port)
@@ -306,6 +347,7 @@ class Phase2NoCTests(unittest.TestCase):
             [256, 256, 1],
         )
         for flit in configured_flits:
+            self.assertIs(flit.fabric_id, NoCChannel.CH1)
             self.assertEqual(flit.src_router, 28)
             self.assertEqual(flit.src_local_port, PORT_GM_RDMA)
             self.assertEqual(flit.dst_router, 31)
@@ -713,8 +755,15 @@ class Phase2NoCTests(unittest.TestCase):
 
     def test_direct_link_latency_and_steady_gap(self):
         env = simpy.Environment()
-        tracer = NoCTracer()
-        link = Link(env, LinkConfig(), 512, tracer, "probe")
+        tracer = NoCTracer(NoCChannel.CH0)
+        link = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            tracer,
+            "probe",
+        )
         flits = [
             self._standalone_flit(FlitType.HEAD, 10),
             self._standalone_flit(FlitType.BODY, 10),
@@ -738,6 +787,137 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertAlmostEqual(arrivals[0], 4.5)
         self.assertAlmostEqual(arrivals[1] - arrivals[0], 4.5)
         self.assertAlmostEqual(arrivals[2] - arrivals[1], 4.5)
+
+    def test_cross_fabric_injection_is_rejected_before_state_changes(self):
+        env = simpy.Environment()
+        tracer = NoCTracer(NoCChannel.CH0)
+        link = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            tracer,
+            "probe",
+        )
+        foreign_flit = Flit(
+            flit_type=FlitType.SINGLE,
+            payload_bytes=512,
+            msg_id=70,
+            fabric_id=NoCChannel.CH1,
+            src_router=0,
+            dst_router=1,
+        )
+
+        initial_credits = link.credits.level
+        with self.assertRaisesRegex(ValueError, "CH1 flit cannot enter CH0:probe"):
+            link.send_flit(foreign_flit)
+        self.assertEqual(link.credits.level, initial_credits)
+        self.assertFalse(link._out_queue.items)
+        self.assertFalse(tracer.events)
+
+        noc = NoC(
+            env,
+            NoCConfig(),
+            NoCChannel.CH0,
+            tracer,
+        ).build_connection_mesh()
+        router = noc.routers[0]
+        ingress = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            tracer,
+            "router-ingress",
+        )
+        egress = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            tracer,
+            "router-egress",
+        )
+        router.bind_link(PORT_PE, ingress, egress)
+        ingress.flit_buffer.put(foreign_flit)
+        with self.assertRaisesRegex(ValueError, "CH1 flit cannot enter CH0:R0"):
+            env.run()
+        self.assertFalse(router.reservation)
+        self.assertFalse(router._sa_reqs)
+        self.assertFalse(tracer.events)
+
+    def test_router_rejects_different_same_fabric_tracer(self):
+        env = simpy.Environment()
+        noc_tracer = NoCTracer(NoCChannel.CH0)
+        link_tracer = NoCTracer(NoCChannel.CH0)
+        noc = NoC(
+            env,
+            NoCConfig(),
+            NoCChannel.CH0,
+            noc_tracer,
+        ).build_connection_mesh()
+        link_in = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            link_tracer,
+            "foreign-tracer-in",
+        )
+        link_out = Link(
+            env,
+            LinkConfig(),
+            512,
+            NoCChannel.CH0,
+            link_tracer,
+            "foreign-tracer-out",
+        )
+
+        router = noc.routers[0]
+        with self.assertRaisesRegex(ValueError, "with a different tracer"):
+            router.bind_link(PORT_PE, link_in, link_out)
+        self.assertIsNone(router.port_in.get(PORT_PE))
+        self.assertIsNone(router.port_out.get(PORT_PE))
+        self.assertNotIn(PORT_PE, router.out_channels)
+
+    def test_trace_records_distinguish_identical_fabric_local_ids(self):
+        latencies = {}
+        qualified_link_names = {}
+        logical_link_names = {}
+
+        for fabric_id in NoCChannel:
+            harness = MeshHarness(fabric_id)
+            flit = harness.flit(FlitType.SINGLE, 71, 0, 1)
+            harness.transfer(0, 1, [flit])
+
+            self.assertTrue(
+                all(event.fabric_id is fabric_id for event in harness.tracer.events)
+            )
+            self.assertIn(f"fabric={fabric_id.name}", harness.tracer.summary(harness.env.now))
+            latencies.update(harness.tracer.per_msg_latency())
+            qualified_link_names[fabric_id] = {
+                event.link_name
+                for event in harness.tracer.events
+                if event.link_name
+            }
+            logical_link_names[fabric_id] = {
+                name.split(":", maxsplit=1)[1]
+                for name in qualified_link_names[fabric_id]
+            }
+
+        self.assertEqual(
+            set(latencies),
+            {(NoCChannel.CH0, 71), (NoCChannel.CH1, 71)},
+        )
+        self.assertEqual(
+            logical_link_names[NoCChannel.CH0],
+            logical_link_names[NoCChannel.CH1],
+        )
+        self.assertTrue(
+            qualified_link_names[NoCChannel.CH0].isdisjoint(
+                qualified_link_names[NoCChannel.CH1]
+            )
+        )
 
     def test_single_flit_latency_for_one_to_ten_hops(self):
         for hops in range(1, 11):
@@ -851,6 +1031,7 @@ class Phase2NoCTests(unittest.TestCase):
             flit_type=flit_type,
             payload_bytes=512,
             msg_id=msg_id,
+            fabric_id=NoCChannel.CH0,
             src_router=0,
             dst_router=1,
         )

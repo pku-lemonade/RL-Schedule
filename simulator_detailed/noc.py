@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 
 import simpy
+from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request as SimpyRequest
 
 from .configs.schemas.arch_config import LinkConfig, NoCConfig, RouterConfig
@@ -14,8 +15,11 @@ from .utils.definitions import (
     PORT_PE,
     Direction,
     Flit,
+    NoCChannel,
     direction_to_port,
 )
+
+TraceMessageKey = tuple[NoCChannel, int]
 
 
 class FlitAction(IntEnum):
@@ -32,10 +36,11 @@ class FlitAction(IntEnum):
     CREDIT_RETURN = 10
 
 
-@dataclass
+@dataclass(frozen=True)
 class FlitEvent:
     time: float
     action: FlitAction
+    fabric_id: NoCChannel
     router_id: int = -1
     port: int = -1
     msg_id: int = -1
@@ -46,7 +51,8 @@ class FlitEvent:
 
 
 class NoCTracer:
-    def __init__(self):
+    def __init__(self, fabric_id: NoCChannel):
+        self.fabric_id = fabric_id
         self.events: List[FlitEvent] = []
         self._enabled = True
 
@@ -72,10 +78,16 @@ class NoCTracer:
     ):
         if not self._enabled:
             return
+        if flit is not None and flit.fabric_id is not self.fabric_id:
+            raise ValueError(
+                f"{flit.fabric_id.name} flit cannot be recorded by "
+                f"{self.fabric_id.name} tracer"
+            )
         self.events.append(
             FlitEvent(
                 time=time,
                 action=action,
+                fabric_id=self.fabric_id,
                 router_id=router_id,
                 port=port,
                 msg_id=-1 if flit is None else flit.msg_id,
@@ -86,18 +98,19 @@ class NoCTracer:
             )
         )
 
-    def per_msg_latency(self) -> Dict[int, float]:
-        injected: Dict[int, float] = {}
-        ejected: Dict[int, float] = {}
+    def per_msg_latency(self) -> Dict[TraceMessageKey, float]:
+        injected: Dict[TraceMessageKey, float] = {}
+        ejected: Dict[TraceMessageKey, float] = {}
         for event in self.events:
+            message_key = (event.fabric_id, event.msg_id)
             if event.action == FlitAction.INJECT:
-                injected.setdefault(event.msg_id, event.time)
+                injected.setdefault(message_key, event.time)
             elif event.action == FlitAction.EJECT:
-                ejected[event.msg_id] = event.time
+                ejected[message_key] = event.time
         return {
-            msg_id: ejected[msg_id] - start
-            for msg_id, start in injected.items()
-            if msg_id in ejected
+            message_key: ejected[message_key] - start
+            for message_key, start in injected.items()
+            if message_key in ejected
         }
 
     def summary(self, end_time: float) -> str:
@@ -110,7 +123,8 @@ class NoCTracer:
             sum(latencies.values()) / len(latencies) if latencies else 0.0
         )
         return (
-            f"cycles={end_time:.3f} events={len(self.events)} "
+            f"fabric={self.fabric_id.name} cycles={end_time:.3f} "
+            f"events={len(self.events)} "
             f"messages={len(latencies)} avg_latency={avg_latency:.3f} "
             + " ".join(f"{name}={count}" for name, count in counts.items())
         )
@@ -124,14 +138,20 @@ class Link:
         env: simpy.Environment,
         config: LinkConfig,
         physical_flit_bytes: int,
+        fabric_id: NoCChannel,
         tracer: NoCTracer,
         link_name: str = "",
     ):
+        if tracer.fabric_id is not fabric_id:
+            raise ValueError(
+                f"{fabric_id.name} link cannot use {tracer.fabric_id.name} tracer"
+            )
         self.env = env
         self.config = config
         self.physical_flit_bytes = physical_flit_bytes
+        self.fabric_id = fabric_id
         self.tracer = tracer
-        self.link_name = link_name
+        self.link_name = f"{fabric_id.name}:{link_name or 'unnamed-link'}"
         self.serialization_cycles = config.serialization_cycles(physical_flit_bytes)
         if config.launch_interval_cycles < self.serialization_cycles:
             raise ValueError("launch interval cannot be shorter than serialization")
@@ -151,13 +171,14 @@ class Link:
         self._out_queue = simpy.Store(env, capacity=1)
         self.env.process(self._transmit_loop())
 
-    def send_flit(self, flit: Flit):
+    def send_flit(self, flit: Flit) -> Process:
+        self._validate_flit_fabric(flit)
         return self.env.process(self._send_flit(flit))
 
-    def recv_flit(self):
+    def recv_flit(self) -> Process:
         return self.env.process(self._recv_flit())
 
-    def ack_credit(self):
+    def ack_credit(self) -> Process:
         return self.env.process(self._return_credit())
 
     def scale_link_delay(self, factor: float):
@@ -165,7 +186,13 @@ class Link:
             raise ValueError("link delay scale factor must be positive")
         self.delay_factor *= factor
 
-    def _send_flit(self, flit: Flit):
+    def _validate_flit_fabric(self, flit: Flit) -> None:
+        if flit.fabric_id is not self.fabric_id:
+            raise ValueError(
+                f"{flit.fabric_id.name} flit cannot enter {self.link_name}"
+            )
+
+    def _send_flit(self, flit: Flit) -> ProcessGenerator:
         if self.credits.level < 1:
             self.tracer.log(
                 self.env.now,
@@ -182,20 +209,20 @@ class Link:
             link_name=self.link_name,
         )
 
-    def _recv_flit(self):
-        flit = yield self.flit_buffer.get()
+    def _recv_flit(self) -> ProcessGenerator:
+        flit = cast(Flit, (yield self.flit_buffer.get()))
         return flit
 
-    def _transmit_loop(self):
+    def _transmit_loop(self) -> ProcessGenerator:
         while True:
-            flit = yield self._out_queue.get()
+            flit = cast(Flit, (yield self._out_queue.get()))
             yield self.env.timeout(self.serialization_cycles * self.delay_factor)
             self.env.process(self._wire_deliver(flit))
             launch_gap = self.launch_interval_cycles - self.serialization_cycles
             if launch_gap > 0:
                 yield self.env.timeout(launch_gap * self.delay_factor)
 
-    def _wire_deliver(self, flit: Flit):
+    def _wire_deliver(self, flit: Flit) -> ProcessGenerator:
         yield self.env.timeout(self.wire_delay_cycles * self.delay_factor)
         yield self.flit_buffer.put(flit)
         self.tracer.log(
@@ -205,7 +232,7 @@ class Link:
             link_name=self.link_name,
         )
 
-    def _return_credit(self):
+    def _return_credit(self) -> ProcessGenerator:
         yield self.credits.put(1)
         self.tracer.log(
             self.env.now,
@@ -224,16 +251,25 @@ class Router:
         router_id: int,
         x_dim: int,
         y_dim: int,
+        fabric_id: NoCChannel,
         tracer: NoCTracer,
     ):
+        self.id = router_id
+        self.fabric_id = fabric_id
+        self.name = f"{fabric_id.name}:R{router_id}"
         if config.type != "XY":
-            raise ValueError("Phase 2 supports only deterministic XY routing")
+            raise ValueError(
+                f"{self.name} supports only deterministic XY routing"
+            )
         if config.vc != 1:
-            raise ValueError("ADA2S-32 requires exactly one VC per port")
+            raise ValueError(f"{self.name} requires exactly one VC per port")
+        if tracer.fabric_id is not fabric_id:
+            raise ValueError(
+                f"{self.name} cannot use {tracer.fabric_id.name} tracer"
+            )
 
         self.env = env
         self.config = config
-        self.id = router_id
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.tracer = tracer
@@ -258,8 +294,17 @@ class Router:
         self._forwarder_started: Dict[int, bool] = {}
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
+        for link in (link_in, link_out):
+            if link.fabric_id is not self.fabric_id:
+                raise ValueError(
+                    f"{self.name} cannot bind {link.link_name} from another fabric"
+                )
+            if link.tracer is not self.tracer:
+                raise ValueError(
+                    f"{self.name} cannot bind {link.link_name} with a different tracer"
+                )
         if self.port_in.get(port) is not None or self.port_out.get(port) is not None:
-            raise ValueError(f"router {self.id} port {port} is already bound")
+            raise ValueError(f"{self.name} port {port} is already bound")
         self.port_in[port] = link_in
         self.port_out[port] = link_out
         self.out_channels[port] = simpy.Resource(self.env, capacity=1)
@@ -275,12 +320,13 @@ class Router:
             if link_out is not None:
                 link_out.scale_link_delay(factor)
 
-    def _port_forwarder(self, in_port: int):
+    def _port_forwarder(self, in_port: int) -> ProcessGenerator:
         in_link = self.port_in[in_port]
         assert in_link is not None
 
         while True:
-            flit = yield in_link.recv_flit()
+            flit = cast(Flit, (yield in_link.recv_flit()))
+            self._validate_flit_fabric(flit)
             self.tracer.log(
                 self.env.now,
                 FlitAction.ROUTER_FLIT_ARR,
@@ -312,7 +358,7 @@ class Router:
                 out_channel = self.out_channels.get(out_port)
                 if out_channel is None:
                     raise RuntimeError(
-                        f"router {self.id} output port {out_port} is unbound"
+                        f"{self.name} output port {out_port} is unbound"
                     )
                 if out_channel.count >= out_channel.capacity:
                     self.tracer.log(
@@ -350,7 +396,7 @@ class Router:
             out_link = self.port_out.get(out_port)
             if out_link is None:
                 raise RuntimeError(
-                    f"router {self.id} output port {out_port} is unbound"
+                    f"{self.name} output port {out_port} is unbound"
                 )
             yield out_link.send_flit(flit)
 
@@ -368,7 +414,7 @@ class Router:
         if not flit.is_head:
             if in_port not in self.reservation:
                 raise RuntimeError(
-                    f"router {self.id} received {flit.flit_type.name} without HEAD"
+                    f"{self.name} received {flit.flit_type.name} without HEAD"
                 )
             return self.reservation[in_port]
 
@@ -393,7 +439,7 @@ class Router:
         request = self._sa_reqs.pop(in_port, None)
         if request is None:
             raise RuntimeError(
-                f"router {self.id} tail flit has no switch reservation"
+                f"{self.name} tail flit has no switch reservation"
             )
         self.out_channels[out_port].release(request)
         del self.reservation[in_port]
@@ -404,6 +450,12 @@ class Router:
     def to_xy(self, router_id: int):
         return router_id % self.x_dim, router_id // self.x_dim
 
+    def _validate_flit_fabric(self, flit: Flit) -> None:
+        if flit.fabric_id is not self.fabric_id:
+            raise ValueError(
+                f"{flit.fabric_id.name} flit cannot enter {self.name}"
+            )
+
 
 class NoC:
     """ADA2S-32 deterministic 4-column by 8-row mesh."""
@@ -412,12 +464,19 @@ class NoC:
         self,
         env: simpy.Environment,
         config: NoCConfig,
+        fabric_id: NoCChannel,
         tracer: NoCTracer,
     ):
         if config.type != "Mesh":
             raise ValueError("Phase 2 supports only the ADA2S-32 Mesh topology")
         self.env = env
         self.config = config
+        self.fabric_id = fabric_id
+        self.name = fabric_id.name
+        if tracer.fabric_id is not fabric_id:
+            raise ValueError(
+                f"{self.name} NoC cannot use {tracer.fabric_id.name} tracer"
+            )
         self.x = config.x
         self.y = config.y
         self.tracer = tracer
@@ -431,12 +490,13 @@ class NoC:
         for router_id in range(self.x * self.y):
             self.routers.append(
                 Router(
-                    self.env,
-                    self.config.router,
-                    router_id,
-                    self.x,
-                    self.y,
-                    self.tracer,
+                    env=self.env,
+                    config=self.config.router,
+                    router_id=router_id,
+                    x_dim=self.x,
+                    y_dim=self.y,
+                    fabric_id=self.fabric_id,
+                    tracer=self.tracer,
                 )
             )
 
@@ -469,18 +529,20 @@ class NoC:
         port_a = direction_to_port(direction_a)
         port_b = direction_to_port(direction_b)
         link_ab = Link(
-            self.env,
-            self.config.link,
-            self.physical_flit_bytes,
-            self.tracer,
-            f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
+            env=self.env,
+            config=self.config.link,
+            physical_flit_bytes=self.physical_flit_bytes,
+            fabric_id=self.fabric_id,
+            tracer=self.tracer,
+            link_name=f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
         )
         link_ba = Link(
-            self.env,
-            self.config.link,
-            self.physical_flit_bytes,
-            self.tracer,
-            f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
+            env=self.env,
+            config=self.config.link,
+            physical_flit_bytes=self.physical_flit_bytes,
+            fabric_id=self.fabric_id,
+            tracer=self.tracer,
+            link_name=f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
         )
         self.routers[router_a].bind_link(port_a, link_ba, link_ab)
         self.routers[router_b].bind_link(port_b, link_ab, link_ba)
@@ -491,6 +553,7 @@ __all__ = [
     "FlitAction",
     "FlitEvent",
     "NoCTracer",
+    "TraceMessageKey",
     "Link",
     "Router",
     "NoC",

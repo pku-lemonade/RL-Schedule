@@ -298,9 +298,13 @@ class Slice(BaseModel):
 
 class Flit(BaseModel):
     """A single flit (flow control digit) in the wormhole NoC."""
+
+    model_config = ConfigDict(frozen=True)
+
     flit_type: FlitType              # HEAD/BODY/TAIL
     payload_bytes: int               # B, payload carried by this flit
     msg_id: int                      # message index for reordering/correlation
+    fabric_id: NoCChannel            # physical NoC fabric carrying this flit
     dst_router: int                  # destination router ID
     dst_local_port: int = PORT_PE    # destination local port on the dst router
     src_router: int                  # source router ID
@@ -439,6 +443,7 @@ class Message(BaseModel):
                     flit_type=flit_type,
                     payload_bytes=flit_payload_bytes,
                     msg_id=self.index,
+                    fabric_id=self.src.fabric_id,
                     dst_router=self.dst.router_id,
                     dst_local_port=self.dst.local_port,
                     src_router=self.src.router_id,

@@ -1,20 +1,20 @@
-import json
-import queue
 from typing import List
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from ...utils.definitions import Direction
+from ...utils.definitions import Direction, NoCChannel
 
 
 class RouterFail(BaseModel):
     start_time: int
     end_time: int
+    fabric_id: NoCChannel = NoCChannel.CH0
     router_id: int
     times: int
 
 class LinkFail(BaseModel):
     start_time: int
     end_time: int
+    fabric_id: NoCChannel = NoCChannel.CH0
     router_id: int
     direction: Direction
     times: int

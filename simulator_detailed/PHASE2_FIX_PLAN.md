@@ -105,6 +105,7 @@ Code changes:
 
 - Copy the resolved fabric identity into every `Flit`.
 - Give each `Link`, `Router`, tracer event, and failure target a fabric ID.
+- Require every router and bound link in one `NoC` to share its tracer instance.
 - Include the fabric in diagnostic names and trace keys.
 - Reject a flit if it is injected into a link or router from another fabric.
 
@@ -112,6 +113,7 @@ Tests:
 
 - Flit packetization preserves one fabric ID from HEAD through TAIL.
 - Cross-fabric injection fails before changing router or link state.
+- Link binding rejects a different tracer even when its fabric ID matches.
 - Trace records distinguish the same router and link IDs on NoC0 and NoC1.
 
 ## Fix 4: Build Two Complete Mesh Instances
@@ -124,8 +126,13 @@ Code changes:
   tracers.
 - Remove the previous plan to add lanes inside `Link` or lane-aware state inside
   `Router`.
-- Add `fabric_id` to router/link fail-slow configuration so duplicate router IDs
-  are unambiguous.
+- Resolve the fabric-qualified router/link fail-slow targets against the new
+  `nocs` mapping.
+- Migrate trace collection, simulation return values, and other `arch.noc`
+  consumers to the explicit `nocs` mapping; do not silently expose CH0 as the
+  complete architecture.
+- Fabric-qualify predictor link identity and failure labels so equal directional
+  link IDs on NoC0 and NoC1 remain distinct.
 
 Tests:
 
@@ -134,6 +141,10 @@ Tests:
 - No router, link, input buffer, reservation, or arbiter object is shared across
   the two fabrics.
 - A failure on NoC0 does not alter NoC1 timing.
+- Trace export and simulation results contain both fabrics without link-ID
+  collisions.
+- Predictor topology and failure labels distinguish the same directional link
+  on CH0 and CH1.
 
 ## Fix 5: Attach Every PE to Both Fabrics
 
