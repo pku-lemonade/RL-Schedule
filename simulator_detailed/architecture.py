@@ -6,6 +6,7 @@ from .utils.dfg import DFGNode
 from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
 from .noc import Link, NoC, NoCTracer
 from .core import Core
+from .pe_channel import PEChannelBinding
 from .endpoint_registry import EndpointRegistry
 from .configs.schemas.arch_config import *
 from .configs.schemas.failure_configs import *
@@ -48,39 +49,49 @@ class Arch:
         cores: List[Core] = []
         for id in range(self.x_size * self.y_size):
             core = Core(
-                env=self.env,
+                env=env,
                 core_id=id,
                 config=config,
                 mapper=mapper,
-                address=self.endpoint_registry.resolve(
-                    NodeType.PE,
-                    id,
-                    fabric_id=NoCChannel.CH0,
-                ),
                 endpoint_registry=self.endpoint_registry,
             )
-            noc = self.nocs[core.address.fabric_id]
-            c2r = Link(
-                env=self.env,
-                config=noc_config.c2r_link,
-                physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
-                fabric_id=core.address.fabric_id,
-                tracer=noc.tracer,
-                link_name=f"PE{id}->R{id}",
-                noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
-            )
-            r2c = Link(
-                env=self.env,
-                config=noc_config.c2r_link,
-                physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
-                fabric_id=core.address.fabric_id,
-                tracer=noc.tracer,
-                link_name=f"R{id}->PE{id}",
-                noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
-            )
+            for fabric_id in NoCChannel:
+                address = self.endpoint_registry.resolve(
+                    NodeType.PE,
+                    id,
+                    fabric_id=fabric_id,
+                )
+                noc = self.nocs[fabric_id]
+                tx_link = Link(
+                    env=env,
+                    config=noc_config.c2r_link,
+                    physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
+                    fabric_id=fabric_id,
+                    tracer=noc.tracer,
+                    link_name=f"PE{id}->R{id}",
+                    noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
+                )
+                rx_link = Link(
+                    env=env,
+                    config=noc_config.c2r_link,
+                    physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
+                    fabric_id=fabric_id,
+                    tracer=noc.tracer,
+                    link_name=f"R{id}->PE{id}",
+                    noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
+                )
+                router = noc.routers[id]
+                binding = PEChannelBinding(
+                    address=address,
+                    tx_link=tx_link,
+                    rx_link=rx_link,
+                    router=router,
+                )
 
-            core.bind_with_router(r2c, c2r, noc.routers[id])
-            noc.routers[id].bind_link(PORT_PE, c2r, r2c)
+                core.bind_channel(binding)
+                router.bind_link(PORT_PE, tx_link, rx_link)
+
+            core.validate_channel_bindings()
             cores.append(core)
             
         return cores

@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import simpy
 from pydantic import ValidationError
@@ -8,6 +9,7 @@ from simulator_detailed.architecture import Arch
 from simulator_detailed.configs.schemas.arch_config import (
     DMAEngineConfig,
     DMAType,
+    CoreConfig,
     FlitConfig,
     LinkConfig,
     NMCConfig,
@@ -17,6 +19,7 @@ from simulator_detailed.configs.schemas.arch_config import (
 from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
+from simulator_detailed.pe_channel import PEChannelBinding
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
 from simulator_detailed.tracing import collect_noc_link_events, process_events
 from simulator_detailed.utils.definitions import (
@@ -154,6 +157,84 @@ class Phase2NoCTests(unittest.TestCase):
                 [link.identity.link_id for link in noc.r2r_links],
                 list(range(104)),
             )
+
+    def test_every_pe_is_bound_independently_to_both_fabrics(self):
+        env = simpy.Environment()
+        noc_config = NoCConfig()
+        arch = object.__new__(Arch)
+        arch.env = env
+        arch.x_size = noc_config.x
+        arch.y_size = noc_config.y
+        arch.endpoint_registry = EndpointRegistry(noc_config)
+        arch.nocs = Arch.build_nocs(env, noc_config)
+
+        cores = arch.build_cores(
+            env=env,
+            config=CoreConfig(),
+            noc_config=noc_config,
+            mapper=Mock(),
+        )
+
+        self.assertEqual(len(cores), 32)
+        endpoint_links = []
+        for core in cores:
+            self.assertEqual(set(core.channel_bindings), set(NoCChannel))
+            self.assertFalse(hasattr(core, "data_in"))
+            self.assertFalse(hasattr(core, "data_out"))
+            self.assertFalse(hasattr(core, "router"))
+
+            for fabric_id in NoCChannel:
+                binding = core.binding_for(fabric_id)
+                expected_address = arch.endpoint_registry.resolve(
+                    NodeType.PE,
+                    core.id,
+                    fabric_id=fabric_id,
+                )
+                self.assertEqual(binding.address, expected_address)
+                self.assertIs(binding.router, arch.nocs[fabric_id].routers[core.id])
+                self.assertIs(
+                    binding.router.port_in[PORT_PE],
+                    binding.tx_link,
+                )
+                self.assertIs(
+                    binding.router.port_out[PORT_PE],
+                    binding.rx_link,
+                )
+                self.assertIs(binding.tx_link.fabric_id, fabric_id)
+                self.assertIs(binding.rx_link.fabric_id, fabric_id)
+                self.assertIsNot(binding.tx_link, binding.rx_link)
+                endpoint_links.extend((binding.tx_link, binding.rx_link))
+
+            ch0 = core.binding_for(NoCChannel.CH0)
+            ch1 = core.binding_for(NoCChannel.CH1)
+            self.assertIsNot(ch0.router, ch1.router)
+            self.assertEqual(ch0.router.id, ch1.router.id)
+            self.assertEqual(
+                len(
+                    {
+                        id(ch0.tx_link),
+                        id(ch0.rx_link),
+                        id(ch1.tx_link),
+                        id(ch1.rx_link),
+                    }
+                ),
+                4,
+            )
+
+        self.assertEqual(len(endpoint_links), 128)
+        self.assertEqual(len({id(link) for link in endpoint_links}), 128)
+
+        core0_ch0 = cores[0].binding_for(NoCChannel.CH0)
+        core0_ch1 = cores[0].binding_for(NoCChannel.CH1)
+        with self.assertRaisesRegex(ValueError, "cannot bind CH1:R0"):
+            PEChannelBinding(
+                address=core0_ch0.address,
+                tx_link=core0_ch1.tx_link,
+                rx_link=core0_ch1.rx_link,
+                router=core0_ch1.router,
+            )
+        with self.assertRaisesRegex(ValueError, "already has a CH0 binding"):
+            cores[0].bind_channel(core0_ch0)
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()

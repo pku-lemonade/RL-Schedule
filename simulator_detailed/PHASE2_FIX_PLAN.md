@@ -241,9 +241,9 @@ Tests:
 
 Status: implemented. `Arch.nocs` now owns two independent meshes; architecture
 traces, simulation return values, hardware embeddings, and predictor identities
-all preserve the data-fabric identity. PE endpoint binding remains CH0-only until
-Fix 5. Predictor checkpoints from the single-fabric topology require retraining
-or migration for the 208-link output shape.
+all preserve the data-fabric identity. Predictor checkpoints from the
+single-fabric topology require retraining or migration for the 208-link output
+shape. Dual PE endpoint attachment is implemented by Fix 5 below.
 
 Code changes:
 
@@ -276,6 +276,10 @@ Tests:
   on CH0 and CH1.
 
 ## Fix 5: Attach Every PE to Both Fabrics
+
+Status: implemented. Every `Core` owns an immutable-view mapping from CH0 and
+CH1 to distinct `PEChannelBinding` objects. Task-level channel selection and the
+replacement of obsolete SEND/RECV transport calls remain assigned to Fix 11.
 
 Code changes:
 

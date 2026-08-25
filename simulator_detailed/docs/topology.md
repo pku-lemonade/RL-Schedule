@@ -18,10 +18,16 @@ same fabric identity. Link diagnostics are prefixed with `CH0:` or `CH1:`. Flit
 movement is traced on `NoCPlane.DATA`; credit returns are traced on
 `NoCPlane.SYNC` while retaining the data fabric ID.
 
-PE links are not created by `NoC.build_connection_mesh()`. During Fix 4,
-`Arch.build_cores()` still creates one PE-to-router and one router-to-PE Link for
-each PE and binds them to CH0 local port 0. Fix 5 replaces each single binding
-with explicit CH0 and CH1 PE channel bindings.
+PE links are not created by `NoC.build_connection_mesh()`. `Arch.build_cores()`
+creates one PE-to-router TX Link and one router-to-PE RX Link for every PE on
+each fabric, producing 128 distinct endpoint Links. Both fabrics use local port
+0 in their own router instances. A `Core` exposes these attachments through its
+read-only `channel_bindings` mapping; each `PEChannelBinding` contains the
+resolved endpoint address, TX Link, RX Link, and fabric-local Router.
+
+The legacy task contract names CH0 explicitly until Fix 11 adds channel
+selection to DFG communication operations. This compatibility choice does not
+merge or alias the two physical PE bindings.
 
 `EndpointRegistry` owns the logical-to-physical attachment map. PE `n` resolves
 on both NoC0 and NoC1 to router `n`, local port 0. DMA entries are built from

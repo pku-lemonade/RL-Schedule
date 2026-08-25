@@ -1,22 +1,23 @@
 import simpy
 import heapq
 import logging
-from enum import IntEnum, auto
-from typing import List, Dict, Optional
+from types import MappingProxyType
+from collections.abc import Mapping
+from typing import Dict, List
 
 from .utils.dfg import *
 from .utils.mapper import NetworkMapper
 from .configs.schemas.arch_config import *
 from .endpoint_registry import EndpointRegistry
-from .noc import Link, Router
+from .pe_channel import PEChannelBinding
 from .utils.task import Task
-from .utils.definitions import EndpointAddress, Event, NodeType
+from .utils.definitions import Event, NoCChannel, NodeType
 from .utils.definitions import comp_operator, comm_operator
 
 
 logger = logging.getLogger("Core")
 
-        
+
 class ScratchpadMemory:
     def __init__(self, env, id, config: SPMConfig):
         # basic parameters
@@ -167,17 +168,17 @@ class Core:
         core_id: int,
         config: CoreConfig,
         mapper: NetworkMapper,
-        address: EndpointAddress,
         endpoint_registry: EndpointRegistry,
     ):
         # basic parameters
         self.env = env
         self.id = core_id
         self.mapper = mapper
-        if address.node_type != NodeType.PE or address.node_id != core_id:
-            raise ValueError(f"core {core_id} received a mismatched endpoint address")
-        self.address = address
         self.endpoint_registry = endpoint_registry
+        self._channel_bindings: Dict[NoCChannel, PEChannelBinding] = {}
+        self.channel_bindings: Mapping[NoCChannel, PEChannelBinding] = (
+            MappingProxyType(self._channel_bindings)
+        )
         
         # other resources
         self.scheduler = Scheduler(id=self.id, mapper=mapper)
@@ -206,25 +207,40 @@ class Core:
         self.lsu.width *= times
         
 
-    def bind_with_router(self, data_in: Link, data_out: Link, router: Router):
-        if router.fabric_id is not self.address.fabric_id:
+    def bind_channel(self, binding: PEChannelBinding) -> None:
+        fabric_id = binding.address.fabric_id
+        if fabric_id in self._channel_bindings:
             raise ValueError(
-                f"core {self.id} address uses {self.address.fabric_id.name}, "
-                f"not {router.fabric_id.name}"
+                f"core {self.id} already has a {fabric_id.name} binding"
             )
-        for link in (data_in, data_out):
-            if link.fabric_id is not self.address.fabric_id:
-                raise ValueError(
-                    f"core {self.id} cannot bind {link.link_name} from another fabric"
-                )
-        if router.id != self.address.router_id:
+        expected_address = self.endpoint_registry.resolve(
+            NodeType.PE,
+            self.id,
+            fabric_id=fabric_id,
+        )
+        if binding.address != expected_address:
             raise ValueError(
-                f"core {self.id} address maps to router {self.address.router_id}, "
-                f"not router {router.id}"
+                f"core {self.id} received a mismatched {fabric_id.name} binding"
             )
-        self.data_in = data_in
-        self.data_out = data_out
-        self.router = router
+        self._channel_bindings[fabric_id] = binding
+
+    def binding_for(self, fabric_id: NoCChannel) -> PEChannelBinding:
+        binding = self._channel_bindings.get(fabric_id)
+        if binding is None:
+            raise RuntimeError(
+                f"core {self.id} has no {fabric_id.name} PE channel binding"
+            )
+        return binding
+
+    def validate_channel_bindings(self) -> None:
+        expected_fabrics = set(NoCChannel)
+        if set(self._channel_bindings) != expected_fabrics:
+            missing = expected_fabrics - set(self._channel_bindings)
+            unexpected = set(self._channel_bindings) - expected_fabrics
+            raise ValueError(
+                f"core {self.id} channel bindings are incomplete; "
+                f"missing={missing}, unexpected={unexpected}"
+            )
 
 
     def initialize(self, operators: List[DFGNode]):

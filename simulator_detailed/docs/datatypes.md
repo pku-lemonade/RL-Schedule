@@ -42,6 +42,11 @@ registry maps those modes to documented local ports on the requested fabric.
 AIU addresses are representable, but Phase 2 packetization rejects them until
 an AIU DMA endpoint model exists.
 
+`PEChannelBinding` is a concrete physical attachment, not a type or mode. It
+groups one PE address with distinct TX and RX Links and the matching
+fabric-local Router. Every `Core` must own exactly one binding for CH0 and one
+for CH1.
+
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
 work are not payload `Message` objects and belong to the later endpoint model.
