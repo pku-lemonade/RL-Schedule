@@ -1,10 +1,12 @@
 import logging
 from typing import List
 
-from .definitions import Message, NodeType, OperatorType, Slice
+from .definitions import Message, NoCChannel, NodeType, OperatorType, Slice
 from .dfg import DFGNode
 
 logger = logging.getLogger("Task")
+
+LEGACY_TASK_FABRIC = NoCChannel.CH0
 
 
 task_priority = {
@@ -184,8 +186,9 @@ class Task:
                 logger.debug(f"successfully release space for task {self.index}")
 
             case OperatorType.SEND:
+                binding = core.binding_for(LEGACY_TASK_FABRIC)
                 # start up time
-                yield env.timeout(core.router.start_up_time)
+                yield env.timeout(binding.router.start_up_time)
                 # put the feature into the corresponding router
                 ### there should be only one successor, I think (Wrong, maybe more successors)
                 for child in self.successors:
@@ -197,26 +200,27 @@ class Task:
                     # print(f"DEBUG: data = {node.input_slice()} (type: {type(node.input_slice())})")
                     # print("-" * 20)
                     message = Message(
-                        src=core.address,
+                        src=binding.address,
                         dst=core.endpoint_registry.resolve(
                             NodeType.PE,
                             node.core_id,
-                            fabric_id=core.address.fabric_id,
+                            fabric_id=binding.address.fabric_id,
                         ),
                         index=self.index,
                         data=node.input_slice().tensor_slice,
                     )
 
-                    yield core.data_out.put(message)
+                    yield binding.tx_link.put(message)
                     # yield env.process(core.spm.release(size=node.input_slice().size(), task_index=self.index))
                     
                 yield env.process(core.spm.release(size=self.output_size(), task_index=self.index))
 
             case OperatorType.RECV:
+                binding = core.binding_for(LEGACY_TASK_FABRIC)
                 # allocate space for coming data
                 yield env.process(core.spm.allocate(self.input_size(), task_index=self.index))
                 # receive data from noc
-                yield core.data_in.get()
+                yield binding.rx_link.get()
 
 
     def __lt__(self, other: "Task") -> bool:
