@@ -37,5 +37,8 @@ silently interpreted.
 `EndpointRegistry` additionally requires each configured DMA to have one local
 port per declared channel. Router IDs must match the fixed hardware attachment
 map, ordered port layouts must correspond to a supported single-side, local, or
-CH0/CH1 interface, endpoint keys must be unique, and no two endpoints may bind
-the same `(router_id, local_port)` pair.
+CH0/CH1 interface, and endpoint keys must be unique. The configured port layout
+selects a `DMAAttachmentMode`; message construction resolves that mode on an
+explicit `NoCChannel` instead of supplying a raw local-port number. Physical
+ownership is unique per `(fabric_id, router_id, local_port)`, so matching router
+and port IDs on NoC0 and NoC1 are separate hardware attachments.

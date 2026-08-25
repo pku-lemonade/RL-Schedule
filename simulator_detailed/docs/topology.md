@@ -17,10 +17,16 @@ creates one PE-to-router and one router-to-PE Link for each PE and binds them to
 local port 0. Two NMC channel pairs replace these links in Phase 3.
 
 `EndpointRegistry` owns the logical-to-physical attachment map. PE `n` resolves
-to router `n`, local port 0. DMA entries are built from `NoCConfig.dma_engines`
-and validated against the hardware local-port map. A DMA with more than one
-configured local port must be resolved with an explicit port; the registry never
-selects a channel implicitly.
+on both NoC0 and NoC1 to router `n`, local port 0. DMA entries are built from
+`NoCConfig.dma_engines` and validated against the hardware local-port map. Every
+lookup names an explicit fabric, and DMA lookups also name a dual-side,
+single-side, or AIU-local attachment mode. The registry maps that mode to a
+local port; callers do not select a raw port.
+
+The current `Arch` runtime still constructs one mesh and temporarily binds its
+PE links to NoC0 addresses. Separate NoC0/NoC1 router and link instances are
+introduced by the later dual-fabric runtime fix; endpoint identity is already
+fabric-safe so that step does not require another addressing rewrite.
 
 For a SINGLE flit crossing `N` inter-router hops, the current calibrated
 NoC-only endpoint latency is:

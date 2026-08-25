@@ -3,7 +3,7 @@ from typing import List
 
 from .utils.mapper import *
 from .utils.dfg import DFGNode
-from .utils.definitions import PORT_PE, NodeType, direction_to_port
+from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
 from .noc import Link, NoC, NoCTracer
 from .core import Core
 from .endpoint_registry import EndpointRegistry
@@ -50,7 +50,11 @@ class Arch:
                 core_id=id,
                 config=config,
                 mapper=mapper,
-                address=self.endpoint_registry.resolve(NodeType.PE, id),
+                address=self.endpoint_registry.resolve(
+                    NodeType.PE,
+                    id,
+                    fabric_id=NoCChannel.CH0,
+                ),
                 endpoint_registry=self.endpoint_registry,
             )
             c2r = Link(

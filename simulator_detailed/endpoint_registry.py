@@ -2,48 +2,26 @@
 
 from .configs.schemas.arch_config import DMAEngineConfig, DMAType, NoCConfig
 from .utils.definitions import (
-    PORT_DDR_RDMA,
-    PORT_DDR_RDMA_LOC,
-    PORT_DDR_WDMA,
-    PORT_DDR_WDMA_CH0,
-    PORT_DDR_WDMA_CH1,
-    PORT_DDR_WDMA_LOC,
-    PORT_GM_RDMA,
-    PORT_GM_RDMA_LOC,
-    PORT_GM_WDMA,
-    PORT_GM_WDMA_CH0,
-    PORT_GM_WDMA_CH1,
-    PORT_GM_WDMA_LOC,
     PORT_PE,
+    DMAAttachmentMode,
     EndpointAddress,
+    NoCChannel,
     NodeType,
+    dma_port_layout,
+    endpoint_local_port,
     expected_endpoint_router,
+    valid_dma_attachment_modes,
     valid_endpoint_local_ports,
 )
 
 EndpointKey = tuple[NodeType, int]
-PhysicalPort = tuple[int, int]
+PhysicalPort = tuple[NoCChannel, int, int]
 
 _DMA_NODE_TYPES = {
     DMAType.GM_RDMA: NodeType.GM_RDMA,
     DMAType.GM_WDMA: NodeType.GM_WDMA,
     DMAType.DDR_RDMA: NodeType.DDR_RDMA,
     DMAType.DDR_WDMA: NodeType.DDR_WDMA,
-}
-
-_VALID_DMA_PORT_LAYOUTS = {
-    NodeType.GM_RDMA: {(PORT_GM_RDMA,), (PORT_GM_RDMA_LOC,)},
-    NodeType.GM_WDMA: {
-        (PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1),
-        (PORT_GM_WDMA_LOC,),
-        (PORT_GM_WDMA,),
-    },
-    NodeType.DDR_RDMA: {(PORT_DDR_RDMA,), (PORT_DDR_RDMA_LOC,)},
-    NodeType.DDR_WDMA: {
-        (PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1),
-        (PORT_DDR_WDMA_LOC,),
-        (PORT_DDR_WDMA,),
-    },
 }
 
 
@@ -61,13 +39,15 @@ class EndpointRegistry:
         for pe_id in range(router_count):
             self._register(
                 (NodeType.PE, pe_id),
-                (
+                tuple(
                     EndpointAddress(
                         node_type=NodeType.PE,
                         node_id=pe_id,
+                        fabric_id=fabric_id,
                         router_id=pe_id,
                         local_port=PORT_PE,
-                    ),
+                    )
+                    for fabric_id in NoCChannel
                 ),
             )
 
@@ -79,29 +59,35 @@ class EndpointRegistry:
         node_type: NodeType,
         node_id: int,
         *,
-        local_port: int | None = None,
+        fabric_id: NoCChannel,
+        attachment_mode: DMAAttachmentMode | None = None,
     ) -> EndpointAddress:
-        """Resolve one endpoint, requiring a port when its attachment is ambiguous."""
+        """Resolve one endpoint on an explicit fabric and DMA attachment mode."""
         key = (node_type, node_id)
         addresses = self._addresses.get(key)
         if addresses is None:
             raise KeyError(f"endpoint {node_type.name}[{node_id}] is not configured")
 
-        if local_port is not None:
-            for address in addresses:
-                if address.local_port == local_port:
-                    return address
+        if node_type is NodeType.PE and attachment_mode is not None:
             raise ValueError(
-                f"endpoint {node_type.name}[{node_id}] has no local port {local_port}"
+                "PE endpoint resolution does not use a DMA attachment mode"
+            )
+        if node_type is not NodeType.PE and attachment_mode is None:
+            raise ValueError(
+                f"endpoint {node_type.name}[{node_id}] requires an attachment mode"
             )
 
-        if len(addresses) != 1:
-            ports = ", ".join(str(address.local_port) for address in addresses)
-            raise ValueError(
-                f"endpoint {node_type.name}[{node_id}] has multiple local ports "
-                f"({ports}); select one explicitly"
-            )
-        return addresses[0]
+        for address in addresses:
+            if (
+                address.fabric_id is fabric_id
+                and address.attachment_mode is attachment_mode
+            ):
+                return address
+        mode_name = attachment_mode.name if attachment_mode is not None else "PE"
+        raise ValueError(
+            f"endpoint {node_type.name}[{node_id}] has no {mode_name} attachment "
+            f"on {fabric_id.name}"
+        )
 
     def _register_dma(self, config: DMAEngineConfig) -> None:
         node_type = _DMA_NODE_TYPES[config.dma_type]
@@ -134,20 +120,29 @@ class EndpointRegistry:
                 f"{invalid_ports}"
             )
         port_layout = tuple(config.local_ports)
-        if port_layout not in _VALID_DMA_PORT_LAYOUTS[node_type]:
+        matching_modes = tuple(
+            attachment_mode
+            for attachment_mode in valid_dma_attachment_modes(node_type)
+            if dma_port_layout(node_type, attachment_mode) == port_layout
+        )
+        if len(matching_modes) != 1:
             raise ValueError(
                 f"{node_type.name}[{config.instance_id}] uses unsupported local-port "
                 f"layout {port_layout}"
             )
+        attachment_mode = matching_modes[0]
 
         addresses = tuple(
             EndpointAddress(
                 node_type=node_type,
                 node_id=config.instance_id,
+                fabric_id=fabric_id,
                 router_id=config.router_id,
-                local_port=local_port,
+                local_port=endpoint_local_port(
+                    node_type, fabric_id, attachment_mode
+                ),
             )
-            for local_port in config.local_ports
+            for fabric_id in NoCChannel
         )
         self._register((node_type, config.instance_id), addresses)
 
@@ -160,15 +155,22 @@ class EndpointRegistry:
             raise ValueError(f"endpoint {key[0].name}[{key[1]}] is configured twice")
 
         for address in addresses:
-            physical_port = (address.router_id, address.local_port)
+            physical_port = (
+                address.fabric_id,
+                address.router_id,
+                address.local_port,
+            )
             owner = self._physical_ports.get(physical_port)
             if owner is not None:
                 raise ValueError(
-                    f"router {address.router_id} local port {address.local_port} "
+                    f"{address.fabric_id.name} router {address.router_id} local port "
+                    f"{address.local_port} "
                     f"is shared by {owner[0].name}[{owner[1]}] and "
                     f"{key[0].name}[{key[1]}]"
                 )
 
         self._addresses[key] = addresses
         for address in addresses:
-            self._physical_ports[(address.router_id, address.local_port)] = key
+            self._physical_ports[
+                (address.fabric_id, address.router_id, address.local_port)
+            ] = key

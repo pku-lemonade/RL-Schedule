@@ -81,8 +81,8 @@ Code changes:
 
 - Add `fabric_id` to immutable `EndpointAddress`.
 - Resolve endpoints with an explicit channel/fabric in `EndpointRegistry`.
-- Add a transfer-path selector for dual-side, single-side, and AIU-local
-  attachment modes so callers do not choose undocumented raw local ports.
+- Add a `DMAAttachmentMode` selector for dual-side, single-side, and AIU-local
+  attachments so callers do not choose undocumented raw local ports.
 - Key physical ownership by `(fabric_id, router_id, local_port)` rather than
   `(router_id, local_port)`.
 - Register each PE on both fabrics at the same router ID and local port 0.

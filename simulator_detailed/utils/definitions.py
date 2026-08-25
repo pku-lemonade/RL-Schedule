@@ -61,6 +61,14 @@ class NoCChannel(IntEnum):
     CH1 = 1
 
 
+class DMAAttachmentMode(Enum):
+    """Physical attachment mode selected for a DMA endpoint."""
+
+    DUAL_SIDE = "dual_side"
+    SINGLE_SIDE = "single_side"
+    AIU_LOCAL = "aiu_local"
+
+
 class TransType(IntEnum):
     """Hardware transmission encoding stored in routing-word bits [18:17]."""
 
@@ -84,6 +92,59 @@ PORT_GM_WDMA_LOC  = 13  # local port: GM write DMA (local path)
 PORT_GM_RDMA      = 14  # local port: GM read DMA
 PORT_GM_WDMA      = 15  # local port: GM write DMA
 
+_DMA_ATTACHMENT_PORTS: dict[
+    NodeType, dict[DMAAttachmentMode, dict[NoCChannel, int]]
+] = {
+    NodeType.GM_RDMA: {
+        DMAAttachmentMode.SINGLE_SIDE: {
+            NoCChannel.CH0: PORT_GM_RDMA,
+            NoCChannel.CH1: PORT_GM_RDMA,
+        },
+        DMAAttachmentMode.AIU_LOCAL: {
+            NoCChannel.CH0: PORT_GM_RDMA_LOC,
+            NoCChannel.CH1: PORT_GM_RDMA_LOC,
+        },
+    },
+    NodeType.GM_WDMA: {
+        DMAAttachmentMode.DUAL_SIDE: {
+            NoCChannel.CH0: PORT_GM_WDMA_CH0,
+            NoCChannel.CH1: PORT_GM_WDMA_CH1,
+        },
+        DMAAttachmentMode.SINGLE_SIDE: {
+            NoCChannel.CH0: PORT_GM_WDMA,
+            NoCChannel.CH1: PORT_GM_WDMA,
+        },
+        DMAAttachmentMode.AIU_LOCAL: {
+            NoCChannel.CH0: PORT_GM_WDMA_LOC,
+            NoCChannel.CH1: PORT_GM_WDMA_LOC,
+        },
+    },
+    NodeType.DDR_RDMA: {
+        DMAAttachmentMode.SINGLE_SIDE: {
+            NoCChannel.CH0: PORT_DDR_RDMA,
+            NoCChannel.CH1: PORT_DDR_RDMA,
+        },
+        DMAAttachmentMode.AIU_LOCAL: {
+            NoCChannel.CH0: PORT_DDR_RDMA_LOC,
+            NoCChannel.CH1: PORT_DDR_RDMA_LOC,
+        },
+    },
+    NodeType.DDR_WDMA: {
+        DMAAttachmentMode.DUAL_SIDE: {
+            NoCChannel.CH0: PORT_DDR_WDMA_CH0,
+            NoCChannel.CH1: PORT_DDR_WDMA_CH1,
+        },
+        DMAAttachmentMode.SINGLE_SIDE: {
+            NoCChannel.CH0: PORT_DDR_WDMA,
+            NoCChannel.CH1: PORT_DDR_WDMA,
+        },
+        DMAAttachmentMode.AIU_LOCAL: {
+            NoCChannel.CH0: PORT_DDR_WDMA_LOC,
+            NoCChannel.CH1: PORT_DDR_WDMA_LOC,
+        },
+    },
+}
+
 _ENDPOINT_ROUTERS = {
     NodeType.PE: tuple(range(32)),
     NodeType.GM_RDMA: (28, 29, 30, 31),
@@ -92,16 +153,16 @@ _ENDPOINT_ROUTERS = {
     NodeType.DDR_WDMA: (0, 28, 3, 31),
 }
 
-_ENDPOINT_LOCAL_PORTS = {
+_ENDPOINT_LOCAL_PORTS: dict[NodeType, frozenset[int]] = {
     NodeType.PE: frozenset({PORT_PE}),
-    NodeType.GM_RDMA: frozenset({PORT_GM_RDMA_LOC, PORT_GM_RDMA}),
-    NodeType.GM_WDMA: frozenset(
-        {PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1, PORT_GM_WDMA_LOC, PORT_GM_WDMA}
-    ),
-    NodeType.DDR_RDMA: frozenset({PORT_DDR_RDMA_LOC, PORT_DDR_RDMA}),
-    NodeType.DDR_WDMA: frozenset(
-        {PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1, PORT_DDR_WDMA_LOC, PORT_DDR_WDMA}
-    ),
+    **{
+        node_type: frozenset(
+            port
+            for fabric_ports in mode_ports.values()
+            for port in fabric_ports.values()
+        )
+        for node_type, mode_ports in _DMA_ATTACHMENT_PORTS.items()
+    },
 }
 
 DIR_NORTH = 100  # direction port: North neighbor (out port = +Y)
@@ -153,6 +214,40 @@ def expected_endpoint_router(node_type: NodeType, node_id: int) -> int:
 def valid_endpoint_local_ports(node_type: NodeType) -> frozenset[int]:
     """Return hardware local ports that can address the given endpoint type."""
     return _ENDPOINT_LOCAL_PORTS[node_type]
+
+
+def valid_dma_attachment_modes(
+    node_type: NodeType,
+) -> frozenset[DMAAttachmentMode]:
+    """Return physical attachment modes exposed by a DMA endpoint type."""
+    return frozenset(_DMA_ATTACHMENT_PORTS.get(node_type, {}))
+
+
+def endpoint_local_port(
+    node_type: NodeType,
+    fabric_id: NoCChannel,
+    attachment_mode: DMAAttachmentMode,
+) -> int:
+    """Return the documented local port for a DMA mode on one fabric."""
+    mode_ports = _DMA_ATTACHMENT_PORTS.get(node_type)
+    if mode_ports is None or attachment_mode not in mode_ports:
+        raise ValueError(
+            f"{node_type.name} does not support {attachment_mode.name} attachment mode"
+        )
+    return mode_ports[attachment_mode][fabric_id]
+
+
+def dma_port_layout(
+    node_type: NodeType,
+    attachment_mode: DMAAttachmentMode,
+) -> tuple[int, ...]:
+    """Return the de-duplicated configured port layout for a DMA mode."""
+    return tuple(
+        dict.fromkeys(
+            endpoint_local_port(node_type, fabric_id, attachment_mode)
+            for fabric_id in NoCChannel
+        )
+    )
 
 
 def compute_flit_count(
@@ -231,7 +326,8 @@ class EndpointAddress(BaseModel):
 
     node_type: NodeType
     node_id: int = Field(ge=0)
-    router_id: int = Field(ge=0, le=63)
+    fabric_id: NoCChannel
+    router_id: int = Field(ge=0, le=31)
     local_port: int = Field(ge=0, le=31)
 
     @model_validator(mode="after")
@@ -247,7 +343,29 @@ class EndpointAddress(BaseModel):
                 f"{self.node_type.name}[{self.node_id}] cannot use local port "
                 f"{self.local_port}"
             )
+        if self.node_type is not NodeType.PE and not any(
+            endpoint_local_port(self.node_type, self.fabric_id, attachment_mode)
+            == self.local_port
+            for attachment_mode in valid_dma_attachment_modes(self.node_type)
+        ):
+            raise ValueError(
+                f"{self.node_type.name}[{self.node_id}] cannot use local port "
+                f"{self.local_port} on {self.fabric_id.name}"
+            )
         return self
+
+    @property
+    def attachment_mode(self) -> DMAAttachmentMode | None:
+        """Return the DMA attachment mode represented by this address."""
+        if self.node_type is NodeType.PE:
+            return None
+        for attachment_mode in valid_dma_attachment_modes(self.node_type):
+            if (
+                endpoint_local_port(self.node_type, self.fabric_id, attachment_mode)
+                == self.local_port
+            ):
+                return attachment_mode
+        raise RuntimeError("validated DMA endpoint has no attachment mode")
 
 
 class Message(BaseModel):
@@ -269,6 +387,8 @@ class Message(BaseModel):
             raise ValueError(f"{self.src.node_type.name} cannot inject payload data")
         if self.dst.node_type in (NodeType.GM_RDMA, NodeType.DDR_RDMA):
             raise ValueError(f"{self.dst.node_type.name} cannot consume payload data")
+        if self.src.fabric_id is not self.dst.fabric_id:
+            raise ValueError("message endpoints must use the same NoC fabric")
         return self
 
     def flit_count(self, payload_capacity_bytes: int = 512) -> int:
@@ -287,6 +407,13 @@ class Message(BaseModel):
         if self.trans_type is not TransType.SINGLECAST:
             raise NotImplementedError(
                 f"Phase 2 transport does not implement {self.trans_type.name}"
+            )
+        if (
+            self.src.attachment_mode is DMAAttachmentMode.AIU_LOCAL
+            or self.dst.attachment_mode is DMAAttachmentMode.AIU_LOCAL
+        ):
+            raise NotImplementedError(
+                "Phase 2 transport does not implement AIU-local DMA endpoints"
             )
 
         payload_bytes = self.payload_bytes()

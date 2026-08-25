@@ -14,9 +14,18 @@ from simulator_detailed.configs.schemas.arch_config import (
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
 from simulator_detailed.utils.definitions import (
+    PORT_DDR_RDMA,
+    PORT_DDR_RDMA_LOC,
+    PORT_DDR_WDMA,
+    PORT_DDR_WDMA_CH0,
+    PORT_DDR_WDMA_CH1,
+    PORT_DDR_WDMA_LOC,
     PORT_GM_RDMA,
+    PORT_GM_RDMA_LOC,
+    PORT_GM_WDMA,
     PORT_GM_WDMA_CH0,
     PORT_GM_WDMA_CH1,
+    PORT_GM_WDMA_LOC,
     PORT_PE,
     DimSlice,
     EndpointAddress,
@@ -25,6 +34,7 @@ from simulator_detailed.utils.definitions import (
     Message,
     NoCChannel,
     NodeType,
+    DMAAttachmentMode,
     TransType,
     compute_flit_count,
 )
@@ -180,12 +190,14 @@ class Phase2NoCTests(unittest.TestCase):
             src=EndpointAddress(
                 node_type=NodeType.PE,
                 node_id=0,
+                fabric_id=NoCChannel.CH0,
                 router_id=0,
                 local_port=PORT_PE,
             ),
             dst=EndpointAddress(
                 node_type=NodeType.PE,
                 node_id=1,
+                fabric_id=NoCChannel.CH0,
                 router_id=1,
                 local_port=PORT_PE,
             ),
@@ -219,8 +231,12 @@ class Phase2NoCTests(unittest.TestCase):
         for payload_bytes, (expected_types, expected_payloads) in boundary_cases.items():
             with self.subTest(payload_bytes=payload_bytes):
                 message = Message(
-                    src=pe_registry.resolve(NodeType.PE, 28),
-                    dst=pe_registry.resolve(NodeType.PE, 31),
+                    src=pe_registry.resolve(
+                        NodeType.PE, 28, fabric_id=NoCChannel.CH0
+                    ),
+                    dst=pe_registry.resolve(
+                        NodeType.PE, 31, fabric_id=NoCChannel.CH0
+                    ),
                     index=100 + payload_bytes,
                     data=[DimSlice(start=0, end=payload_bytes)],
                     trans_type=TransType.SINGLECAST,
@@ -263,11 +279,17 @@ class Phase2NoCTests(unittest.TestCase):
             )
         )
         configured_message = Message(
-            src=dma_registry.resolve(NodeType.GM_RDMA, 0),
+            src=dma_registry.resolve(
+                NodeType.GM_RDMA,
+                0,
+                fabric_id=NoCChannel.CH1,
+                attachment_mode=DMAAttachmentMode.SINGLE_SIDE,
+            ),
             dst=dma_registry.resolve(
                 NodeType.GM_WDMA,
                 3,
-                local_port=PORT_GM_WDMA_CH1,
+                fabric_id=NoCChannel.CH1,
+                attachment_mode=DMAAttachmentMode.DUAL_SIDE,
             ),
             index=7,
             data=[DimSlice(start=0, end=513)],
@@ -294,16 +316,26 @@ class Phase2NoCTests(unittest.TestCase):
                 src=dma_registry.resolve(
                     NodeType.GM_WDMA,
                     3,
-                    local_port=PORT_GM_WDMA_CH1,
+                    fabric_id=NoCChannel.CH1,
+                    attachment_mode=DMAAttachmentMode.DUAL_SIDE,
                 ),
-                dst=pe_registry.resolve(NodeType.PE, 0),
+                dst=pe_registry.resolve(
+                    NodeType.PE, 0, fabric_id=NoCChannel.CH1
+                ),
                 index=8,
                 data=[DimSlice(start=0, end=1)],
             )
         with self.assertRaisesRegex(ValueError, "GM_RDMA cannot consume"):
             Message(
-                src=pe_registry.resolve(NodeType.PE, 0),
-                dst=dma_registry.resolve(NodeType.GM_RDMA, 0),
+                src=pe_registry.resolve(
+                    NodeType.PE, 0, fabric_id=NoCChannel.CH1
+                ),
+                dst=dma_registry.resolve(
+                    NodeType.GM_RDMA,
+                    0,
+                    fabric_id=NoCChannel.CH1,
+                    attachment_mode=DMAAttachmentMode.SINGLE_SIDE,
+                ),
                 index=9,
                 data=[DimSlice(start=0, end=1)],
             )
@@ -317,8 +349,12 @@ class Phase2NoCTests(unittest.TestCase):
         ):
             with self.subTest(trans_type=trans_type):
                 message = Message(
-                    src=registry.resolve(NodeType.PE, 0),
-                    dst=registry.resolve(NodeType.PE, 1),
+                    src=registry.resolve(
+                        NodeType.PE, 0, fabric_id=NoCChannel.CH0
+                    ),
+                    dst=registry.resolve(
+                        NodeType.PE, 1, fabric_id=NoCChannel.CH0
+                    ),
                     index=trans_type.value,
                     data=[DimSlice(start=0, end=512)],
                     trans_type=trans_type,
@@ -330,7 +366,7 @@ class Phase2NoCTests(unittest.TestCase):
                 ):
                     message.packetize(FlitConfig())
 
-    def test_endpoint_registry_rejects_ambiguous_or_invalid_mappings(self) -> None:
+    def test_endpoint_registry_requires_explicit_fabric_and_path(self) -> None:
         registry = EndpointRegistry(
             NoCConfig(
                 dma_engines=[
@@ -345,27 +381,247 @@ class Phase2NoCTests(unittest.TestCase):
             )
         )
 
-        pe_address = registry.resolve(NodeType.PE, 17)
-        self.assertEqual(
-            (pe_address.router_id, pe_address.local_port),
-            (17, PORT_PE),
+        pe_ch0 = registry.resolve(
+            NodeType.PE, 17, fabric_id=NoCChannel.CH0
         )
-        with self.assertRaisesRegex(ValueError, "multiple local ports"):
-            registry.resolve(NodeType.GM_WDMA, 0)
-        self.assertEqual(
-            registry.resolve(NodeType.GM_WDMA, 0, local_port=11).local_port,
-            11,
+        pe_ch1 = registry.resolve(
+            NodeType.PE, 17, fabric_id=NoCChannel.CH1
         )
-        with self.assertRaisesRegex(ValueError, "has no local port 15"):
-            registry.resolve(NodeType.GM_WDMA, 0, local_port=15)
+        self.assertEqual(
+            (pe_ch0.fabric_id, pe_ch0.router_id, pe_ch0.local_port),
+            (NoCChannel.CH0, 17, PORT_PE),
+        )
+        self.assertEqual(
+            (pe_ch1.fabric_id, pe_ch1.router_id, pe_ch1.local_port),
+            (NoCChannel.CH1, 17, PORT_PE),
+        )
+        self.assertNotEqual(pe_ch0, pe_ch1)
+
+        dual_ch0 = registry.resolve(
+            NodeType.GM_WDMA,
+            0,
+            fabric_id=NoCChannel.CH0,
+            attachment_mode=DMAAttachmentMode.DUAL_SIDE,
+        )
+        dual_ch1 = registry.resolve(
+            NodeType.GM_WDMA,
+            0,
+            fabric_id=NoCChannel.CH1,
+            attachment_mode=DMAAttachmentMode.DUAL_SIDE,
+        )
+        self.assertEqual(dual_ch0.local_port, PORT_GM_WDMA_CH0)
+        self.assertEqual(dual_ch1.local_port, PORT_GM_WDMA_CH1)
+
+        with self.assertRaisesRegex(ValueError, "requires an attachment mode"):
+            registry.resolve(
+                NodeType.GM_WDMA, 0, fabric_id=NoCChannel.CH0
+            )
+        with self.assertRaisesRegex(ValueError, "no SINGLE_SIDE attachment"):
+            registry.resolve(
+                NodeType.GM_WDMA,
+                0,
+                fabric_id=NoCChannel.CH0,
+                attachment_mode=DMAAttachmentMode.SINGLE_SIDE,
+            )
+        with self.assertRaisesRegex(ValueError, "does not use a DMA attachment mode"):
+            registry.resolve(
+                NodeType.PE,
+                0,
+                fabric_id=NoCChannel.CH0,
+                attachment_mode=DMAAttachmentMode.DUAL_SIDE,
+            )
         with self.assertRaisesRegex(KeyError, "is not configured"):
-            registry.resolve(NodeType.DDR_RDMA, 0)
+            registry.resolve(
+                NodeType.DDR_RDMA,
+                0,
+                fabric_id=NoCChannel.CH0,
+                attachment_mode=DMAAttachmentMode.SINGLE_SIDE,
+            )
+
+        with self.assertRaisesRegex(ValueError, "same NoC fabric"):
+            Message(
+                src=registry.resolve(
+                    NodeType.PE, 0, fabric_id=NoCChannel.CH0
+                ),
+                dst=registry.resolve(
+                    NodeType.PE, 1, fabric_id=NoCChannel.CH1
+                ),
+                index=10,
+                data=[DimSlice(start=0, end=1)],
+            )
+
+    def test_endpoint_registry_maps_hardware_attachment_modes(self) -> None:
+        mode_cases = (
+            (
+                DMAType.GM_RDMA,
+                NodeType.GM_RDMA,
+                28,
+                [PORT_GM_RDMA],
+                DMAAttachmentMode.SINGLE_SIDE,
+                PORT_GM_RDMA,
+                PORT_GM_RDMA,
+            ),
+            (
+                DMAType.GM_RDMA,
+                NodeType.GM_RDMA,
+                28,
+                [PORT_GM_RDMA_LOC],
+                DMAAttachmentMode.AIU_LOCAL,
+                PORT_GM_RDMA_LOC,
+                PORT_GM_RDMA_LOC,
+            ),
+            (
+                DMAType.GM_WDMA,
+                NodeType.GM_WDMA,
+                28,
+                [PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                DMAAttachmentMode.DUAL_SIDE,
+                PORT_GM_WDMA_CH0,
+                PORT_GM_WDMA_CH1,
+            ),
+            (
+                DMAType.GM_WDMA,
+                NodeType.GM_WDMA,
+                28,
+                [PORT_GM_WDMA],
+                DMAAttachmentMode.SINGLE_SIDE,
+                PORT_GM_WDMA,
+                PORT_GM_WDMA,
+            ),
+            (
+                DMAType.GM_WDMA,
+                NodeType.GM_WDMA,
+                28,
+                [PORT_GM_WDMA_LOC],
+                DMAAttachmentMode.AIU_LOCAL,
+                PORT_GM_WDMA_LOC,
+                PORT_GM_WDMA_LOC,
+            ),
+            (
+                DMAType.DDR_RDMA,
+                NodeType.DDR_RDMA,
+                0,
+                [PORT_DDR_RDMA],
+                DMAAttachmentMode.SINGLE_SIDE,
+                PORT_DDR_RDMA,
+                PORT_DDR_RDMA,
+            ),
+            (
+                DMAType.DDR_RDMA,
+                NodeType.DDR_RDMA,
+                0,
+                [PORT_DDR_RDMA_LOC],
+                DMAAttachmentMode.AIU_LOCAL,
+                PORT_DDR_RDMA_LOC,
+                PORT_DDR_RDMA_LOC,
+            ),
+            (
+                DMAType.DDR_WDMA,
+                NodeType.DDR_WDMA,
+                0,
+                [PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+                DMAAttachmentMode.DUAL_SIDE,
+                PORT_DDR_WDMA_CH0,
+                PORT_DDR_WDMA_CH1,
+            ),
+            (
+                DMAType.DDR_WDMA,
+                NodeType.DDR_WDMA,
+                0,
+                [PORT_DDR_WDMA],
+                DMAAttachmentMode.SINGLE_SIDE,
+                PORT_DDR_WDMA,
+                PORT_DDR_WDMA,
+            ),
+            (
+                DMAType.DDR_WDMA,
+                NodeType.DDR_WDMA,
+                0,
+                [PORT_DDR_WDMA_LOC],
+                DMAAttachmentMode.AIU_LOCAL,
+                PORT_DDR_WDMA_LOC,
+                PORT_DDR_WDMA_LOC,
+            ),
+        )
+
+        for (
+            dma_type,
+            node_type,
+            router_id,
+            local_ports,
+            attachment_mode,
+            ch0_port,
+            ch1_port,
+        ) in mode_cases:
+            with self.subTest(node_type=node_type, attachment_mode=attachment_mode):
+                registry = EndpointRegistry(
+                    NoCConfig(
+                        dma_engines=[
+                            DMAEngineConfig(
+                                dma_type=dma_type,
+                                instance_id=0,
+                                router_id=router_id,
+                                channels=len(local_ports),
+                                local_ports=local_ports,
+                            )
+                        ]
+                    )
+                )
+                ch0_address = registry.resolve(
+                    node_type,
+                    0,
+                    fabric_id=NoCChannel.CH0,
+                    attachment_mode=attachment_mode,
+                )
+                ch1_address = registry.resolve(
+                    node_type,
+                    0,
+                    fabric_id=NoCChannel.CH1,
+                    attachment_mode=attachment_mode,
+                )
+                self.assertEqual(ch0_address.local_port, ch0_port)
+                self.assertEqual(ch1_address.local_port, ch1_port)
+                self.assertEqual(ch0_address.attachment_mode, attachment_mode)
+                self.assertEqual(ch1_address.attachment_mode, attachment_mode)
+
+    def test_aiu_local_address_is_representable_but_not_executable(self) -> None:
+        registry = EndpointRegistry(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_RDMA,
+                        instance_id=0,
+                        router_id=28,
+                        channels=1,
+                        local_ports=[PORT_GM_RDMA_LOC],
+                    )
+                ]
+            )
+        )
+        message = Message(
+            src=registry.resolve(
+                NodeType.GM_RDMA,
+                0,
+                fabric_id=NoCChannel.CH0,
+                attachment_mode=DMAAttachmentMode.AIU_LOCAL,
+            ),
+            dst=registry.resolve(
+                NodeType.PE, 0, fabric_id=NoCChannel.CH0
+            ),
+            index=11,
+            data=[DimSlice(start=0, end=512)],
+        )
+        with self.assertRaisesRegex(NotImplementedError, "AIU-local"):
+            message.packetize(FlitConfig())
+
+    def test_endpoint_registry_rejects_invalid_mappings(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a 4x8 NoC"):
             EndpointRegistry(NoCConfig(x=8, y=4))
         with self.assertRaisesRegex(ValueError, "must attach to router 28"):
             EndpointAddress(
                 node_type=NodeType.GM_RDMA,
                 node_id=0,
+                fabric_id=NoCChannel.CH0,
                 router_id=29,
                 local_port=PORT_GM_RDMA,
             )
@@ -373,8 +629,17 @@ class Phase2NoCTests(unittest.TestCase):
             EndpointAddress(
                 node_type=NodeType.GM_RDMA,
                 node_id=0,
+                fabric_id=NoCChannel.CH0,
                 router_id=28,
                 local_port=7,
+            )
+        with self.assertRaisesRegex(ValueError, "cannot use local port 11 on CH0"):
+            EndpointAddress(
+                node_type=NodeType.GM_WDMA,
+                node_id=0,
+                fabric_id=NoCChannel.CH0,
+                router_id=28,
+                local_port=PORT_GM_WDMA_CH1,
             )
 
         invalid_configs = (
