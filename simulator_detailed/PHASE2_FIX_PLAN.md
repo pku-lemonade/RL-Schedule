@@ -12,12 +12,20 @@ the corresponding documentation update.
 - Do not deduct the estimated header or CRC size from logical payload capacity
   until hardware data confirms that behavior.
 
-## Fix 2: Implement message packetization
+## Fix 2: Implement message packetization (complete)
 
-- Add `Message.packetize(flit_config, src_router, dst_router, channel_id)`.
+- Add immutable `EndpointAddress` values and an architecture-owned
+  `EndpointRegistry` for PE/DMA attachment resolution.
+- Add `Message.packetize(flit_config)`; routing comes from the source and
+  destination addresses captured when the message is initialized.
 - Emit `SINGLE` for one flit, `HEAD`/`TAIL` for two flits, and
   `HEAD`/`BODY`/`TAIL` for longer packets.
 - Verify that the output payload sum equals the input message payload.
+
+Implemented in `simulator_detailed/utils/definitions.py` and
+`simulator_detailed/endpoint_registry.py`. Multi-port DMA endpoints require an
+explicit local-port selection. PE CH0/CH1 identity remains a Fix 5 responsibility
+because both lanes use PE local port 0.
 
 ## Fix 3: Correct zero-load Link throughput
 

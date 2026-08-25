@@ -8,6 +8,8 @@ The relevant configuration objects are:
 - `LinkConfig`: `phit_width=128`, `wire_delay=0.5`,
   `buffer_depth=1`, `credit_return_cycles=0.3`.
 - `NoCConfig`: X=4, Y=8, separate r2r `link` and PE-side `c2r_link` configs.
+- `DMAEngineConfig`: a type-qualified DMA instance, attached router, channel
+  count, and corresponding local ports used by `EndpointRegistry`.
 
 `header_bytes` and `body_overhead` describe estimated wire metadata. The
 measured packet-count model exposes 512 logical payload bytes per flit, so these
@@ -17,3 +19,9 @@ The Link derives serialization time as `flit_size / phit_width`; it is not a
 second independently tunable latency. Phase 2 accepts only `Mesh`, `XY`, and
 one VC. Legacy topology JSON files are reference artifacts and are not
 supported by the Phase 2 NoC implementation.
+
+`EndpointRegistry` additionally requires each configured DMA to have one local
+port per declared channel. Router IDs must match the fixed hardware attachment
+map, ordered port layouts must correspond to a supported single-side, local, or
+CH0/CH1 interface, endpoint keys must be unique, and no two endpoints may bind
+the same `(router_id, local_port)` pair.

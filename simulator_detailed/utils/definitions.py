@@ -1,8 +1,10 @@
-from enum import Enum, auto
-from enum import IntEnum
 import math
+from enum import Enum, IntEnum, auto
 from typing import List, Optional
-from pydantic import BaseModel
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from ..configs.schemas.arch_config import FlitConfig
 
 
 class OperatorType(Enum):
@@ -70,6 +72,26 @@ PORT_GM_WDMA_LOC  = 13  # local port: GM write DMA (local path)
 PORT_GM_RDMA      = 14  # local port: GM read DMA
 PORT_GM_WDMA      = 15  # local port: GM write DMA
 
+_ENDPOINT_ROUTERS = {
+    NodeType.PE: tuple(range(32)),
+    NodeType.GM_RDMA: (28, 29, 30, 31),
+    NodeType.GM_WDMA: (28, 29, 30, 31),
+    NodeType.DDR_RDMA: (0, 28, 3, 31),
+    NodeType.DDR_WDMA: (0, 28, 3, 31),
+}
+
+_ENDPOINT_LOCAL_PORTS = {
+    NodeType.PE: frozenset({PORT_PE}),
+    NodeType.GM_RDMA: frozenset({PORT_GM_RDMA_LOC, PORT_GM_RDMA}),
+    NodeType.GM_WDMA: frozenset(
+        {PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1, PORT_GM_WDMA_LOC, PORT_GM_WDMA}
+    ),
+    NodeType.DDR_RDMA: frozenset({PORT_DDR_RDMA_LOC, PORT_DDR_RDMA}),
+    NodeType.DDR_WDMA: frozenset(
+        {PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1, PORT_DDR_WDMA_LOC, PORT_DDR_WDMA}
+    ),
+}
+
 DIR_NORTH = 100  # direction port: North neighbor (out port = +Y)
 DIR_SOUTH = 101  # direction port: South neighbor (out port = -Y)
 DIR_EAST  = 102  # direction port: East neighbor (out port = +X)
@@ -106,6 +128,21 @@ def is_local_port(port: int) -> bool:
     return port < 100
 
 
+def expected_endpoint_router(node_type: NodeType, node_id: int) -> int:
+    """Return the fixed ADA2S-32 router attachment for an endpoint."""
+    routers = _ENDPOINT_ROUTERS[node_type]
+    if not 0 <= node_id < len(routers):
+        raise ValueError(
+            f"{node_type.name} node_id must be between 0 and {len(routers) - 1}"
+        )
+    return routers[node_id]
+
+
+def valid_endpoint_local_ports(node_type: NodeType) -> frozenset[int]:
+    """Return hardware local ports that can address the given endpoint type."""
+    return _ENDPOINT_LOCAL_PORTS[node_type]
+
+
 def compute_flit_count(payload_bytes: int, flit_size: int = 512) -> int:
     """Return the measured logical flit count for a payload.
 
@@ -138,7 +175,7 @@ class Slice(BaseModel):
         return res
     
     def max(self, other: "Slice") -> "Slice":
-        res = []
+        res: list[DimSlice] = []
         for i in range(len(self.tensor_slice)):
             res.append(
                 DimSlice(
@@ -172,22 +209,52 @@ class Flit(BaseModel):
         return self.flit_type in (FlitType.SINGLE, FlitType.TAIL)
 
 
+class EndpointAddress(BaseModel):
+    """Resolved, immutable attachment of one type-qualified NoC endpoint."""
+
+    model_config = ConfigDict(frozen=True)
+
+    node_type: NodeType
+    node_id: int = Field(ge=0)
+    router_id: int = Field(ge=0, le=63)
+    local_port: int = Field(ge=0, le=31)
+
+    @model_validator(mode="after")
+    def validate_attachment(self) -> "EndpointAddress":
+        expected_router = expected_endpoint_router(self.node_type, self.node_id)
+        if self.router_id != expected_router:
+            raise ValueError(
+                f"{self.node_type.name}[{self.node_id}] must attach to router "
+                f"{expected_router}, not router {self.router_id}"
+            )
+        if self.local_port not in valid_endpoint_local_ports(self.node_type):
+            raise ValueError(
+                f"{self.node_type.name}[{self.node_id}] cannot use local port "
+                f"{self.local_port}"
+            )
+        return self
+
+
 class Message(BaseModel):
     """A message to be injected into the NoC, packetized into flits."""
-    src: int                          # source node ID (PE or DMA)
-    dst: int                          # destination node ID (PE or DMA)
+    src: EndpointAddress              # resolved source endpoint attachment
+    dst: EndpointAddress              # resolved destination endpoint attachment
     index: int                        # unique message index (DFG task index)
     data: List[DimSlice]              # tensor slice(s) describing payload
-    src_type: NodeType = NodeType.PE  # source node type
-    dst_type: NodeType = NodeType.PE  # destination node type
-    src_local_port: int = PORT_PE     # source local port on source router
-    dst_local_port: int = PORT_PE     # destination local port on destination router
     trans_type: TransType = TransType.SINGLECAST  # transmission type
     is_broadcast: bool = False        # whether this is a broadcast message
     broadcast_dst_mask: int = 0       # destination bitmask for broadcast/multicast
     reduce_op: int = -1               # reduce operation (-1 = none)
     sync_mode: int = 0                # sync mode field
     header_bytes: int = 12            # B, estimated metadata; not deducted from logical payload
+
+    @model_validator(mode="after")
+    def validate_endpoint_roles(self) -> "Message":
+        if self.src.node_type in (NodeType.GM_WDMA, NodeType.DDR_WDMA):
+            raise ValueError(f"{self.src.node_type.name} cannot inject payload data")
+        if self.dst.node_type in (NodeType.GM_RDMA, NodeType.DDR_RDMA):
+            raise ValueError(f"{self.dst.node_type.name} cannot consume payload data")
+        return self
 
     def flit_count(self, flit_size: int = 512) -> int:
         """Number of flits this message is packetized into."""
@@ -196,6 +263,46 @@ class Message(BaseModel):
     def payload_bytes(self) -> int:
         """Total payload size in bytes."""
         return Slice(tensor_slice=self.data).size()
+
+    def packetize(
+        self,
+        flit_config: FlitConfig,
+    ) -> list[Flit]:
+        """Split this addressed message into payload-bearing flits."""
+        payload_bytes = self.payload_bytes()
+        flit_count = compute_flit_count(payload_bytes, flit_config.flit_size)
+        remaining_bytes = payload_bytes
+        flits: list[Flit] = []
+
+        for flit_index in range(flit_count):
+            if flit_count == 1:
+                flit_type = FlitType.SINGLE
+            elif flit_index == 0:
+                flit_type = FlitType.HEAD
+            elif flit_index == flit_count - 1:
+                flit_type = FlitType.TAIL
+            else:
+                flit_type = FlitType.BODY
+
+            flit_payload_bytes = min(remaining_bytes, flit_config.flit_size)
+            remaining_bytes -= flit_payload_bytes
+            flits.append(
+                Flit(
+                    flit_type=flit_type,
+                    payload_bytes=flit_payload_bytes,
+                    msg_id=self.index,
+                    dst_router=self.dst.router_id,
+                    dst_local_port=self.dst.local_port,
+                    src_router=self.src.router_id,
+                    src_local_port=self.src.local_port,
+                    is_broadcast=self.is_broadcast,
+                    broadcast_dst_mask=self.broadcast_dst_mask,
+                    reduce_op=self.reduce_op,
+                    sync_mode=self.sync_mode,
+                )
+            )
+
+        return flits
 
     def __lt__(self, other: "Message") -> bool:
         return self.payload_bytes() < other.payload_bytes()

@@ -7,9 +7,10 @@ from typing import List, Dict, Optional
 from .utils.dfg import *
 from .utils.mapper import NetworkMapper
 from .configs.schemas.arch_config import *
+from .endpoint_registry import EndpointRegistry
 from .noc import Link, Router
 from .utils.task import Task
-from .utils.definitions import Event
+from .utils.definitions import EndpointAddress, Event, NodeType
 from .utils.definitions import comp_operator, comm_operator
 
 
@@ -158,11 +159,23 @@ class Scheduler:
 
 # task execution
 class Core:
-    def __init__(self, env, core_id: int, config: CoreConfig, mapper: NetworkMapper):
+    def __init__(
+        self,
+        env,
+        core_id: int,
+        config: CoreConfig,
+        mapper: NetworkMapper,
+        address: EndpointAddress,
+        endpoint_registry: EndpointRegistry,
+    ):
         # basic parameters
         self.env = env
         self.id = core_id
         self.mapper = mapper
+        if address.node_type != NodeType.PE or address.node_id != core_id:
+            raise ValueError(f"core {core_id} received a mismatched endpoint address")
+        self.address = address
+        self.endpoint_registry = endpoint_registry
         
         # other resources
         self.scheduler = Scheduler(id=self.id, mapper=mapper)
@@ -192,6 +205,11 @@ class Core:
         
 
     def bind_with_router(self, data_in: Link, data_out: Link, router: Router):
+        if router.id != self.address.router_id:
+            raise ValueError(
+                f"core {self.id} address maps to router {self.address.router_id}, "
+                f"not router {router.id}"
+            )
         self.data_in = data_in
         self.data_out = data_out
         self.router = router

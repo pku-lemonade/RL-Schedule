@@ -3,9 +3,10 @@ from typing import List
 
 from .utils.mapper import *
 from .utils.dfg import DFGNode
-from .utils.definitions import PORT_PE, direction_to_port
+from .utils.definitions import PORT_PE, NodeType, direction_to_port
 from .noc import Link, NoC, NoCTracer
 from .core import Core
+from .endpoint_registry import EndpointRegistry
 from .configs.schemas.arch_config import *
 from .configs.schemas.failure_configs import *
 
@@ -19,6 +20,7 @@ class Arch:
         self.y_size = arch.noc.y
         self.mapper = mapper
         self.fail_slow = failures
+        self.endpoint_registry = EndpointRegistry(arch.noc)
         
         # construction
         self.noc = self.build_noc(env=self.env, config=self.config.noc)
@@ -43,7 +45,14 @@ class Arch:
     ) -> List[Core]:
         cores = []
         for id in range(self.x_size * self.y_size):
-            core = Core(env=self.env, core_id=id, config=config, mapper=mapper)
+            core = Core(
+                env=self.env,
+                core_id=id,
+                config=config,
+                mapper=mapper,
+                address=self.endpoint_registry.resolve(NodeType.PE, id),
+                endpoint_registry=self.endpoint_registry,
+            )
             c2r = Link(
                 env=self.env,
                 config=noc_config.c2r_link,

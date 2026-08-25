@@ -2,14 +2,27 @@ import unittest
 
 import simpy
 
-from simulator_detailed.configs.schemas.arch_config import LinkConfig, NoCConfig
+from simulator_detailed.configs.schemas.arch_config import (
+    DMAEngineConfig,
+    DMAType,
+    FlitConfig,
+    LinkConfig,
+    NoCConfig,
+)
+from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
 from simulator_detailed.utils.definitions import (
+    PORT_GM_RDMA,
+    PORT_GM_WDMA_CH0,
+    PORT_GM_WDMA_CH1,
     PORT_PE,
     DimSlice,
+    EndpointAddress,
     Flit,
     FlitType,
     Message,
+    NodeType,
+    TransType,
     compute_flit_count,
 )
 
@@ -116,8 +129,18 @@ class Phase2NoCTests(unittest.TestCase):
                 self.assertEqual(compute_flit_count(payload_bytes), expected)
 
         message = Message(
-            src=0,
-            dst=1,
+            src=EndpointAddress(
+                node_type=NodeType.PE,
+                node_id=0,
+                router_id=0,
+                local_port=PORT_PE,
+            ),
+            dst=EndpointAddress(
+                node_type=NodeType.PE,
+                node_id=1,
+                router_id=1,
+                local_port=PORT_PE,
+            ),
             index=1,
             data=[DimSlice(start=0, end=512)],
             header_bytes=64,
@@ -129,6 +152,231 @@ class Phase2NoCTests(unittest.TestCase):
             compute_flit_count(-1)
         with self.assertRaises(ValueError):
             compute_flit_count(1, flit_size=0)
+
+    def test_message_packetize_uses_config_and_preserves_metadata(self) -> None:
+        pe_registry = EndpointRegistry(NoCConfig())
+        boundary_cases = {
+            0: ([FlitType.SINGLE], [0]),
+            1: ([FlitType.SINGLE], [1]),
+            512: ([FlitType.SINGLE], [512]),
+            513: ([FlitType.HEAD, FlitType.TAIL], [512, 1]),
+            1024: ([FlitType.HEAD, FlitType.TAIL], [512, 512]),
+            1025: ([FlitType.HEAD, FlitType.BODY, FlitType.TAIL], [512, 512, 1]),
+            2048: (
+                [FlitType.HEAD, FlitType.BODY, FlitType.BODY, FlitType.TAIL],
+                [512, 512, 512, 512],
+            ),
+        }
+
+        for payload_bytes, (expected_types, expected_payloads) in boundary_cases.items():
+            with self.subTest(payload_bytes=payload_bytes):
+                message = Message(
+                    src=pe_registry.resolve(NodeType.PE, 28),
+                    dst=pe_registry.resolve(NodeType.PE, 31),
+                    index=100 + payload_bytes,
+                    data=[DimSlice(start=0, end=payload_bytes)],
+                    trans_type=TransType.BROADCAST,
+                    is_broadcast=True,
+                    broadcast_dst_mask=0b101,
+                    reduce_op=1,
+                    sync_mode=2,
+                )
+
+                flits = message.packetize(FlitConfig(flit_size=512))
+
+                self.assertEqual([flit.flit_type for flit in flits], expected_types)
+                self.assertEqual([flit.payload_bytes for flit in flits], expected_payloads)
+                self.assertEqual(sum(flit.payload_bytes for flit in flits), payload_bytes)
+                for flit in flits:
+                    self.assertEqual(flit.msg_id, message.index)
+                    self.assertEqual(flit.src_router, 28)
+                    self.assertEqual(flit.dst_router, 31)
+                    self.assertEqual(flit.src_local_port, message.src.local_port)
+                    self.assertEqual(flit.dst_local_port, message.dst.local_port)
+                    self.assertEqual(flit.is_broadcast, message.is_broadcast)
+                    self.assertEqual(flit.broadcast_dst_mask, message.broadcast_dst_mask)
+                    self.assertEqual(flit.reduce_op, message.reduce_op)
+                    self.assertEqual(flit.sync_mode, message.sync_mode)
+
+        dma_registry = EndpointRegistry(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_RDMA,
+                        instance_id=0,
+                        router_id=28,
+                        channels=1,
+                        local_ports=[PORT_GM_RDMA],
+                    ),
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_WDMA,
+                        instance_id=3,
+                        router_id=31,
+                        channels=2,
+                        local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                    ),
+                ]
+            )
+        )
+        configured_message = Message(
+            src=dma_registry.resolve(NodeType.GM_RDMA, 0),
+            dst=dma_registry.resolve(
+                NodeType.GM_WDMA,
+                3,
+                local_port=PORT_GM_WDMA_CH1,
+            ),
+            index=7,
+            data=[DimSlice(start=0, end=513)],
+        )
+        configured_flits = configured_message.packetize(FlitConfig(flit_size=256))
+        self.assertEqual(
+            [flit.flit_type for flit in configured_flits],
+            [FlitType.HEAD, FlitType.BODY, FlitType.TAIL],
+        )
+        self.assertEqual(
+            [flit.payload_bytes for flit in configured_flits],
+            [256, 256, 1],
+        )
+        for flit in configured_flits:
+            self.assertEqual(flit.src_router, 28)
+            self.assertEqual(flit.src_local_port, PORT_GM_RDMA)
+            self.assertEqual(flit.dst_router, 31)
+            self.assertEqual(flit.dst_local_port, PORT_GM_WDMA_CH1)
+
+        with self.assertRaisesRegex(ValueError, "GM_WDMA cannot inject"):
+            Message(
+                src=dma_registry.resolve(
+                    NodeType.GM_WDMA,
+                    3,
+                    local_port=PORT_GM_WDMA_CH1,
+                ),
+                dst=pe_registry.resolve(NodeType.PE, 0),
+                index=8,
+                data=[DimSlice(start=0, end=1)],
+            )
+        with self.assertRaisesRegex(ValueError, "GM_RDMA cannot consume"):
+            Message(
+                src=pe_registry.resolve(NodeType.PE, 0),
+                dst=dma_registry.resolve(NodeType.GM_RDMA, 0),
+                index=9,
+                data=[DimSlice(start=0, end=1)],
+            )
+
+    def test_endpoint_registry_rejects_ambiguous_or_invalid_mappings(self) -> None:
+        registry = EndpointRegistry(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_WDMA,
+                        instance_id=0,
+                        router_id=28,
+                        channels=2,
+                        local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                    )
+                ]
+            )
+        )
+
+        pe_address = registry.resolve(NodeType.PE, 17)
+        self.assertEqual(
+            (pe_address.router_id, pe_address.local_port),
+            (17, PORT_PE),
+        )
+        with self.assertRaisesRegex(ValueError, "multiple local ports"):
+            registry.resolve(NodeType.GM_WDMA, 0)
+        self.assertEqual(
+            registry.resolve(NodeType.GM_WDMA, 0, local_port=11).local_port,
+            11,
+        )
+        with self.assertRaisesRegex(ValueError, "has no local port 15"):
+            registry.resolve(NodeType.GM_WDMA, 0, local_port=15)
+        with self.assertRaisesRegex(KeyError, "is not configured"):
+            registry.resolve(NodeType.DDR_RDMA, 0)
+        with self.assertRaisesRegex(ValueError, "requires a 4x8 NoC"):
+            EndpointRegistry(NoCConfig(x=8, y=4))
+        with self.assertRaisesRegex(ValueError, "must attach to router 28"):
+            EndpointAddress(
+                node_type=NodeType.GM_RDMA,
+                node_id=0,
+                router_id=29,
+                local_port=PORT_GM_RDMA,
+            )
+        with self.assertRaisesRegex(ValueError, "cannot use local port 7"):
+            EndpointAddress(
+                node_type=NodeType.GM_RDMA,
+                node_id=0,
+                router_id=28,
+                local_port=7,
+            )
+
+        invalid_configs = (
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=29,
+                    channels=1,
+                    local_ports=[14],
+                ),
+                "must attach to router 28",
+            ),
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[14],
+                ),
+                "2 channels but 1 local ports",
+            ),
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[7],
+                ),
+                "invalid local ports",
+            ),
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, 15],
+                ),
+                "unsupported local-port layout",
+            ),
+        )
+        for dma_config, expected_error in invalid_configs:
+            with self.subTest(expected_error=expected_error):
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    EndpointRegistry(NoCConfig(dma_engines=[dma_config]))
+
+        with self.assertRaisesRegex(ValueError, "is configured twice"):
+            EndpointRegistry(
+                NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.GM_RDMA,
+                            instance_id=0,
+                            router_id=28,
+                            channels=1,
+                            local_ports=[14],
+                        ),
+                        DMAEngineConfig(
+                            dma_type=DMAType.GM_RDMA,
+                            instance_id=0,
+                            router_id=28,
+                            channels=1,
+                            local_ports=[14],
+                        ),
+                    ]
+                )
+            )
 
     def test_direct_link_latency_and_steady_gap(self):
         env = simpy.Environment()
