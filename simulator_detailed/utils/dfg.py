@@ -101,7 +101,7 @@ class DFG:
         """Retrieve a node by index"""
         return self.nodes.get(index)
     
-    def print(self, filename):
+    def print(self, filename: str):
         with open(filename, 'w') as file:
             for index, node in self.nodes.items():
                 print(f"Node {index}: Operation={node.operation.name}, Core={node.core_id}", file=file)
