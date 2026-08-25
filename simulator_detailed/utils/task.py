@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from .definitions import Slice, Message, OperatorType
+from .definitions import Message, NodeType, OperatorType, Slice
 from .dfg import DFGNode
 
 logger = logging.getLogger("Task")
@@ -196,7 +196,12 @@ class Task:
                     # print(f"DEBUG: dst = {node.core_id} (type: {type(node.core_id)})")
                     # print(f"DEBUG: data = {node.input_slice()} (type: {type(node.input_slice())})")
                     # print("-" * 20)
-                    message = Message(src=core.id, dst=node.core_id, index=self.index, data=node.input_slice().tensor_slice)
+                    message = Message(
+                        src=core.address,
+                        dst=core.endpoint_registry.resolve(NodeType.PE, node.core_id),
+                        index=self.index,
+                        data=node.input_slice().tensor_slice,
+                    )
 
                     yield core.data_out.put(message)
                     # yield env.process(core.spm.release(size=node.input_slice().size(), task_index=self.index))
