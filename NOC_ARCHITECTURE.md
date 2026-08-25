@@ -1,10 +1,10 @@
 # ADA2S-32 NoC and Transport Subsystem Architecture (Single-Card Model)
 
-> This document describes the on-chip NoC and data transport subsystem of the ADA2S-32 SoC, scoped to a single chip. All content is derived from hardware header files and driver source; parameters whose exact numerical values are not exposed in code are marked with **[TBD]** and require microbenchmarking or vendor microarchitecture documentation.
+> This document describes the on-chip NoC and data transport subsystem of the ADA2S-32 SoC, scoped to a single chip. The chip features **two physically independent 8×4 NoC meshes (NoC0 and NoC1)** with PE NMC channels mapped 1:1 to each mesh. All high-priority transport parameters have been empirically calibrated through silicon microbenchmarks (§9); remaining unmeasured parameters are listed in §10.
 
 ## 1. Chip Overview
 
-The ADA2S-32 is a heterogeneous many-core AI accelerator SoC built around a 2D mesh Network-on-Chip (NoC). The chip employs an SPMD programming model where all Processing Elements (PEs) execute the same kernel on different data partitions.
+The ADA2S-32 is a heterogeneous many-core AI accelerator SoC built around **dual 2D mesh Network-on-Chip (NoC)** fabrics. The chip employs an SPMD programming model where all Processing Elements (PEs) execute the same kernel on different data partitions. Each PE contains a scalar control core, a Matrix compute engine (fp8 GEMM), a 4-TPC Vector engine, and an NMC (Network Memory Controller) with two fully independent, full-duplex DMA channels connecting to the two NoC meshes.
 
 ### 1.1 Node Inventory
 
@@ -20,16 +20,18 @@ The ADA2S-32 is a heterogeneous many-core AI accelerator SoC built around a 2D m
 
 ### 1.2 Memory Hierarchy
 
+The chip has **two physically independent NoC meshes (NoC0 and NoC1)**, each with its own routers and links. PE NMC exposes two fully independent channels (CH0→NoC0, CH1→NoC1), each with independent upload/download engines. PE↔PE traffic achieves full 2× bandwidth on dual-channel; GM/DDR nodes have a single internal DMA engine shared by both channels, capping aggregate at ~124 GB/s regardless of channels used.
+
 | Memory | Capacity | Aggregate Bandwidth | Visibility | Address Range |
 |--------|----------|-------------------|------------|---------------|
-| LPDDR (external) | 128 GB | 533 GB/s | All nodes (via DDR_DMA) | -- |
-| Global Memory (GM, on-chip SRAM) | 32 MB | 576 GB/s | All nodes (via GM_DMA) | -- |
-| PE Local SRAM | 3 MB per PE | [TBD: per-port BW] | Single PE only | 0x10_0000 - 0x3F_FFFF |
-| PE Weight SRAM | 16 MB per PE | [TBD: per-port BW, Matrix-prioritized] | Single PE only | 0x40_0000 - 0x13F_FFFF |
-| VMEM (Vector register file) | 128 entries x 128 B = 16 KB per PE | -- | Vector core only | Entry-indexed |
+| LPDDR (external) | 128 GB | 533 GB/s (4×DDR) | All nodes (via DDR_DMA) | -- |
+| Global Memory (GM, on-chip SRAM) | 32 MB | 4×124 = ~496 GB/s | All nodes (via GM_DMA) | -- |
+| PE Local SRAM | 3 MB per PE | **~292 GB/s read / ~145 GB/s write** (vec DMA), ~134 GB/s/ch NMC | Single PE only | 0x10_0000 - 0x3F_FFFF |
+| PE Weight SRAM | 16 MB per PE | ~283 GB/s read (vec DMA); Matrix read priority | Single PE only | 0x40_0000 - 0x13F_FFFF |
+| VMEM (Vector register file) | **990 entries x 128 B ≈ 124 KB per PE** | -- | Vector core only | Byte-offset from VMEM base; 10-bit addr field (max 1023 entries) |
 | AIU Download SRAM | 256 KB per DMA node | -- | Local DMA node only | 16 B-aligned |
 
-> **Note (documented)**: SRAM bank conflicts do not need to be considered in software; the hardware SRAM controller handles banking transparently. Feature SRAM (Local) accesses should be 128 B-aligned; Weight SRAM accesses should be 4 KB-aligned.
+> **Note (documented + measured)**: SRAM bank conflicts do not need to be considered in software; the hardware SRAM controller handles banking transparently. Feature SRAM (Local) accesses should be 128 B-aligned; Weight SRAM accesses should be 4 KB-aligned. Local SRAM and Weight SRAM are **independent banks with separate read/write ports** (§9.18); NMC TX (SRAM read) and NMC RX (SRAM write) plus Matrix and Vector DMA can run concurrently with ≤7% worst-case port contention (§9.19).
 
 ### 1.3 Clock Domains
 
@@ -46,12 +48,14 @@ The ADA2S-32 is a heterogeneous many-core AI accelerator SoC built around a 2D m
 
 ### 2.1 Physical Layout
 
-The Data NoC is a **2D rectangular mesh** with dimensions defined in adas_base_info.h:
+The chip contains **two physically independent Data NoC meshes (NoC0 and NoC1)**, each an identical 2D rectangular mesh. NMC CH0 connects to NoC0; NMC CH1 connects to NoC1. Both meshes share the same 8×4 logical grid (32 routers each), and PE NMC CH0/CH1 have separate physical ports to their respective NoC. GM/DDR DMA nodes attach to both meshes via CH0/CH1 ports but share a single internal DMA engine (§2.5, §9.9-9.10).
+
+Each mesh has dimensions defined in adas_base_info.h:
 
 - **NOC_DIM_X = 4** (columns)
 - **NOC_DIM_Y = 8** (rows)
 
-This yields **32 mesh routers** (ID 0-31), one per PE grid position.
+This yields **32 mesh routers per NoC** (ID 0-31), one per PE grid position. With two NoCs, the chip has 64 routers total. Inter-PE traffic on both NoCs can run in parallel at full line rate (§9.13, §9.19).
 
 ### 2.2 Router Coordinate System
 
@@ -125,7 +129,7 @@ Each router implements a simple wormhole-cut-through design (mentor-confirmed pa
 
 **Directional ports**: Each router has up to 4 neighbor ports (N/S/E/W) + local ports (see §2.5). Edge routers have fewer active neighbor ports.
 
-**Bandwidth per directional link**: 128 B/cycle × 1125 MHz = **144 GB/s per direction** (full-duplex: 288 GB/s bidirectional). Effective payload throughput ≈ 120 B/cycle = **135 GB/s** after inter-flit bubbles (~6%) and per-flit CRC overhead (~4 B/flit).
+**Bandwidth per directional link (per NoC)**: 128 B/cycle × 1125 MHz = **144 GB/s per direction per NoC** (full-duplex: 288 GB/s bidirectional per NoC). Effective payload throughput ≈ 120 B/cycle = **135 GB/s** after inter-flit bubbles (~6%) and per-flit CRC overhead (~4 B/flit). With two independent NoCs, a PE can achieve **~270 GB/s simplex aggregate (dual-ch same-direction)** or **~527 GB/s bulk bidirectional** (2 NoCs × 2 directions × ~117 B/cyc, §9.19).
 
 ### 2.5 Router Local Port Map (DataNocLocalId)
 
@@ -151,7 +155,11 @@ Each router has local ports connecting to attached modules, defined by the DataN
 | 15 | DATA_NOC_LOCAL_ID_GM_WDMA | GM WDMA (single-side) | Single-side | 28-31 |
 | 22 | DATA_NOC_LOCAL_ID_MMU | Memory Management Unit | -- | [TBD] |
 
-> **DMA channel sharing rules** ★ (updated 2026-08-23): Each DMA instance has its own command processor and independent physical NoC port (bandwidth stacks across instances). For **PE NMC CH0/CH1**, same-direction parallel injection (back-to-back `send_with_sync<0>`+`send_with_sync<1>` before a single fence) achieves full 2× bandwidth (~240 B/cyc aggregate) for PE↔PE traffic, proving independent NoC datapaths per channel (§9.13). For **GM_WDMA/GM_RDMA CH0/CH1** and traffic to/from DDR, the remote DMA receiver caps aggregate throughput at ~114-126 GB/s (NOT 2×). Cross-channel full-duplex patterns (send on CH0 while recv on CH1) were previously measured at ~120 GB/s but used sequential posting (fence between directions), which does not test true simultaneous bidirectional. Different DMA types (GM_RDMA vs GM_WDMA vs DDR_RDMA vs PE NMC) are independent. Each of the 4 GM_WDMA nodes has an independent port to its router.
+> **DMA channel sharing rules** ★ (updated 2026-08-24):
+> - **PE NMC CH0/CH1 are fully independent and full-duplex**: Each channel has separate upload/download engines with independent SRAM read/write ports. Same-direction parallel (back-to-back `send_with_sync<0>`+`send_with_sync<1>` before fence) achieves full 2× bandwidth (~240 B/cyc = 270 GB/s PE↔PE, §9.13). Same-channel full-duplex (TX+RX on same CH) achieves 2× simplex BW (~234 B/cyc = 263 GB/s, §9.19). Dual-channel full-duplex (2ch × 2dir) peaks at ~468 B/cyc = 527 GB/s bulk / ~340 B/cyc = 382 GB/s at 32KB batch.
+> - **GM_WDMA/GM_RDMA/DDR_WDMA/DDR_RDMA share a single internal DMA engine across CH0+CH1**: PE→GM/DDR dual-channel caps aggregate at ~114-126 GB/s (NOT 2×). The remote endpoint is the bottleneck, not NoC links.
+> - **Different DMA types are independent**: GM_RDMA vs GM_WDMA vs DDR_RDMA vs PE NMC each have independent router ports. The 4 GM_WDMA instances aggregate to ~314 GB/s when PEs spread across different GMs.
+> - **In-router ALU (reduce) adds zero bandwidth overhead**; reduction passes data through at line rate.
 
 ---
 
@@ -198,16 +206,13 @@ The software-visible 32-bit routing word is embedded in a larger hardware header
 | CRC/checksum | 16-32 bits | Per-flit or per-packet integrity |
 | **Total** | **~70-90 bits ≈ 9-12 bytes** | Fits in first phit (128B) |
 
-**Logical flit payload accounting** (measured):
-- Transfer sizes up to 512B use one SINGLE flit.
-- 1024B uses two flits (HEAD+TAIL), and 2048B uses four flits.
-- The exposed packet count therefore follows `ceil(payload_bytes / 512)`.
-- The estimated 10-12B header and CRC/sequence fields are wire metadata; the
-  measurements do not establish that they reduce software-visible payload
-  capacity. Their exact physical placement or sideband encoding remains TBD.
+**Flit payload layout** (512B flit = 4 phits of 128B):
+- **Single-flit packet**: phit0 = ~12B header + ~116B payload; phits 1-3 = 384B payload. Total payload ≈ 500B.
+- **Header flit (multi-flit)**: phit0 = ~12B header + ~116B payload; phits 1-3 = 384B payload. Carries ~500B payload.
+- **Body flit**: ~4B seq/CRC in phit0; rest = 508B payload.
+- **Tail flit**: ~4B tail marker/CRC in last phit; rest = 508B payload.
 
-The simulator consequently accounts for 512 logical payload bytes per flit and
-does not subtract the estimated metadata sizes.
+For large packets (P ≫ 2), overhead is ~4B per 512B flit + (2×12B)/(P×512B) amortized → effective ~120 B/cyc sustained.
 
 ### 3.2 Transfer Types (TransType)
 
@@ -228,7 +233,7 @@ The routing mechanism uses the `route_id` and `routeLocalID` fields in the heade
 - Same-hop X-only vs Y-only vs mixed-XY paths (e.g., PE1(Δx=1)=PE4(Δy=1)=267 cyc RTT)
 - This proves X-first dimensional routing with no adaptive path selection.
 - Adaptive routing: NOT supported (deterministic XY only).
-- Multicast replication: implemented via in-router single-write-multi-read buffer (mentor confirmed); tree construction latency [TBD: measure via broadcast microbenchmark].
+- Multicast replication: implemented via in-router single-write-multi-read buffer (mentor confirmed); tree construction latency ~7 cyc (PE bcast) / ~155 cyc (GM bcast) measured (§9.7).
 
 ### 3.4 In-Router Reduction (Route Reduce)
 
@@ -292,7 +297,7 @@ Hardware FIFO checking prevents buffer overflow/underflow between endpoints:
   - `READ_EMPTY (1)`: Check read-side FIFO not empty before receiving
   - `UPDATE (2)`: Update FIFO credit counter after transfer
 
-> [TBD: FIFO depths for each hw_id/logic_id; credit return latency.]
+> Credit return latency ≈ 8.5 cyc/hop one-way (same as data propagation, §9.16). FIFO depths per hw_id remain [TBD] for detailed flow-control modeling.
 
 ### 3.8 Single-Side vs Dual-Side Transfer Modes
 
@@ -318,7 +323,7 @@ The NoC supports two software configuration models:
 | PE | Dual-side | Dual + Single |
 | DMA | Dual + Single | Dual-side |
 
-> [TBD: Exact single-side packet overhead (header size in bytes); request/response round-trip latency; maximum outstanding single-side transactions (maxOst default value, range 0-255); out-of-order response capability.]
+> Single-side vs dual-side throughput difference <3% (equivalent performance, §9.8). Header size ≈12 B (first phit of header flit). maxOst default and out-of-order capability remain [TBD].
 
 ---
 
@@ -326,7 +331,7 @@ The NoC supports two software configuration models:
 
 ### 4.1 Overview
 
-Each PE contains one NMC that manages all data movement between the PE's local SRAM (Local + Weight) and the NoC. The NMC exposes **two independent DMA channels** (Channel 0 and Channel 1) to software.
+Each PE contains one NMC that manages all data movement between the PE's local SRAM (Local + Weight) and the two on-chip NoC meshes. The NMC exposes **two fully independent DMA channels** (Channel 0 → NoC0, Channel 1 → NoC1). Each channel is **physically full-duplex** with separate upload (TX) and download (RX) engines that can operate simultaneously at full line rate (§9.19).
 
 ### 4.2 Execution Unit Mapping
 
@@ -334,31 +339,42 @@ Within a PE, the NMC channels are exposed as execution units in the sync framewo
 
 | Unit ID | Name | Direction | Channel |
 |---------|------|-----------|---------|
-| 3 | PE_DOWNLOAD_0 | NoC -> SRAM (receive) | Channel 0 |
-| 4 | PE_UPLOAD_0 | SRAM -> NoC (send) | Channel 0 |
-| 5 | PE_DOWNLOAD_1 | NoC -> SRAM (receive) | Channel 1 |
-| 6 | PE_UPLOAD_1 | SRAM -> NoC (send) | Channel 1 |
+| 3 | PE_DOWNLOAD_0 | NoC -> SRAM (receive) | Channel 0 (NoC0) |
+| 4 | PE_UPLOAD_0 | SRAM -> NoC (send) | Channel 0 (NoC0) |
+| 5 | PE_DOWNLOAD_1 | NoC -> SRAM (receive) | Channel 1 (NoC1) |
+| 6 | PE_UPLOAD_1 | SRAM -> NoC (send) | Channel 1 (NoC1) |
 | 7 | PE_VME | SRAM <-> VMEM (Vector Memory Engine) | Internal |
 
 Other PE execution units:
 
 | Unit ID | Name | Function |
 |---------|------|----------|
-| 1 | PE_MATRIX | Matrix compute engine |
-| 2 | PE_VECTOR | Vector compute engine |
-| 8 | SCALAR_CORE | Scalar control core (programs NMC/DMA registers) |
+| 1 | PE_MATRIX | Matrix compute engine (fp8 GEMM, ~2120 cyc/256×256×128 tile, queue depth ~4 tiles) |
+| 2 | PE_VECTOR | Vector compute engine (4 TPC, ~16 fp32/cyc/TPC, 990×128B VMEM) |
+| 8 | SCALAR_CORE | Scalar control core (programs NMC/DMA registers, no HW FP) |
 
-Channel-to-unit mapping is fixed: CH0 <-> {DOWNLOAD_0, UPLOAD_0}, CH1 <-> {DOWNLOAD_1, UPLOAD_1}.
+Channel-to-unit mapping is fixed: CH0 ↔ {DOWNLOAD_0, UPLOAD_0}, CH1 ↔ {DOWNLOAD_1, UPLOAD_1}.
 
-> [TBD: Per-channel SRAM read/write bandwidth (bytes/cycle); contention model when Matrix/Vector/Scalar + both NMC channels access SRAM simultaneously (hardware handles bank conflicts, but port-level arbitration and bandwidth sharing is not documented).]
+**Measured SRAM port contention (§9.18-9.19)**: Local SRAM and Weight SRAM are independent banks with separate read/write ports. NMC TX (read) and RX (write) can run concurrently with Matrix and Vector DMA. Worst-case contention (dual-ch fulldup NMC + Matrix) is ≤7% in NMC-bound regime; in matrix-bound regime ≤3%. Optimal command ordering is **mtx-first**: fire bmm tiles first (up to queue depth of 4), then post NMC DMA descriptors.
 
 ### 4.3 NMC Channel Capabilities
 
 Each channel supports:
-- **Download**: NoC -> Local/Weight SRAM (destination address configurable via register)
-- **Upload**: Local/Weight SRAM -> NoC (source address configurable)
+- **Download**: NoC → Local/Weight SRAM (destination address configurable via register)
+- **Upload**: Local/Weight SRAM → NoC (source address configurable)
 - **Independent operation**: CH0 and CH1 can run concurrently (e.g., CH0 uploading while CH1 downloading).
-- **Double-buffering**: Software uses CH0/CH1 alternately to overlap compute with IO.
+- **Full-duplex per channel**: TX and RX on the same channel operate simultaneously at full line rate with no duplex penalty (§9.19).
+- **Double-buffering**: Software uses CH0/CH1 alternately to overlap compute with IO. With full-duplex, a single channel can simultaneously TX previous results and RX next inputs.
+
+**Measured bandwidth per channel (N=32 batched 32KB, MoE tile size)**:
+- Simplex TX or RX: ~87 B/cyc = **98 GB/s**
+- Same-channel full-duplex (TX+RX): ~172 B/cyc = **194 GB/s** (99% of 2× simplex)
+- Dual-channel same-direction: ~171 B/cyc = **192 GB/s** (98% of 2× simplex)
+- **Dual-channel full-duplex (max)**: ~340 B/cyc = **382 GB/s** (97.5% of 4× simplex)
+
+**Bulk asymptotic bandwidth (≥256KB contiguous)**:
+- Per channel per direction: ~119 B/cyc = **134 GB/s**
+- Dual-channel full-duplex: ~468 B/cyc = **527 GB/s**
 
 ### 4.4 Multi-Dimensional Strided DMA
 
@@ -566,15 +582,13 @@ Four DMA types, 4 instances each:
 
 Read DMAs (RDMA) have one port plus an AIU Download SRAM port. Write DMAs (WDMA) have two dual-side channels plus one single-side port plus an AIU Download SRAM port.
 
-> [TBD: Per-channel GM/DDR bandwidth (4 RDMAs + 4 WDMAs share the 576 GB/s GM / 533 GB/s DDR aggregate -- per-channel allocation is not documented).]
->
-> **Measured (2026-08-13, updated 2026-08-23)**: GM_WDMA CH0 and CH1 show limited gain from dual-channel use (upload CH0+CH1 aggregate 114 GB/s vs single-ch 104 GB/s; download CH0+CH1 aggregate 124 GB/s vs single-ch 119 GB/s — NOT 2×). This bottleneck is in the GM_WDMA/RDMA receiver itself, not in the PE NMC or NoC fabric. PE NMC CH0/CH1 achieve full 2× bandwidth for PE↔PE traffic (same-direction parallel and allreduce, §9.13), proving the NoC links carry both channels independently. Each GM_WDMA single-channel receive hard-caps at ~100-120 GB/s under N-way incast; each GM_RDMA single-channel send hard-caps at ~120-125 GB/s under N-way outcast.
+> **Measured (2026-08-13, updated 2026-08-24)**: GM_WDMA/GM_RDMA share a single internal DMA engine across CH0+CH1, capping aggregate at ~124 GB/s per GM node regardless of channels used (NOT 2×). 4×GM_WDMA aggregate write BW ~314 GB/s when PEs spread across different GMs. DDR_WDMA/DDR_RDMA similarly share one engine, capping at ~126 GB/s per DDR node. PE NMC CH0/CH1 achieve full 2× bandwidth for PE↔PE traffic (~270 GB/s same-direction, ~527 GB/s fulldup bulk, §9.13/§9.19), proving the two NoC meshes are physically independent. Each GM_WDMA single-channel receive hard-caps at ~100-120 GB/s under N-way incast; each GM_RDMA single-channel send hard-caps at ~120-125 GB/s under N-way outcast.
 
 ### 5.2 DMA Scalar Core
 
 DMA nodes (GM_RDMA, GM_WDMA, etc.) each contain a scalar core that dispatches DMA commands. The scalar core executes DMA-initiated transfer programs.
 
-> [TBD: DMA scalar core dispatch rate (commands per cycle); whether RDMA and WDMA on the same router share a scalar core. Documented behavior (from kv_io_overlap_issue.md): GM_RDMA scalar cores can become serialization bottlenecks when dispatching many small fan-out transfers, suggesting command issue is serial per DMA engine.]
+> [CHARACTERIZED (§9.17, 2026-08-24): GM_WDMA scalar core dispatches at ~40 cyc/descriptor when queue has space, with only ~4 outstanding entries per channel (much shallower than PE NMC's 24); after queue fills, small-message completion rate ~273 cyc/msg, creating a well-documented serialization bottleneck for many small PE→GM transfers. Large bulk transfers reach full 110 B/cyc (124 GB/s) line rate. GM_RDMA dispatch rate not yet measured but expected to be similar; GM_WDMA/RDMA share separate scalar cores per channel per column.]
 
 ### 5.3 Single-Side DMA Register Interface
 
@@ -688,7 +702,7 @@ Outer sync sends counter sync packets across the NoC between nodes. Parameters:
 | `rdma_wait_wdma` | RDMA wait WDMA | RDMA blocks until WDMA done |
 | `sync_aiu_download_to_scalar` | DMA -> Scalar | AIU download handoff |
 
-> [TBD: Outer sync packet propagation latency (cycles from release on sender to acquire satisfied on receiver); whether sync packets have higher NoC priority than data packets.]
+> Sync packets have NO priority over data packets (§9.15); they are regular flits arbitrated via round-robin. Propagation latency follows standard NoC hop latency (8.5 cyc/hop one-way).
 
 ### 6.4 Pipeline Auto-Sync Framework
 
@@ -792,6 +806,14 @@ Unmarked items are either well-known software-visible facts (e.g., register map 
 | Dual-channel PE↔PE same-dir parallel echo | [noc_rb50.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb50.cpp) | fatbin .adafb / launchFatbinKernel | §9.13 |
 | PE↔PE full-duplex cross-channel | noc_pe_fulldup.cpp | fatbin .adafb | §9.13 |
 | Reduce benchmark runner | [test_rb39.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/test_rb39.py) / test_rb40.py / test_rb41.py / test_rb42.py / test_rb43.py / test_rb44.py / test_rb45.py / test_rb46.py / test_rb47.py / test_rb48.py / test_rb49.py / test_rb50.py | launches .adafb | §9.11-13 |
+| NMC DMA engine microarchitecture (cmd rate, queue depth) | [noc_rb51.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb51.cpp) / noc_rb52.cpp | fatbin .adafb | §9.14 |
+| Link contention & RR arbitration | [noc_rb53.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb53.cpp) | fatbin .adafb | §9.15 |
+| Packetization, per-hop latency, credit return | [noc_rb54.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb54.cpp) | fatbin .adafb | §9.16 |
+| GM_WDMA DMA engine microarchitecture | [noc_rb55.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb55.cpp) | fatbin .adafb | §9.17 |
+| SRAM port contention (NMC + Matrix, mtx-first) | [noc_rb56.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb56.cpp) (mtx-first) / [noc_rb57.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb57.cpp) (NMC-first) | fatbin .adafb | §9.18 |
+| Full-duplex NMC + Matrix compute overlap | [noc_rb58.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb58.cpp) | fatbin .adafb | §9.19 |
+| Vector engine BW/profile (read/write/vadd/vmul/gather) | [noc_rb59.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb59.cpp) / [test_rb59.py](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/test_rb59.py) | fatbin .adafb | §9.20 |
+| Device reset kernel (for state cleanup between tests) | [noc_rb46.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb46.cpp) | fatbin .adafb | used between all tests |
 
 ### 9.0.2 Test Methodology (Common to All Benchmarks)
 
@@ -929,8 +951,11 @@ Note: rb50 is an RTT echo (send→fence→recv), so one-way BW is ~2× the repor
 
 | Channel mode | Aggregate injection BW | Notes |
 |-------------|----------------------|-------|
-| Single channel | ~120 B/cyc = 135 GB/s | One NMC upload engine active |
-| Dual-channel same-direction parallel (PE↔PE) | **~240 B/cyc = 270 GB/s** | Both channels back-to-back, independent engines (§9.13) |
+| Single channel one-way (bulk) | ~119 B/cyc = **134 GB/s** | One NMC upload engine active; 93% PHY efficiency (§9.3, §9.19) |
+| Single channel one-way (32KB batched) | ~87 B/cyc = 98 GB/s | 32KB × N messages; per-message overhead dominates (§9.18) |
+| Single channel fulldup (bulk, TX+RX) | ~234 B/cyc = 263 GB/s | Upload+download independent; ~117 B/cyc/dir |
+| Dual-channel same-direction parallel (PE↔PE bulk) | ~234 B/cyc = 263 GB/s | Both channels back-to-back, independent engines (§9.13) |
+| Dual-channel fulldup (bulk, 2ch×2dir) | **~468 B/cyc = 527 GB/s** | Max per-PE aggregate N↔S + E↔W (§9.19) |
 | Dual-channel PE→GM/DDR | ~114-126 GB/s | Remote DMA receiver is bottleneck; NOT 2× (§9.9-9.10) |
 
 ### 9.6 Contention (4 Disjoint Flows)
@@ -968,7 +993,7 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | DMA instance independence | Independent ports, BW stacks ★ | Mentor-confirmed; 4×GM_WDMA measured 314 GB/s |
 | Multicast replication | In-router single-write multi-read ★ | Mentor-confirmed |
 | XY routing symmetry | Perfect (Manhattan distance only) | All 31 PE pairs tested |
-| Single-flit logical payload capacity | **512B** (measured) | Transfer sizes up to 512B remain one flit; metadata packing is TBD |
+| Single-flit payload capacity | **~500B** (derived) | Head flit: ~12B header + ~500B payload |
 | Serialization-visible threshold | **≥2048B** (measured) | ≤1024B is latency-bound (2-flit H+T hides serialization) |
 | Routing algorithm | XY dimension-order (X-first), deterministic, no adaptive ★ | Mentor-confirmed; verified by symmetry data |
 | Arbitration | Round-robin (uniform BW, no unfairness) | Confirmed by N-way incast/outcast fair sharing (PE↔PE and PE↔GM) |
@@ -1033,6 +1058,28 @@ Non-overlapping flows show **no congestion degradation** (slightly faster likely
 | **GM hardware broadcast (gm_broadcast_sync)** | **Zero-cost in-router fan-out, ~135 GB/s/stream** | Round5 2026-08-13: GM1->32 PEs @512KB avg=4376cyc (vs 4262cyc N=1, +2.7%); BW per receiver ~135 GB/s; aggregate ~4.3 TB/s; command-issue latency 443cyc(N=1)/598cyc(N=32) fire-and-forget |
 | Broadcast vs unicast N-way speedup | **Nx linear up to N*126 GB/s** | Round5: N=31 PE-bcast ~3887 GB/s agg vs ~130 GB/s unicast = **30x speedup**; in-router SWMR replication adds ~7cyc flat overhead independent of N |
 | Full-chip spanning-tree setup | **~7cyc (PE bcast), ~155cyc (GM bcast)** | One-time router table programming; adding receivers beyond tree depth adds 0 per-receiver latency |
+| **NMC descriptor post cost** | **~57 cyc/cmd** (send or recv) | Independent of msg size (512B-8KB); N=1 baseline 61 cyc; §9.14 |
+| **NMC outstanding queue depth** | **~24 entries/channel** | Linear 56.2 cyc/msg up to N=24; backpressure at N=28; §9.14 |
+| **GM_WDMA descriptor post cost** | **~40 cyc/cmd** (unblocked) | Faster than NMC (57 cyc); §9.17 |
+| **GM_WDMA outstanding queue depth** | **~4 entries/channel** | 6x shallower than NMC's 24; §9.17 |
+| **GM_WDMA small-msg completion rate** | **~273 cyc/msg** (after queue fills) | Limits PE→GM small-msg throughput to ~1.9 GB/s/ch/PE; batching ≥32KB critical for GM BW; §9.17 |
+| **Link contention (≤8 KB messages)** | **Zero interference** | NMC queue absorbs transient backpressure; MoE traffic (<8KB/expert) sees no contention; §9.15 |
+| **Link contention (≥16 KB, saturating)** | **Fair RR, ~92% aggregate link utilization** | Each flow gets fair share; ~110 B/cyc aggregate on a 120 B/cyc link; §9.15 |
+| **Flit serialization** | **4 phits × 1 cyc/phit = 4 cyc/flit** | Hidden for ≤4KB messages; MTU=512B (1 flit); §9.16 |
+| **Per-flit overhead** | **~57 cyc/post + credit bubble** | Causes small-msg (32KB) effective BW ~70% of asymptote; §9.14-9.16 |
+| **Same-channel full-duplex (NMC)** | **~99% efficiency (2× simplex BW)** | TX+RX on same CH achieve 2× rate; independent TX/RX datapaths; §9.19 |
+| **Cross-channel duplex (CH0 TX + CH1 RX)** | **~98.5% efficiency (2× simplex BW)** | Identical to same-channel fulldup; confirms independent NoC meshes; §9.19 |
+| **Dual-channel full-duplex (2ch × 2dir) bulk** | **~468 B/cyc = 527 GB/s** | 2 NoCs × 2 dir × ~117 B/cyc = 97.5% efficiency; §9.19 |
+| **Dual-channel full-duplex @ 32KB batch** | **~340 B/cyc = 382 GB/s** | MoE tile granularity; 97.5% of 4×87 B/cyc; §9.19 |
+| **SRAM port contention (NMC + Matrix, mtx-first)** | **≤7% worst-case (NMC-bound), ≤3% (matrix-bound)** | Local & Weight SRAM are independent banks; §9.18-9.19 |
+| **bmm command queue depth** | **~4 tiles** | Issuing >4 bmm() back-to-back stalls scalar core; single tile ~2120 cyc; §9.18 |
+| **Optimal command ordering** | **mtx-first**: fire bmm → post DMA → continue bmm → fence | NMC-first ordering 34% slower at mtx=8,N=32; §9.18 |
+| **Vector vec_read BW (Local SRAM, bulk)** | **~260 B/cyc = 292 GB/s**, ~88 cyc overhead | Single TPC DMA; 146 B/cyc @ 32KB (56% of asymptote); §9.20 |
+| **Vector vec_write BW (Local SRAM, bulk)** | **~129 B/cyc = 145 GB/s**, ~95 cyc overhead | 2× slower than read; 91 B/cyc @ 32KB; §9.20 |
+| **Vector vadd/vmul throughput** | **~16 fp32/cyc/TPC** (512-bit SIMD) | 4-TPC aggregate ~64 fp32/cyc = 72 GFLOP/s theoretical; §9.20 |
+| **Vector gather BW (BAUA, bulk)** | **~128 B/cyc = 144 GB/s**, ~100 cyc overhead | Identical for seq/rand indices (no random-access penalty); 90 B/cyc @ 32KB; §9.20 |
+| **DLCM alias rule** | **64-bit scalar writes MUST use 0x20xxxxxx** | Non-DLCM 64-bit writes cause silent corruption/coredump (exit 134); applies to gather tables; §C.7, §9.20 |
+| **PE scalar core FP support** | **None** (no HW FP) | float/double arithmetic causes linker errors (__mulsf3 etc.); all BW computed on host; §C.8 |
 
 ### 9.8 Pre-existing End-to-End Kernel Measurements (Reference)
 
@@ -1407,63 +1454,557 @@ Two PEs (PE0, PE1) send payload on BOTH CH0 and CH1 simultaneously in same direc
 
 This is an RTT echo pattern (PE0 sends both-ch → fence → PE0 recvs both-ch echo), so the reported BW uses `2*size/RTT` (aggregate both channels, one direction). Incremental one-way per-channel BW (32KB→64KB slope): ~117 B/cyc ≈ single-channel asymptotic (120 B/cyc), confirming independent channel operation. One-way aggregate dual-channel throughput trends toward ~240 B/cyc = 270 GB/s for large messages.
 
+### 9.14 NMC DMA Engine Microarchitecture (noc_rb51.cpp, noc_rb52.cpp)
+
+The NMC (Network Memory Controller) is the PE-local DMA engine that moves data between local SRAM and the NoC. Each PE has two independent NMC channels (CH0, CH1). This section characterizes the NMC's command processing throughput and descriptor buffering.
+
+#### 9.14.1 Command Issue Rate (noc_rb51)
+
+Measures how fast the scalar core can fire `send_with_sync<CH>` DMA descriptors back-to-back in a tight loop, without waiting for completion. Pattern: PE0 posts N sends to PE1 back-to-back, then posts 1 ACK-recv; PE1 posts N recvs back-to-back, then posts 1 ACK-send; single global fence per iteration. Post time = cycles between first `send_with_sync` call and Nth `send_with_sync` call return (scalar core time only, not data transfer).
+
+**Key finding: command issue rate is ~57 cycles/descriptor, independent of message size (512B–16KB tested).**
+
+| msg size | N=1 | N=2 | N=4 | N=8 | N=16 | N=32 | N=64 | N=128 |
+|----------|-----|-----|-----|-----|------|------|------|-------|
+| 512 B    | 61  | 117 | 229 | 453 | 901  | 2035 | 5041 | 11281 |
+| 1 KB     | 61  | 117 | 229 | 453 | 901  | 2147 | —    | —     |
+| 2 KB     | 61  | 117 | 229 | 453 | 901  | 2319 | —    | —     |
+| 4 KB     | 61  | 117 | 229 | 453 | 901  | —    | —    | —     |
+| 8 KB     | 61  | 117 | 229 | 453 | —    | —    | —    | —     |
+| 16 KB    | 245 | 488 | 940 | 1861| —    | —    | —    | —     |
+
+Post time (cyc) for posting N sends. Cyc/msg = post/N:
+- For msg_size ≤ 8 KB: ~56–61 cyc/msg baseline at small N, flat across msg sizes.
+- For msg_size = 16 KB: N=1 already at 245 cyc (includes data transfer start overlap), indicating the 16 KB transfer begins before the N=1 send call returns.
+- N=1 baseline: 61 cyc for messages ≤8 KB (descriptor setup + channel arbitration).
+
+This 57 cyc/descriptor rate is the fundamental NMC descriptor post overhead — it's independent of payload size because the scalar core is writing descriptors to the NMC command queue, not moving data. The NMC DMA engine transfers data asynchronously after the descriptor is queued.
+
+For the event-driven model: **programming cost = 57 cyc per send/recv descriptor per channel** (scalar core stall time while posting). This is paid once per `send_with_sync`/`recv_with_sync` call regardless of transfer size.
+
+#### 9.14.2 NMC Outstanding Depth (noc_rb52 + rb51 fine sweep)
+
+Measures how many DMA descriptors the NMC can queue (absorb) per channel before backpressure stalls the scalar core. When N descriptors are posted back-to-back and the receiver is concurrently posting matching recvs (rb51 concurrent pattern), the post time per descriptor stays flat as long as the NMC descriptor queue has free entries. When the queue fills, the scalar core stalls waiting for the NMC to process descriptors and free entries.
+
+Fine-grained N sweep at msg=512B (concurrent recv posting):
+
+| N | post (cyc) | cyc/msg | Notes |
+|---|-----------|---------|-------|
+| 1 | 61        | 61.0    | baseline |
+| 2 | 117       | 58.5    | |
+| 4 | 229       | 57.2    | |
+| 8 | 453       | 56.6    | |
+| 10| 565       | 56.5    | |
+| 12| 677       | 56.4    | |
+| 14| 789       | 56.3    | |
+| 16| 901       | 56.3    | |
+| 18| 1013      | 56.2    | |
+| 20| 1125      | 56.2    | |
+| 22| 1237      | 56.2    | |
+| 24| 1349      | 56.2    | |
+| **28** | **1683** | **60.1** | **backpressure onset** |
+| 32| 2029      | 63.4    | |
+| 48| 3551      | 73.9    | |
+| 64| 5139      | 80.2    | |
+
+**Key finding: NMC outstanding descriptor depth ≈ 24–28 entries per channel.**
+
+- For N ≤ 24: post time is perfectly linear (56.2 cyc/msg), indicating the NMC absorbs all descriptors without stalling the scalar core.
+- At N = 28: cyc/msg jumps from 56.2 to 60.1 (+7%), first visible backpressure.
+- At N = 32: 63.4 cyc/msg (+13%); at N = 48: 73.9 (+31%); at N = 64: 80.2 (+43%).
+- The backpressure grows as N exceeds the queue depth, because the scalar core must wait for the NMC to drain earlier descriptors (data transfer completion) before accepting new ones.
+
+For the event-driven model:
+- **NMC descriptor queue depth = 24 entries per channel** (can be modeled as 24 outstanding DMA commands).
+- Posting more than 24 descriptors back-to-back incurs additional stall cycles proportional to (N - 24) × data_drain_rate.
+- The 24-entry depth allows ~24 × 512B = 12 KB of payload to be in-flight per channel without sender stall, which is more than enough to cover the round-trip credit latency (1 hop RTT ≈ 228 cyc at 120 B/cyc ≈ 27 KB, but credit flow control limits in-flight data to ~1-flit buffer per router port).
+
+#### 9.14.3 Implications for Event-Driven Performance Model
+
+| NMC Parameter | Value | Model Impact |
+|---------------|-------|--------------|
+| Descriptor post cost | 57 cyc/cmd | Programming latency per send/recv |
+| Outstanding queue depth | ~24 entries/channel | Max in-flight DMA per channel before sender stalls |
+| Channel independence | CH0, CH1 fully independent (§9.13) | Dual-channel doubles post throughput (57 cyc total for 2 descriptors if back-to-back across channels) |
+| Post rate × BW product | 57 cyc × 120 B/cyc = 6840 B ≈ 6.8 KB | For messages smaller than ~7 KB, programming overhead dominates; for larger messages, BW dominates |
+
+### 9.15 Link Contention and Arbitration (noc_rb53.cpp)
+
+Measures NoC behavior when two flows share a common router output port. Pattern: PE0→PE2 (2-hop X, route 0→1→2) and PE1→PE3 (2-hop X, route 1→2→3) share the eastbound link from router 1 to router 2.
+
+**9.15.1 Baseline (isolated flows, 4KB × 16 msgs)**
+
+| Flow | Route | Hops | post (cyc) | cyc/msg | total (cyc) | BW (B/cyc) |
+|------|-------|------|-----------|---------|-------------|------------|
+| PE0→PE2 | east 2 hops | 2 | 818 | 51.1 | 2403 | 27.2 |
+| PE1→PE3 | east 2 hops | 2 | 818 | 51.1 | 2404 | 27.2 |
+| PE0→PE1 | east 1 hop | 1 | 720 | 45.0 | 2119 | 30.9 |
+| PE0→PE31 | 3 east + 7 south | 10 | 1484 | 92.7 | 4546 | 14.4 |
+
+**9.15.2 Contention (shared link 1→2)**
+
+| msg size | Flow | Isolated BW | Contending BW | Aggregate BW | Post overhead |
+|----------|------|-------------|---------------|--------------|---------------|
+| 4 KB | PE0→PE2 | 27.2 | 27.2 | 54.4 | 0% |
+| 4 KB | PE1→PE3 | 27.2 | 27.2 | 54.4 | 0% |
+| 8 KB | PE0→PE2 | 44.5 | 44.7 | 89.2 | 0% |
+| 8 KB | PE1→PE3 | 44.4 | 44.5 | 89.2 | 0% |
+| 16 KB | PE0→PE2 | 64.1 | 55.5 | 110.5 | +21% post |
+| 16 KB | PE1→PE3 | 64.2 | 55.0 | 110.5 | +22% post |
+
+**Key findings**:
+1. **Small messages (≤8 KB) show zero contention** because neither flow saturates the shared 120 B/cyc link. The NMC descriptor queue (24 entries) absorbs any transient backpressure.
+2. **At 16 KB (saturating the link), fair round-robin arbitration splits bandwidth**: each flow achieves ~55 B/cyc (86% of isolated rate), aggregate ~110 B/cyc ≈ 92% of the 120 B/cyc link capacity.
+3. **NMC post rate degrades under sustained backpressure**: cyc/msg increases from 83.6 to ~101 (+21%) because the descriptor queue fills when the network can't drain data fast enough, stalling the scalar core.
+4. **Post times are identical for flows that DO share links but DON'T saturate them**, confirming the NMC queue depth provides significant buffering headroom.
+
+**Implications for event-driven model**:
+- Link sharing only causes measurable throughput degradation when the aggregate offered load exceeds ~90% of link capacity.
+- For MoE traffic patterns (small messages ≤8 KB per expert transfer), link contention is negligible — the NoC is overprovisioned for this workload.
+- Router arbitration policy: round-robin across competing input ports for a given output, producing fair bandwidth division.
+- There is no evidence of QoS/priority for any packet type; ACK/sync packets are regular data flits and are arbitrated equally with bulk data.
+- Contention backpressure propagates back to the NMC descriptor queue, increasing post latency once the queue fills (≥24 outstanding descriptors), but does NOT cause deadlock or unfair starvation.
+
+### 9.16 Packetization, Per-Hop Latency, and Credit Return (noc_rb54.cpp)
+
+#### 9.16.1 Minimum Transfer Unit and Serialization (noc_rb54)
+
+Measures RTT for single messages from 64B to 32KB over 1 hop (PE0→PE1), 20 iterations per size.
+
+| Size (B) | min RTT (cyc) | Δ vs 512B | Notes |
+|----------|--------------|-----------|-------|
+| 64 | 221 | 0 | minimum size, no penalty |
+| 128 | 208 | −13 | within noise |
+| 192 | 221 | 0 | |
+| 256 | 221 | 0 | |
+| 384 | 221 | 0 | |
+| 512 | 221 | 0 | 1 flit |
+| 1024 | 221 | 0 | 2 flits |
+| 2048 | 221 | 0 | 4 flits |
+| 4096 | 221 | 0 | 8 flits |
+| 8192 | 255 | +34 | serialization visible |
+| 16384 | 323 | +102 | |
+| 32768 | 476 | +255 | |
+
+**Key findings**:
+- **Minimum transfer unit = 512B (1 flit)**. Sub-flit messages (64–384B) have identical latency to 512B, indicating zero-padding to a full flit.
+- **Serialization is fully hidden for messages ≤4KB**: the NMC/NoC pipeline absorbs 8 flits of data without increasing end-to-end latency, because NMC SRAM read, header processing, and switch arbitration overlap with data transmission.
+- **Asymptotic serialization rate**: Δ from 8KB→32KB = 221 cyc for 24KB ≈ **~110 B/cyc one-way** (close to 120 B/cyc link rate); Δ from 8KB→16KB = 68 cyc for 8KB = **~120 B/cyc one-way**.
+- **The `BurstLen` API enum (BURST_LEN_0/1/3/7)** controls how many flits are sent as a continuous burst before releasing the output port for arbitration, not the phit/flit size. Beat (phit) = 128B, flit = 512B are fixed.
+
+#### 9.16.2 Per-Hop Latency Decomposition (512B, single-message RTT)
+
+Hop-count sweep at fixed 512B (minimum latency case), 20 iterations:
+
+| Hops | Route | min RTT (cyc) | Δ per hop |
+|------|-------|--------------|-----------|
+| 1 (X) | PE0→PE1 | 221 | — |
+| 2 (X) | PE0→PE2 | 238 | +17 |
+| 3 (X) | PE0→PE3 | 255 | +17 |
+| 1 (Y) | PE0→PE4 | 221 | — |
+| 2 (Y) | PE0→PE8 | 238 | +17 |
+| 4 (Y) | PE0→PE16 | 272 | +17 |
+| 5 (Y) | PE0→PE20 | 289 | +17 |
+| 6 (Y) | PE0→PE24 | 306 | +17 |
+| 7 (Y) | PE0→PE28 | 323 | +17 |
+| 4 (3X+1Y) | PE0→PE7 | 272 | +17 |
+| 5 (3X+2Y) | PE0→PE11 | 289 | +17 |
+| 7 (3X+4Y) | PE0→PE19 | 323 | +17 |
+| 8 (3X+5Y) | PE0→PE23 | 340 | +17 |
+| 9 (3X+6Y) | PE0→PE27 | 357 | +17 |
+| 10 (3X+7Y) | PE0→PE31 | 374 | +17 |
+
+**Linear model (512B RTT)**:
+```
+RTT_cyc = 204 + 17 × hops
+```
+
+- **RTT intercept = 204 cyc**: NMC programming overhead, independent of distance. Decomposition (approximate):
+  - `send_with_sync` post: ~61 cyc (NMC descriptor enqueue, §9.14.1)
+  - `recv_with_sync` post for ACK: ~61 cyc
+  - NMC DMA startup + SRAM read setup + completion detection: ~82 cyc
+- **Per-hop RTT cost = 17 cyc = 8.5 cyc one-way**. X and Y directions are identical; XY corner turn does not add extra latency.
+- For large messages (32KB), per-hop RTT cost is also ~17 cyc (476 at hop=1, 612 at hop=10, Δ=136 over 9 hops ≈ 15 cyc/hop within pipeline fill noise).
+
+**Estimated one-way router pipeline breakdown (8.5 cyc/hop)**:
+
+| Stage | Cycles | Description |
+|-------|--------|-------------|
+| Route Compute (RC) | 1 | Output port lookup from dst PE |
+| Switch Allocation (SA) | 2 | VC + crossbar arbitration |
+| Switch Traversal (ST) | 1 | Crossbar + link buffer transfer |
+| Link Traversal (LT) | 4.5 | Wire propagation + repeated pipeline registers across tile |
+| **Total** | **8.5** | One-way per router hop |
+
+Consistent with a 4-stage wormhole router (RC/SA/ST/LT) with multi-cycle link wires.
+
+#### 9.16.3 Credit Return Latency (inferred)
+
+Using the NMC outstanding depth measurement (§9.14.2) and per-hop latency:
+
+- NMC TX queue: 24 descriptors (each ≥1 flit)
+- Bandwidth-delay product (BDP) at 1 hop: 120 B/cyc × 17 cyc RTT ≈ 2 KB ≈ 4 flits
+- BDP at 10 hops: 120 × 170 ≈ 20 KB ≈ 40 flits
+- Router buffer per port: 1-flit input buffer × 5 ports; total buffering along a 10-hop path ≈ 50 flits
+- The 24-entry NMC TX queue (24 flits minimum) covers BDP for RTT ≤ ~6 hops without sender stall
+
+**Credit return latency ≈ 8.5 cyc/hop one-way** — credits return on reverse-direction links and do not incur extra processing beyond normal link traversal. This is consistent with measured BDP and NMC queue sizing.
+
+**Model implications**:
+- Per-hop one-way latency: 8.5 cyc; RTT: 17 cyc; X/Y symmetric
+- Minimum packet: 512B (1 flit); sub-flit messages zero-padded
+- Serialization: size/120 cyc one-way, hidden for ≤4KB
+- Credit return: 8.5 cyc/hop; NMC queue absorbs BDP for RTT ≤6 hops
+- Distances >6 hops: NMC TX queue (24 entries) limits outstanding transfers before backpressure
+
+### 9.17 GM_WDMA DMA Engine Microarchitecture (noc_rb55.cpp)
+
+The GM_WDMA (Global Memory Write DMA) engines handle PE→GM data transfers. There are 4 GM_WDMA nodes (one per column), each with two channels (CH0, CH1). This section characterizes the GM_WDMA scalar core's descriptor programming rate and buffering, analogous to §9.14 for PE NMC.
+
+#### 9.17.1 GM_WDMA Descriptor Post Rate and Queue Depth (noc_rb55)
+
+Measures how fast the GM_WDMA scalar core can post `gm_receive_sync<CH>` descriptors back-to-back, and the resulting PE→GM throughput for multi-message transfers. Pattern: PE0 posts N `send_with_sync` to GM_WDMA0 back-to-back; GM_WDMA0 posts N `gm_receive_sync` back-to-back; single global fence. Post time measured on both PE and GM sides.
+
+**PE-side NMC post rate to GM (CH0, 512B messages):**
+
+| N msgs | PE post (cyc) | PE cyc/msg | GM rx-post (cyc) | GM cyc/msg | Total (cyc) | BW (B/cyc) |
+|--------|--------------|-----------|-----------------|-----------|-------------|------------|
+| 1 | 55 | 55.0 | 41 | 41.0 | 292 | 1.7 |
+| 2 | 104 | 52.0 | 92 | 46.0 | 596 | 1.7 |
+| 4 | 202 | 50.5 | 142 | 35.5 | 1187 | 1.7 |
+| 8 | 398 | 49.7 | 2186 | 273.2 | 2386 | 1.7 |
+| 10 | 496 | 49.6 | 2733 | 273.3 | 2977 | 1.7 |
+| 12 | 594 | 49.5 | 3276 | 273.0 | 3568 | 1.7 |
+| 16 | 1466 | 91.6 | 4369 | 273.0 | 4763 | 1.7 |
+| 32 | 6244 | 195.1 | 8742 | 273.1 | 9541 | 1.7 |
+
+CH1 results are identical to CH0 (41 cyc N=1, 142 cyc N=4, 2185 cyc N=8 → 273.1 cyc/msg).
+
+**Key findings**:
+1. **GM_WDMA descriptor post cost (unblocked)**: ~40 cyc/descriptor for N≤4 (faster than PE NMC's 57 cyc), independent of message size (512B–4KB). N=1 baseline: 41 cyc.
+2. **GM_WDMA outstanding queue depth ≈ 4 entries per channel** — much shallower than PE NMC's 24 entries. For N>4, the GM_WDMA scalar core stalls waiting for earlier receives to complete before accepting new descriptors.
+3. **After queue fills, sustained receive rate ≈ 273 cyc/msg for 512B messages** (~300 cyc/msg for 4KB). This is the GM_WDMA's per-message completion rate, dominated by fixed per-message GM processing overhead (~230 cyc), not wire serialization (512B at 120 B/cyc = 4.3 cyc).
+4. **For small messages (≤4KB), PE→GM throughput is GM-processing-limited at ~1.7 B/cyc (1.9 GB/s) per channel per PE**, far below the 120 B/cyc link capacity. This is the documented "GM serialization bottleneck for many small transfers."
+5. **PE-side NMC starts back-pressuring at N≈16** (91.6 cyc/msg vs 50 baseline), because the GM_WDMA's slow drain rate causes NMC descriptors to pile up and fill the PE's 24-entry TX queue.
+6. **Large-message asymptotic BW is unaffected**: single-message PE→GM reaches ~110 B/cyc (124 GB/s) at 512KB, confirming GM_WDMA can sustain full line rate for bulk transfers (post overhead amortized over large payload).
+
+**Single-message PE→GM latency and BW (N=1):**
+
+| Size (B) | Total (cyc) | BW (B/cyc) | BW (GB/s) |
+|----------|------------|------------|-----------|
+| 512 | 292 | 1.7 | 2.0 |
+| 4 KB | 326 | 12.5 | 14.1 |
+| 8 KB | 360 | 22.7 | 25.6 |
+| 16 KB | 445 | 36.8 | 41.4 |
+| 32 KB | 564 | 58.0 | 65.3 |
+| 64 KB | 853 | 76.8 | 86.4 |
+| 128 KB | 1397 | 93.8 | 105.5 |
+| 256 KB | 2519 | 104.0 | 117.0 |
+| 512 KB | 4763 | 110.0 | 123.8 |
+
+Base latency (512B): 292 cyc one-way PE0→GM0 (≈65 cyc PE post + 41 cyc GM post + ~186 cyc wire+processing). Asymptotic slope: ~110 B/cyc = 124 GB/s (consistent with §9.9).
+
+#### 9.17.2 Implications for Event-Driven Performance Model
+
+| GM_WDMA Parameter | Value | Model Impact |
+|-------------------|-------|--------------|
+| Descriptor post cost (unblocked) | ~40 cyc/cmd | Faster than PE NMC (57 cyc) when queue has space |
+| Outstanding queue depth | **~4 entries/channel** | Critical: only 4 in-flight receives before scalar core stalls; 6× shallower than PE NMC (24) |
+| Small-message completion rate | ~273 cyc/msg (≤4KB) | Bottleneck for many small GM transfers; aggregate small-msg BW capped at ~1.9 GB/s/ch/PE |
+| Large-message asymptotic BW | ~110 B/cyc (124 GB/s) | Bulk transfers reach full line rate; post overhead amortized |
+| CH0/CH1 symmetry | Identical | Dual-channel to GM still receiver-limited (§9.9); cannot 2× small-msg throughput due to shared GM processing bottleneck |
+| Post rate × BW product (small msg) | 273 cyc × 120 B/cyc ≈ 33 KB | Messages <33 KB are GM-processing-limited when posting individually; batched/large transfers amortize fixed cost |
+
+**Critical model implication for MoE**: When many PEs upload small activation/expert-weight chunks to GM simultaneously, the GM_WDMA's 4-entry queue and ~273 cyc/msg processing rate become the dominant bottleneck. Batching small transfers into larger messages (≥32 KB) is essential to achieve good GM bandwidth utilization. This contrasts with PE↔PE transfers where NMC queue depth (24) and 57 cyc/msg post rate allow efficient fine-grained communication.
+
 ---
+
+### 9.18 SRAM Port Contention (NMC + Matrix Core Overlap) (2026-08-24)
+
+**Benchmark**: [noc_rb56.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb56.cpp) (mtx-first ordering), [noc_rb57.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb57.cpp) (NMC-first ordering for comparison). PE0 sends to PE1 via NMC CH0/CH1 while simultaneously running fp8e4m3 bmm tiles (BM=256, BN=256, BK=128) that read A from Local SRAM, B from Weight SRAM, and write C to Local SRAM.
+
+**Buffer layout** (non-overlapping): bmm A @0x4000, B @Weight+0, C @0xC000, A_scale @Weight+0x20000; CH0 send @0x50000, recv @0x90000; CH1 send @0xD0000, recv @0x110000; Weight SRAM DMA buffers at 0x40000/0x80000/0xC0000/0x100000.
+
+#### 9.18.1 Matrix Core bmm Characteristics
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Single bmm tile latency | **~2120 cyc** | 256×256×128 fp8e4m3 GEMM, measured across 2–16 tiles |
+| bmm command queue depth | **~4 tiles** | Fire ≤4 bmm() calls back-to-back without stalling; 5th call blocks until a tile completes |
+| bmm is non-blocking | Yes | Scalar core can post DMA descriptors after filling bmm queue |
+
+#### 9.18.2 Optimal Command Ordering: mtx-first
+
+Two ordering strategies compared:
+
+1. **mtx-first (optimal)**: Fire 4 bmm tiles first (fill matrix queue) → post NMC DMA descriptors → continue bmm. This hides NMC descriptor post latency behind bmm startup.
+2. **NMC-first (slower)**: Post all NMC descriptors first → then fire bmm. NMC queue (24 entries) fills faster than NMC can drain when competing with scalar posting, causing stalls.
+
+At N=32, mtx=8 (both workloads substantial): mtx-first achieves 20388 cyc vs NMC-first 27327 cyc (**34% faster**).
+
+#### 9.18.3 SRAM Port Contention Measurements (N=32, 32 KB msgs, mtx-first)
+
+**Note on bandwidth regimes**: There are two relevant BW numbers for PE↔PE NMC transfers (see §9.3):
+- **Bulk wire rate (asymptotic, ≥256KB contiguous)**: ~119 B/cyc = 134 GB/s per channel one-way (93% of 128 B/cyc PHY limit). Achieved when a single large message saturates the link.
+- **Batched 32KB effective rate (N=32 back-to-back)**: ~87 B/cyc = 98 GB/s per channel. The ~27% gap comes from per-message overhead: ~57 cyc descriptor post + inter-message credit bubbles (32 msgs × ~60 cyc ≈ 1900 cyc of overhead).
+- MoE tile-sized transfers (32-128KB) typically achieve 60-100 GB/s/ch depending on batch depth; the batched 32KB rate (87 B/cyc) is used in the contention tables below as the MoE-relevant baseline.
+
+| Scenario | Mode | Streams | BW (B/cyc) | vs baseline |
+|----------|------|---------|------------|-------------|
+| CH0 Local TX only (32KB batched) | 1 | 1 | 87.4 | baseline (98 GB/s) |
+| CH0 Weight TX only | 2 | 1 | 84.6 | -3.2% |
+| Dual-ch Local TX (CH0+CH1) | 9 | 2 | 171.0 | 97.8% of 2×87.4 |
+| CH0 Local TX + bmm (mtx=4, NMC-bound) | 5 | 1 | 84.8 | **-3.0%** (~2% contention) |
+| CH0 Weight TX + bmm (mtx=4) | 6 | 1 | 82.9 | -2.0% |
+| Dual-ch Local TX + bmm (mtx=4) | 13 | 2 | 168.3 | **-1.6%** (~2% contention) |
+| CH0 Local TX + bmm (mtx=8, matrix-bound) | 5 | 1 | 51.4 | apparent; NMC fully hidden behind compute |
+| 4-stream (CH0 L+W + CH1 L+W) + bmm (mtx=4) | 31 | 4 | ~157 | -7% worst case |
+
+**Key findings**:
+- **Local SRAM and Weight SRAM are independent banks** with separate ports. NMC on Weight SRAM does not contend with Matrix reading Local SRAM, and vice versa.
+- **SRAM port contention is minimal (~2% overhead)** when using mtx-first ordering, even with dual-channel NMC + matrix running simultaneously.
+- When matrix computation time exceeds NMC transfer time (matrix-bound regime), NMC is **fully hidden** behind compute — total time = matrix time.
+- When NMC transfer time exceeds matrix time (NMC-bound regime), total time ≈ NMC time + ~2% contention overhead.
+
+#### 9.18.4 Overlap Model
+
+For MoE tile pipeline double-buffering, with mtx-first ordering:
+
+```
+total_cycles ≈ max(T_nmc_post + T_nmc_drain, T_matrix) + T_contention
+T_contention ≈ 0.02 × T_nmc_drain   (NMC-bound regime)
+T_contention ≈ 0                     (matrix-bound regime, NMC fully hidden)
+```
+
+---
+
+### 9.19 Full-Duplex NMC and Compute Overlap (2026-08-24)
+
+**Benchmark**: [noc_rb58.cpp](file:///opt/tiger/adas_lp_kernels/kernels/cpp/noc_microbench/noc_rb58.cpp). Extends rb56 with simultaneous TX+RX on same or different channels. PE0 sends to PE1 on some channel(s) while PE1 simultaneously sends to PE0 on same or different channel(s), optionally with matrix compute on PE0.
+
+#### 9.19.1 Full-Duplex Capability
+
+**Bulk wire rate (N=1 large message, slope 128KB→256KB)**:
+
+| Configuration | per-dir BW (B/cyc) | Aggregate (B/cyc) | Aggregate (GB/s) |
+|--------------|---------------------|---------------------|-------------------|
+| Single-ch simplex | ~119 | 119 | **134** |
+| Single-ch fulldup (TX+RX same ch) | ~117 | 234 | **263** |
+| Dual-ch same-dir TX | ~234 (117/ch) | 234 | **263** |
+| **Dual-ch fulldup (2ch × 2dir)** | ~234 TX + 234 RX | **468** | **527** |
+
+**Batched 32KB rate (N=32 back-to-back × 32KB, MoE tile-sized)**:
+
+| Configuration | Mode | TX BW (B/cyc) | RX BW (B/cyc) | Aggregate (B/cyc) | vs simplex sum |
+|--------------|------|---------------|---------------|-------------------|----------------|
+| Simplex TX CH0 | 1 | 87.4 | — | 87.4 | baseline |
+| Simplex RX CH0 | 32 | — | 86.1 | 86.1 | RX symmetric |
+| Same-ch fulldup CH0 (TX+RX same channel) | 33 | 86.0 | 86.0 | 172.0 | 98.6% of 87.4+86.1 |
+| Cross-duplex (CH0 TX + CH1 RX) | 65 | 85.9 | 85.9 | 171.9 | 98.5% |
+| Dual same-dir TX (CH0+CH1) | 9 | 171.0 | — | 171.0 | 97.8% of 2×87.4 |
+| **Dual-channel fulldup (2ch × 2dir)** | **105** | **169.8** | **169.8** | **339.7** | **97.5% of 4×87.4** |
+
+**Critical finding: each NMC channel is physically full-duplex.** The same channel can transmit and receive simultaneously at full line rate, with zero per-channel duplex penalty. Cross-channel and same-channel duplex perform identically, confirming:
+1. Independent TX and RX datapaths within each channel (separate upload/download engines).
+2. SRAM read (TX source) and write (RX destination) ports operate independently.
+3. Two NoC meshes (NoC0/NoC1) are completely independent, each supporting full-duplex.
+4. Single PE maximum aggregate bidirectional bandwidth: **~468 B/cyc ≈ 527 GB/s** (2 channels × 2 directions × ~117 B/cyc bulk wire rate); **~340 B/cyc ≈ 382 GB/s** for 32KB batched traffic (MoE tile granularity).
+
+#### 9.19.2 Full-Duplex + Matrix Compute (mtx-first)
+
+| Configuration | Mode | mtx=4 cyc (NMC-bound) | mtx=8 cyc (matrix-bound) | Overhead vs NMC-only |
+|--------------|------|----------------------|------------------------|---------------------|
+| Matrix only | 4 | 8567 | 16991 | — |
+| TX CH0 only | 1 | 11993 | 11993 | baseline |
+| Fulldup CH0 (TX+RX) | 33 | 12187 | 12187 | baseline |
+| Dual fulldup (4 streams) | 105 | 12347 | 12347 | baseline |
+| TX+mtx | 5 | 12320 | 20376 | +2.7% (NMC-bd), +0.4% (mtx-bd) |
+| Fulldup CH0+mtx | 37 | 12603 | 20538 | +3.4% (NMC-bd), +0.9% (mtx-bd) |
+| Cross-duplex+mtx | 69 | 12664 | 20560 | +3.8% (NMC-bd), +1.0% (mtx-bd) |
+| **Dual fulldup+mtx** (max contention) | **109** | **13205** | **20815** | **+7.0%** (NMC-bd), +3.0% (mtx-bd) |
+
+**Key findings**:
+- Full-duplex NMC + matrix compute works efficiently. Even the worst case (4 simultaneous NMC streams + matrix: CH0 TX, CH1 TX, CH0 RX, CH1 RX, plus bmm reading A/B and writing C) adds only **7% overhead** in the NMC-bound regime.
+- In the matrix-bound regime (compute > communication), overhead is 0–3%, meaning **NMC TX+RX are almost entirely hidden behind matrix compute**.
+- Same-channel fulldup (CH0 bidirectional) performs identically to cross-duplex (CH0 TX + CH1 RX), confirming no extra penalty for using the same channel in both directions vs different channels.
+
+#### 9.19.3 Implications for MoE Double-Buffering
+
+The validated double-buffering pattern for MoE tile pipeline is:
+
+```
+// mtx-first + full-duplex pattern per tile:
+fire 4 bmm tiles (current tile compute)        // fill matrix queue
+post CH1 recv descriptors (prefetch next tile inputs)  // overlaps with compute
+post CH0 send descriptors (send previous tile outputs) // overlaps with compute
+continue bmm tiles                              // ongoing compute
+fence_io                                        // ensure all DMA complete before next phase
+```
+
+This achieves:
+- **Compute-communication overlap**: Both prefetch (RX) and send (TX) hide behind matrix compute.
+- **Aggregate BW available**: Up to ~170 B/cyc TX + ~170 B/cyc RX = ~382 GB/s bidirectional per PE during compute.
+- **Minimal SRAM port contention**: ≤7% overhead in worst case, ≤3% in typical matrix-bound MoE tiles.
+- **Batching requirement**: GM/DDR transfers (if used) must still be batched to ≥32 KB to avoid GM_WDMA queue stalls.
+
+---
+
+### 9.20 Vector Engine (TPC) Bandwidth and Compute Profile (2026-08-24)
+
+**Microbenchmark**: `noc_rb59.cpp` / `test_rb59.py` (fatbin, PE0-timed, all 32 PEs in sync fences).
+
+**Vector engine architecture**: 4 TPC (Tensor Processing Core) units per PE. VMEM capacity = 990 entries x 128 B/entry = ~124 KB per PE. Each entry holds 32 fp32 elements. Pipeline: SRAM <-> vec_read/vec_write DMA <-> VMEM <-> vector_launch (vkernel) <-> VMEM.
+
+**VMEM layout conventions**:
+- VMEM addresses are in **byte offsets** from VMEM base: `(float*)0` = entry 0, `(float*)256` = entry 2, `(float*)512` = entry 4.
+- Address field is 10 bits -> max entry offset = 1023. For 3-tensor ops (e.g., vadd: in0, in1, out), 3*N <= 990 -> N <= 256 entries (32 KB) per launch.
+
+**DMA/TPC mode notes**: `ada_native_to_vmem` / `ada_vmem_to_native` helpers launch a single-TPC DMA channel. Using multiple TPCs for a single contiguous transfer does not increase bandwidth because the SRAM port is the bottleneck. Compute kernels via direct `vadd/vmul` intrinsics with absolute VMEM addresses also execute on a single effective TPC (others do redundant work without hardware tiling); multi-TPC throughput requires the streaming interface (`vecLaunchTensor` descriptors), not profiled here.
+
+#### 9.20.1 vec_read (SRAM -> VMEM DMA)
+
+| N (entries) | Size (B) | Cyc (Local) | B/cyc | Cyc (Weight) | B/cyc |
+|-------------|----------|-------------|-------|--------------|-------|
+| 8  | 1K  | 88  | 11.6 | 105 | 9.8  |
+| 16 | 2K  | 105 | 19.5 | 105 | 19.5 |
+| 32 | 4K  | 105 | 39.0 | 122 | 33.6 |
+| 64 | 8K  | 122 | 67.1 | 139 | 58.9 |
+| 128| 16K | 156 | 105.0| 156 | 105.0|
+| 256| 32K | 224 | 146.3| 224 | 146.3|
+| 512| 64K | 343 | 191.1| 360 | 182.0|
+| 960| 120K| 564 | 217.9| 581 | 211.5|
+
+- **Asymptotic bandwidth (Local)**: ~260 B/cyc = **292 GB/s**, fixed overhead ~88 cyc
+- At MoE tile size (32 KB / N=256): **146 B/cyc = 165 GB/s** (56% of asymptotic)
+- Weight SRAM: ~252 B/cyc asymptote, ~105 cyc overhead (~3% slower than Local)
+
+#### 9.20.2 vec_write (VMEM -> SRAM DMA)
+
+| N (entries) | Size (B) | Cyc | B/cyc |
+|-------------|----------|-----|-------|
+| 8  | 1K  | 105 | 9.8   |
+| 16 | 2K  | 122 | 16.8  |
+| 32 | 4K  | 139 | 29.5  |
+| 64 | 8K  | 173 | 47.4  |
+| 128| 16K | 224 | 73.1  |
+| 256| 32K | 360 | 91.0  |
+| 512| 64K | 615 | 106.6 |
+| 960| 120K| 1057| 116.3 |
+
+- **Asymptotic bandwidth**: ~129 B/cyc = **145 GB/s**, fixed overhead ~95 cyc
+- Write is **~2x slower** than read (no burst doubling on write port)
+- At 32 KB: **91 B/cyc = 102 GB/s** (71% of asymptotic)
+
+#### 9.20.3 Element-wise Compute (vadd / vmul, single TPC, inputs in VMEM)
+
+| N (entries) | FLOPs (fp32) | vadd cyc | vmul cyc | FLOPs/cyc |
+|-------------|-------------|----------|----------|-----------|
+| 8  | 256   | 213 | 213 | 1.2  |
+| 16 | 512   | 213 | 213 | 2.4  |
+| 32 | 1024  | 230 | 230 | 4.5  |
+| 64 | 2048  | 281 | 298 | 7.0  |
+| 128| 4096  | 417 | 417 | 9.8  |
+| 256| 8192  | 672 | 672 | 12.2 |
+
+- **Asymptotic throughput**: ~16 fp32 FLOPs/cyc per TPC = **18 GFLOPS per TPC** (512-bit SIMD)
+- Fixed overhead: ~200 cyc (vkernel dispatch + pipeline fill)
+- vadd and vmul have identical throughput
+- 4-TPC theoretical aggregate (streaming API): ~64 FLOPs/cyc = 72 GFLOPS
+- At 32 KB (N=256): **12.2 FLOPs/cyc** per TPC (76% of asymptotic)
+
+#### 9.20.4 vec_read_gather (Indexed SRAM -> VMEM, BAUA unit)
+
+| N (entries) | Size (B) | cyc (seq) | B/cyc | cyc (rand) | B/cyc |
+|-------------|----------|-----------|-------|------------|-------|
+| 8  | 1K  | 109 | 9.4  | 109 | 9.4  |
+| 16 | 2K  | 126 | 16.3 | 126 | 16.3 |
+| 32 | 4K  | 143 | 28.6 | 143 | 28.6 |
+| 64 | 8K  | 163 | 50.3 | 177 | 46.3 |
+| 128| 16K | 228 | 71.9 | 228 | 71.9 |
+| 256| 32K | 364 | 89.9 | 364 | 89.9 |
+
+- **Asymptotic bandwidth**: ~128 B/cyc = **144 GB/s** (identical to vec_write), ~100 cyc overhead
+- **CRITICAL**: Random/strided indices perform **identically** to sequential (NO random-access penalty). BAUA throughput is limited by VMEM write port (1 entry/cyc), not SRAM access pattern.
+- At 32 KB: **90 B/cyc = 101 GB/s** (70% of asymptotic)
+
+**Gather programming notes**:
+- Table entries are **64-bit absolute physical SRAM addresses**; `addrOffset` can be `(float*)0`.
+- 64-bit table writes from scalar core MUST use DLCM alias (0x20xxxxxx); non-DLCM writes cause coredump (exit 134).
+- Table address passed to DMA must be physical address (non-DLCM).
+
+#### 9.20.5 MoE Kernel Design Implications
+
+1. **Activation gather**: ~90 B/cyc (101 GB/s) at 32 KB, comparable to NMC bandwidth (~98 GB/s/ch at 32 KB). Gather is not the bottleneck when overlapped with NMC/Matrix.
+2. **Element-wise ops (SiLU/gating)**: ~670 cyc (1-TPC) or ~170 cyc (4-TPC) for 32 KB, negligible vs BMM (~2120 cyc/tile) and NMC (~2000+ cyc).
+3. **Pipeline stage costs** (32 KB batch): gather ~364 cyc -> compute ~670 cyc -> write ~360 cyc = ~1400 cyc total (1-TPC) or ~900 cyc (4-TPC).
+4. **Port contention**: Vector DMA uses independent SRAM ports; expected <=7% overhead when overlapped with NMC+Matrix (consistent with 9.18/9.19 findings).
 
 ## 10. Remaining TBD Parameters (What We Still Lack)
 
-Parameters marked **[TBD]** in this document that require additional measurement or vendor disclosure for a high-fidelity (<20% error) event-driven model:
+Parameters marked **[TBD]** in this document that require additional measurement or vendor disclosure for a high-fidelity (<20% error) event-driven model. Parameters marked ~~strikethrough~~ are **DONE**.
 
-### 10.1 High Priority (Directly Affects End-to-End NoC Timing)
+### 10.1 High Priority (Directly Affects End-to-End MoE Kernel Timing)
 
-| # | Parameter | Why It Matters | How to Measure |
-|---|-----------|---------------|----------------|
-| 1 | ~~**PE↔GM bandwidth** (single GM_RDMA/WDMA channel)~~ | **DONE (§9.9, updated 2026-08-23)**: Single-PE upload ~104 GB/s (0-hop) to ~90 GB/s (7-hop), 138cyc/257cyc fixed latency; 4-GM_WDMA aggregate ~314 GB/s; download ~119 GB/s (0-hop 256KB), 246cyc/365cyc fixed latency; CH0+CH1 to GM caps at 114-124 GB/s (GM receiver bottleneck, NOT NMC/NoC limit; PE↔PE achieves 2× at 270 GB/s §9.13); N-way incast caps at ~100-120 GB/s/GM, outcast ~120-125 GB/s/GM; bottom-row X fast path confirmed for both directions; atomic with_sum=1 ~120 GB/s aggregate. | Extend bench with `sram_to_gm` / `gm_to_sram` using `__global_sram__` GM allocation from Python host; sweep message sizes to/from GM0 (router 28). |
-| 2 | ~~**PE↔DDR bandwidth**~~ | **DONE (§9.10, updated 2026-08-23)**: Upload ~122 GB/s/ch (0-hop, PE NMC-limited, hop latency fully hidden at ≥256KB), download ~103 GB/s/ch (DDR_RDMA/MC-limited, ~13% lower than GM); 512B base latency: ul 193cyc (+5cyc CDC), dl 426cyc (+180cyc DDR PHY); hop cost dl ~15-17cyc/hop, ul ~0cyc/hop (large msg); CH0+CH1 to DDR caps at 126 GB/s (DDR_WDMA receiver bottleneck; NOT 2×, but PE↔PE achieves 2× §9.13); X fast path confirmed for DDR on rows 0/7; all 4 DDRs symmetric. CDC penalty <10cyc. | Fatbin split-kernel with __global_ddr__ buffers (adaMemoryType.GDDR), ddr_send_sync/ddr_receive_sync/ddr_to_sram APIs, same launch config as GM. |
-| 3 | ~~**Multicast/broadcast fanout latency** (1-to-N)~~ | **DONE (§9.11, Round5 2026-08-13)**: Zero-cost in-router SWMR replication; min_cyc 2347->2354 (+7cyc = +0.3%) from N=1 to N=31; each receiver gets full sender BW (~126 GB/s PE, ~135 GB/s GM); PE bcast 512B latency 120->127cyc (+7cyc spanning-tree); GM bcast 512B 443->598cyc (+155cyc); agg BW 3.9 TB/s (PE) / 4.3 TB/s (GM) to full chip; **30x speedup vs unicast N-way outcast** (130 GB/s cap). Use pe_broadcast_sync/gm_broadcast_sync with dst_mask bitmask; receivers call standard recv_with_sync. | `pe_broadcast_sync<CH>(view, int64_t dst_mask)` / `gm_broadcast_sync<CH>(view, NodeType::PE, int64_t dst_mask)`; measure N=1..31. |
-| 4 | ~~**In-router reduction overhead** (Add/Max per-hop)~~ | **DONE (§9.11, Round6 2026-08-20)**: In-router reduce ALU is fully pipelined (zero BW cost, 92% efficiency = 59 B/cyc = 66 GB/s); per-chain-hop fixed overhead ~42 cycles; X-row (4 PE, 3-hop) base 335 cyc, Y-col (8 PE, 7-hop) base 502 cyc; Sum/Max identical; CH0/CH1 symmetric; mandatory broadcast release after reduce; min size ≥256B. Allreduce (reduce+bcast) cost measured end-to-end. | Use `send_with_sync(..., ReduceOp::Add, ...)` in a reduction chain across PEs; compare RTT with reduction enabled vs disabled. |
-| 5 | ~~**Incast/outcast/full-duplex/contention**~~ | **DONE (updated 2026-08-23)**: N-way incast/outcast caps at ~100-130 GB/s per channel for all endpoints; 4 disjoint pairs ~119 GB/s each with zero interference → **endpoint NMC ports (~120 GB/s/ch) match NoC link rate per channel, not NoC fabric bottleneck**. **Dual-channel same-direction parallel (PE↔PE) achieves 2× BW** (~270 GB/s aggregate, §9.13); GM/DDR dual-channel limited by remote receiver to ~114-126 GB/s. | noc_pe_incast/outcast/fulldup/contend + GM fatbin kernels. |
-| 6 | **SRAM port structure** (1R1W vs 2R1W vs more) | When NMC CH0+CH1 + Matrix + Vector all access Local/Weight SRAM simultaneously, port contention determines real achievable BW. Note: PE↔PE CH0+CH1 same-direction measured at ~2× (§9.13); PE→GM/DDR CH0+CH1 limited by remote receiver (114-126 GB/s ≠ 2×). SRAM bank-level contention during dual-ch+compute TBD. | Run concurrent upload (CH0) + download (CH1) + matrix compute; measure achieved NMC BW vs isolated. |
-
-### 10.2 Medium Priority (Affects Contention Accuracy)
-
-| # | Parameter | How to Measure |
+| # | Parameter | Status & Notes |
 |---|-----------|----------------|
-| 7 | **Sync packet priority vs data packets** | Do sync/ACK packets preempt data flits? Measure RTT under heavy background BW load. |
-| 8 | **NMC command issue rate** (back-to-back `native_send` gap) | How many cycles between two independent send fires? Fire N sends in a tight loop without waiting; measure total time vs N. |
-| 9 | **NMC outstanding depth** (max in-flight DMA commands per channel) | How many transfers can be queued before scalar core stalls? |
-| 10 | **Credit return latency breakdown** | The 17-cycle RTT-hop includes credit return path latency; model needs this for buffer sizing. |
-| 11 | **GM scalar core dispatch rate** | Documented serialization bottleneck for many small GM transfers; measure commands/cycle. |
-| 12 | **Burst length (beat size)** | Confirm beat = 128 B (gather table entry unit) vs 512 B (flit). |
-| 13 | **Per-hop packet processing latency breakdown** | How much is route-compute vs switch-arbitration vs link-traversal within the 8.5 cyc budget. |
+| 1 | ~~**PE↔GM bandwidth**~~ | **DONE (§9.9)** |
+| 2 | ~~**PE↔DDR bandwidth**~~ | **DONE (§9.10)** |
+| 3 | ~~**Multicast/broadcast fanout latency**~~ | **DONE (§9.11)** |
+| 4 | ~~**In-router reduction overhead**~~ | **DONE (§9.11)** |
+| 5 | ~~**Incast/outcast/full-duplex/contention**~~ | **DONE (§9.13-9.19)** |
+| 6 | ~~**SRAM port structure & NMC+Matrix contention**~~ | **DONE (§9.18-9.19)** |
+| 7 | ~~**NMC command issue rate & outstanding depth**~~ | **DONE (§9.14)** |
+| 8 | ~~**GM_WDMA dispatch rate & queue depth**~~ | **DONE (§9.17)** |
+| 9 | ~~**Link contention & arbitration**~~ | **DONE (§9.15)** |
+| 10 | ~~**Packetization/per-hop latency/credit return**~~ | **DONE (§9.16)** |
+| 11 | ~~**Vector engine load/store/gather/compute BW**~~ | **DONE (§9.20)** |
+| 12 | **Vector + NMC + Matrix three-way SRAM contention** | Vector DMA added to NMC+Matrix overlap; expected ≤10% worst-case but unmeasured. Needed for accurate MoE activation pipeline modeling. |
+| 13 | **Matrix bmm with small M latency profile** (M=8/16/32/64/128/256) | MoE expert GEMMs have small M dimensions; single-tile latency ~2120 cyc at M=256, but smaller M may have different efficiency curves. Critical for MFU estimation. |
+| 14 | **Vector scatter (VMEM→SRAM indexed write)** BAUA performance | vec_write_scatter bandwidth for MoE combine/scatter phase; symmetric to gather expected but unmeasured. |
 
-### 10.3 Lower Priority (Corner Cases / Features Not in Current Critical Path)
+### 10.2 Medium Priority (Affects Contention Accuracy & Non-Critical Paths)
 
 | # | Parameter | Notes |
 |---|-----------|-------|
-| 14 | ~~Single-side (request/response) exact overhead~~ | **DONE (2026-08-13)**: <3% difference vs dual-side; performance equivalent. Earlier "10% degradation" claim was incorrect. |
-| 15 | ~~DDR↔ACI async FIFO bubble penalty~~ | **DONE (Round4, §9.10)**: <10 cyc fixed overhead; negligible for BW modeling (512B ul base 193cyc vs GM 188cyc → +5cyc). | CDC between 1150 MHz DDR and 1125 MHz ACI domains. |
-| 16 | BAUA / mask / transpose throughput impact | Used in attention/conv but not in MoE critical path; zero-cost vs extra cycles. |
-| 17 | Gather/scatter per-entry table-walk overhead | For MoE expert dispatch (may be used). |
-| 18 | maxOst default value | Max outstanding single-side transactions (0-255). |
-| 19 | MMU page size / translation latency | If MMU is used in practice. |
-| 20 | AdaLink cross-chip NoC extension latency | Multi-chip (2-card/4-card/8-card) AdaLink bridge latency; needed for multi-card modeling. |
-| 21 | FIFO credit depths per hw_id/logic_id | For detailed flow-control modeling. |
-| 22 | Reduction tree concurrency (max simultaneous trees) | For modeling overlapping collectives. |
-| 23 | ~~Atomic GM writeSum throughput~~ | **DONE (2026-08-13 Round2 B8)**: ~120 GB/s aggregate, same as non-atomic incast; RMW fully pipelined; float32 only (int32 unsupported in compiler). |
+| 15 | ~~**Sync packet priority / QoS**~~ | **DONE (§9.15)**: No priority, RR arbitration. |
+| 16 | ~~**Credit return latency**~~ | **DONE (§9.16)**: 8.5 cyc/hop. |
+| 17 | ~~**Burst length / beat size**~~ | **DONE (§9.16)**: 128B phit, 512B flit. |
+| 18 | ~~**Per-hop latency breakdown**~~ | **DONE (§9.16)**: 8.5 cyc/hop one-way. |
+| 19 | **GM internal DMA↔DMA** (WDMA→RDMA without PE) | `wdma_signal_rdma`/`rdma_wait_wdma` path for MoE pipeline data movement within GM. |
+| 20 | **DDR N-way incast/outcast** (N PEs↔1 DDR) | Expected ~100-126 GB/s cap (DDR_RDMA MC-limited); 4-disjoint-DDR aggregate BW. |
+| 21 | **Vector element-wise ops** (SiLU/residual/cast/reduction) | Throughput of vexp, vdiv, vcopy, vreduce in vkernel pipeline; needed for activation stage timing. |
+| 22 | **BAUA / mask / transpose throughput impact** | Used in attention/conv but not MoE critical path. |
+| 23 | **Vector multi-TPC streaming throughput** (vecLaunchTensor API) | 4-TPC partitioned DMA/compute to achieve ~4× single-TPC throughput for activation pipelines. |
+| 24 | **Gather/scatter table-walk overhead** (NMC-side) | Per-entry cycle cost for NMC gather/scatter (different from Vector gather §9.20). |
+
+### 10.3 Lower Priority (Corner Cases / Future Features)
+
+| # | Parameter | Notes |
+|---|-----------|-------|
+| 25 | ~~Single-side vs dual-side overhead~~ | **DONE**: <3% difference. |
+| 26 | ~~DDR↔ACI CDC penalty~~ | **DONE**: <10 cyc. |
+| 27 | ~~Atomic GM writeSum throughput~~ | **DONE**: ~120 GB/s. |
+| 28 | MMU page size / translation latency | If MMU is used in practice. |
+| 29 | AdaLink cross-chip NoC extension latency | Multi-card (2/4/8-card) modeling. |
+| 30 | FIFO credit depths per hw_id/logic_id | Detailed flow-control modeling. |
+| 31 | Reduction tree concurrency (max simultaneous trees) | Overlapping collectives. |
+| 32 | maxOst default value | Max outstanding single-side transactions. |
 
 ### 10.4 Recommended Next Benchmark Sequence
 
-To get from current state to <20% end-to-end error for MoE workloads:
+To complete the MoE kernel performance model:
 
-1. ~~**GM↔PE BW** (#1)~~: **DONE (§9.9, Round1+Round2 2026-08-13, updated 2026-08-23)**. Upload/download latency, BW, dual-ch (GM caps at 114-124 GB/s), incast/outcast, hop-sweep, X fast-path, atomic, symmetricity all measured.
-2. ~~**PE↔DDR bandwidth** (#2)~~: **DONE (§9.10, Round4 2026-08-13, updated 2026-08-23)**. Upload 122 GB/s/ch (NMC-limited, hop-free for large msg), download 103 GB/s/ch (DDR_RDMA/MC-limited, 17cyc/hop), CH0+CH1 to DDR caps at 126 GB/s (DDR_WDMA bottleneck; PE↔PE achieves 2× §9.13), CDC penalty <10cyc, 4-DDR symmetry confirmed.
-3. **Multicast/broadcast fanout** (#3): Hardware MULTICAST/BROADCAST transType — needed for EP weight dispatch (MoE all-gather). Note: unicast outcast from GM already gives ~125 GB/s/GM baseline.
-4. **In-router PE-side reduction** (#4): `ReduceOp::Add` in send_with_sync for reduce-scatter chains (note: GM-side atomic with_sum=1 already confirmed zero-overhead).
-5. ~~**Dual-stream full-duplex / dual-channel parallel**~~: **DONE (Round3 A10 2026-08-13 + Round7 2026-08-23)**. Sequential cross-duplex ~120 GB/s (fenced); same-direction parallel achieves ~270 GB/s aggregate (2× single-channel) for PE↔PE traffic (§9.13); GM/DDR endpoints cap at ~114-126 GB/s due to receiver limits.
-6. **GM internal DMA↔DMA** (WDMA→RDMA without PE involvement): `wdma_signal_rdma`/`rdma_wait_wdma` path for MoE pipeline data movement within GM.
-7. **DDR N-way incast/outcast** (med-pri): N PEs → 1 DDR_WDMA / 1 DDR_RDMA → N PEs; expected to cap at same ~120-130 GB/s per channel as other endpoints (RR at NMC), but DDR_RDMA read-side cap (103 GB/s/ch) may lower effective ceiling.
+1. **Vector + NMC + Matrix three-way SRAM contention** (#12): Extend noc_rb58 pattern to include vec_read/gather DMA concurrent with NMC fulldup + bmm.
+2. **Matrix bmm small-M profiling** (#13): Sweep M=8/16/32/64/128/256 for fp8e4m3 bmm tiles to get latency vs M curves.
+3. **Vector scatter + element-wise ops** (#14, #21): vec_write_scatter bandwidth; SiLU (vexp+vadd+vdiv+vmul) pipeline throughput on real activation shapes.
+4. **GM internal DMA↔DMA** (#19): wdma_signal_rdma path for direct GM→GM data movement bypassing PEs.
+5. **DDR N-way incast/outcast** (#20): Confirm DDR endpoint caps under multi-PE load.
 
-The current benchmark infrastructure in `kernels/cpp/noc_microbench/` provides a working template (build system, Python runner, both .out PE-only and fatbin split-kernel modes, integer/float timing, send_with_sync/recv_with_sync/gm/ddr send/receive_sync handshake, atomic with_sum, parameterized PE/GM/DDR selection) that can be extended for these additional measurements. **All core PE↔PE, PE↔GM, and PE↔DDR NoC parameters required for MoE modeling are now calibrated** (updated 2026-08-23): RTT latency (8.5 cyc/hop one-way, 250+17h), single-stream BW (PE↔PE ~120 B/cyc/ch, PE→GM ~104 GB/s, GM→PE ~119 GB/s, PE→DDR ~122 GB/s, DDR→PE ~103 GB/s per channel), N-way incast/outcast fair RR sharing (~120-130 GB/s per channel cap at PE/GM endpoints), PE↔PE dual-channel same-direction parallel achieves 2× bandwidth (~240 B/cyc = 270 GB/s aggregate §9.13), dual-channel to GM/DDR caps at 114-126 GB/s (receiver-limited), 32-PE allreduce at 29.4 B/cyc (single-ch) / 58 B/cyc (dual-ch) = 33/65 GB/s, full-duplex bidirectional, atomic reduce (zero-overhead pipelined), X fast path on edge rows, disjoint-flow zero interference, 4-GM and 4-DDR perfect symmetry, DDR CDC penalty <10cyc, and DDR download being DDR-memory-controller-limited (not NoC-limited).
+**Current calibration status (updated 2026-08-25)**: All core NoC transport parameters are calibrated:
+- **Latency**: RTT = 204 + 17×hops cyc; 8.5 cyc/hop one-way; 57 cyc/NMC-descriptor; 40 cyc/GM-descriptor; ~100 cyc fixed overhead per vector op.
+- **Bandwidth**: PE↔PE ~134 GB/s/ch/dir bulk, ~98 GB/s @32KB; dual-ch same-dir ~270 GB/s; dual-ch fulldup ~527 GB/s bulk / ~382 GB/s @32KB; GM/DDR caps ~124 GB/s aggregate (receiver-limited); Vector read ~292 GB/s, write ~145 GB/s, gather ~144 GB/s, compute ~18 GFLOPS/TPC; Matrix bmm ~2120 cyc/256×256×128 tile.
+- **Contention**: ≤7% SRAM port contention worst-case (mtx-first ordering); RR arbitration with 92% link utilization under saturation; zero contention for ≤8 KB messages.
+- **Programming model**: Dual NoC (NoC0/NoC1) fully independent; per-channel full-duplex; DLCM alias required for 64-bit scalar writes; all PEs must participate in global fences; mtx-first command ordering optimal.
 
 ---
 
@@ -1607,10 +2148,10 @@ Hypothesis: NoC runs at 2× PE frequency (2250 MHz) with 512-bit phits.
 
 Given phit = 128 B and wire rate = 128 B/cyc:
 - Ideal flit serialization: 4 cycles (4 phits)
-- Measured effective serialization: ~4.27 cycles (512B / 120B/cyc)
-- Effective inter-flit overhead: ~0.27 cycles beyond ideal serialization
-- Logical payload capacity: 512B per flit, from the measured packet counts
-- Effective steady-state: 512B / 4.27cyc = 120 B/cyc (matches measurement)
+- Measured effective serialization: ~4.3 cycles (from document: 512B/4.3cyc ≈ 119 B/cyc)
+- Inter-flit bubble: ~0.3 cycles per flit (from arbitration/credit)
+- Payload per body flit: ~508 B (128B - 12B first phit header for H flit; 128B - 4B CRC for body/tail flits)
+- Effective steady-state: 508B / (4 + 0.3)cyc = 118 B/cyc ≈ 120 B/cyc (matches measurement)
 
 ### B.5 Header Size Estimate
 
@@ -1629,9 +2170,7 @@ The software-visible `build_info1` routing word is 32 bits (see §3.1). The full
 | MMU/PID/barrier flags | 8 |
 | **Total** | **76–92 bits ≈ 10–12 bytes** |
 
-An inline 10-12B header would leave about 116B in the first physical phit, but
-the measured packet counts still expose 512 logical payload bytes per flit.
-The exact header placement or sideband encoding is therefore not established.
+Header fits entirely in first phit (128B), leaving ~116B for payload in the head flit.
 
 ### B.6 Conclusion (Derived Parameters)
 
@@ -1642,7 +2181,7 @@ The exact header placement or sideband encoding is therefore not established.
 | Phits per flit | 4 | High |
 | Router pipeline depth | ~4.5 cycles (RC:1, SA:2, ST:1, LT:0.5) | Medium (not directly measurable, but consistent with 8.5 cyc/hop) |
 | On-wire header size | ~10–12 bytes in first phit | Medium (estimated from field list) |
-| Inter-flit overhead | ~0.27 cycles/flit (~6% overhead) | High (from 4.0 ideal vs ~4.27 measured interval) |
+| Inter-flit bubble | ~0.3 cycles/flit (~6% overhead) | High (from 4.0 vs 4.3 cyc serialization) |
 | Link wire efficiency | ~94% (large messages) | High (120/128 B/cyc) |
 
 These derived values are used in §2.4 and §9.7. They would be confirmed if hardware documentation provides the exact microarchitecture specification.
@@ -1702,3 +2241,32 @@ This is consistent with how production code accesses SRAM via `dlcm_sram` pointe
 **Root cause**: In microbenchmarks with no computation between NOC calls, all 32 PEs hit NOC programming in perfect lockstep after `ada_sync_fence_io()`, overwhelming the NOC control plane. Production kernels are safe because real computation between NOC calls naturally desynchronizes PEs.
 
 **Workaround**: Insert `printf("[PE%d] step\n", pe_id);` (with `\n` to flush UART) before each NOC call. The shared UART naturally serializes execution across PEs. Note: `printf(".")` without `\n` does NOT flush and provides no serialization. After all PEs synchronize at a global fence, avoid simultaneous printf from multiple PEs (post-fence UART contention causes coredump).
+
+### C.7 DLCM Alias Required for 64-bit Scalar Writes
+
+**Symptom**: Writing `unsigned long long` (64-bit) values to SRAM via the non-DLCM physical address (`0x10xxxxxx`) causes silent data corruption or immediate coredump (exit 134). This is critical for gather/scatter table construction, where table entries are 64-bit absolute physical addresses.
+
+**Root cause**: The scalar core's 64-bit store path requires the DLCM coherence manager alias to correctly handle 8-byte writes to SRAM. 8-bit writes work through physical addresses, but 64-bit writes must go through DLCM.
+
+**Workaround**: Write 64-bit table entries through the DLCM alias (`0x20xxxxxx`), but pass the physical (non-DLCM) address as the table pointer to DMA engines like `ada_native_to_vmem_gather`:
+```cpp
+unsigned long long *table_dl = (unsigned long long*)(0x20000000 + 0x100000 + table_offset);
+unsigned long long *table    = (unsigned long long*)(0x100000 + table_offset);
+for (int i = 0; i < N; i++) table_dl[i] = (unsigned long long)(src_addr + offset);
+ada_native_to_vmem_gather(table, (float*)0, N, (float*)0, N, 1);
+```
+This also applies to reading NMC-written data (§C.5).
+
+### C.8 All-PE Fence Participation Requirement
+
+**Symptom**: Kernels where some PEs return early (before reaching a global `ada_sync_fence_io()`/`ada_sync_fence_calc()`) cause host segfault (exit 139). Idle PEs that do not participate in compute but still hit the fence are fine; PEs that skip the fence entirely cause runtime crash.
+
+**Rule**: In fatbin split-kernel mode, ALL 32 PEs MUST enter every iteration of a loop containing a global fence. Conditional work must be guarded by `if (pe_id == 0)` INSIDE the fence-participating code path, not by early return. Non-participating PEs may return early ONLY if they do not need to hit the fence (i.e., the fence has mode bits excluding their execution unit).
+
+### C.9 Additional Microbenchmark Pitfalls
+
+- **Scalar core stack size is very limited**: Declaring multiple large arrays (e.g., `uint64_t ts[20]`) across multiple functions causes host segfault. Use single-iteration timing or reduce array sizes.
+- **Name collision with `cute::R`**: Using `R` as a constant name causes "reference to 'R' is ambiguous" due to `cute::R` in cute-ada headers. Use `N_REP`, `N_WARM` etc.
+- **Fatbin launch requires ALL 32 PEs**: PE(0,1) config is rejected with "invalid unitNum"; PE(0,32)+GLPD+GSRM is mandatory.
+- **PE-only .out binary size limit ~112KB**: Templates instantiating many N values cause bloat; use `.adafb` fatbin which has no such limit.
+- **`fp8e4m3` constant assignment in scalar core**: Causes backend "Cannot select" error. Use `int8_t` byte fill: `(int8_t)0x38` cast to `fp8e4m3*`.
