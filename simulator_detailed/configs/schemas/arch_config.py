@@ -4,7 +4,7 @@ from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from ...utils.definitions import NoCChannel
+from ...utils.definitions import FLIT_BYTES, NoCChannel
 
 
 class DMAType(IntEnum):
@@ -40,17 +40,22 @@ class LSUConfig(BaseModel):
 
 
 class FlitConfig(BaseModel):
-    """Physical transfer size and confirmed logical payload capacity."""
+    """Fixed physical transfer size and logical payload capacity."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    physical_flit_bytes: int = Field(default=512, gt=0)
-    payload_capacity_bytes: int = Field(default=512, gt=0)
+    physical_flit_bytes: int = Field(default=FLIT_BYTES, strict=True)
+    payload_capacity_bytes: int = Field(default=FLIT_BYTES, strict=True)
 
     @model_validator(mode="after")
-    def validate_payload_capacity(self) -> "FlitConfig":
-        if self.payload_capacity_bytes > self.physical_flit_bytes:
-            raise ValueError("payload capacity cannot exceed physical flit size")
+    def validate_fixed_hardware_flit(self) -> "FlitConfig":
+        if (
+            self.physical_flit_bytes != FLIT_BYTES
+            or self.payload_capacity_bytes != FLIT_BYTES
+        ):
+            raise ValueError(
+                f"physical flit size and payload capacity must both be {FLIT_BYTES} B"
+            )
         return self
 
 
@@ -95,11 +100,9 @@ class LinkConfig(BaseModel):
             raise ValueError("payload width must contain a whole number of bytes")
         return self
 
-    def serialization_noc_cycles(self, physical_flit_bytes: int) -> int:
+    def serialization_noc_cycles(self) -> int:
         """Return native NoC cycles needed to serialize one logical flit."""
-        if physical_flit_bytes <= 0:
-            raise ValueError("physical flit size must be positive")
-        flit_bits = physical_flit_bytes * 8
+        flit_bits = FLIT_BYTES * 8
         if flit_bits % self.payload_bits_per_noc_cycle != 0:
             raise ValueError(
                 "physical flit size must contain a whole number of native NoC beats"
@@ -108,14 +111,13 @@ class LinkConfig(BaseModel):
 
     def serialization_aci_cycles(
         self,
-        physical_flit_bytes: int,
         noc_cycles_per_aci_cycle: float,
     ) -> float:
         """Convert native serialization time to the simulator's ACI timebase."""
         if noc_cycles_per_aci_cycle <= 0:
             raise ValueError("NoC-to-ACI clock ratio must be positive")
         return (
-            self.serialization_noc_cycles(physical_flit_bytes)
+            self.serialization_noc_cycles()
             / noc_cycles_per_aci_cycle
         )
 

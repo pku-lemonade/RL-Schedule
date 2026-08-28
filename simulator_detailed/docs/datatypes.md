@@ -12,7 +12,9 @@
 Logical payload accounting follows the measured transfer-size behavior: each
 flit carries up to 512 logical payload bytes. Therefore 512 B uses one flit,
 1024 B uses two, and 2048 B uses four. The estimated header and CRC sizes are
-wire metadata and do not reduce this logical capacity in the simulator.
+wire metadata and do not reduce this logical capacity in the simulator. A
+partial flit's `payload_bytes` records only meaningful data, while its
+`transfer_bytes` is always 512 B because the hardware transfer is padded.
 
 `Flit` is immutable after construction. It carries one message fabric identity
 alongside payload size, message ID, source/destination router IDs, local ports,
@@ -25,11 +27,12 @@ to the node type: PE IDs are 0-31 and each DMA type has instance IDs 0-3.
 initialized, avoiding independent fabric, node, router, and port fields that
 could contradict one another. Both addresses must belong to the same fabric.
 
-`Message.packetize(flit_config)` converts an addressed message into
+`Message.packetize()` converts an addressed message into fixed-capacity,
 payload-bearing flits. It copies fabric identity and routing from the stored
-endpoint addresses and uses `FlitConfig.payload_capacity_bytes` as payload
-capacity. The independent `physical_flit_bytes` field describes link transfer
-cost. The source route is simulator metadata used for injection tracing; the
+endpoint addresses and uses the hardware `FLIT_BYTES=512` invariant for both
+packet count and Link transfer cost. `FlitConfig` retains the corresponding
+fields for explicit configuration validation but rejects any non-512 value.
+The source route is simulator metadata used for injection tracing; the
 documented hardware routing word carries only the destination route and local
 port.
 

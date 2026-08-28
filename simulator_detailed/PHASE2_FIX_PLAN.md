@@ -298,6 +298,11 @@ Tests:
 
 ## Fix 6: Enforce Confirmed 512 B Payload Packetization
 
+Status: implemented. `FLIT_BYTES` is the single packetization and transfer-size
+constant. Non-512 `FlitConfig` values are rejected, packetization and Link APIs
+no longer accept size overrides, and partial flits retain their actual payload
+count while consuming one padded 512 B transfer.
+
 Code changes:
 
 - Define packet count as `max(1, ceil(payload_bytes / 512))`: 512 B is one

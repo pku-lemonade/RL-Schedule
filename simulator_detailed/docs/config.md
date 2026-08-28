@@ -2,8 +2,8 @@
 
 The relevant configuration objects are:
 
-- `FlitConfig`: `physical_flit_bytes=512` and
-  `payload_capacity_bytes=512`.
+- `FlitConfig`: fixed `physical_flit_bytes=512` and
+  `payload_capacity_bytes=512`; non-512 values are rejected.
 - `RouterPipelineConfig`: effective RC=1, SA=2, and ST=1 ACI cycles.
 - `RouterConfig`: XY routing, one VC, FIFO round-robin arbitration.
 - `LinkConfig`: `wire_bits_per_noc_cycle=579`,
@@ -22,8 +22,10 @@ The relevant configuration objects are:
 
 Header, CRC, sequence, and tail fields are control metadata. They do not reduce
 the confirmed 512 B logical payload capacity used by `Message.flit_count()`.
+The size is a hardware invariant, not a simulator tuning parameter.
 
-The Link derives native serialization as `512 B * 8 / 512 bits = 8` NoC cycles,
+The Link derives native serialization from the fixed `FLIT_BYTES` constant as
+`512 B * 8 / 512 bits = 8` NoC cycles,
 then divides by the validated 2:1 clock ratio to schedule four ACI cycles. The
 measured launch interval is a separate calibrated value of approximately 4.267
 ACI cycles. The 0.5-ACI-cycle link stage is an effective calibration term, not a

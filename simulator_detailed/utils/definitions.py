@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import math
 from enum import Enum, IntEnum, auto
-from typing import TYPE_CHECKING, List, Optional
+from typing import Final, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-if TYPE_CHECKING:
-    from ..configs.schemas.arch_config import FlitConfig
+FLIT_BYTES: Final = 512
 
 
 class OperatorType(Enum):
@@ -24,10 +22,6 @@ class OperatorType(Enum):
 comp_operator = [OperatorType.CONV, OperatorType.POOL, OperatorType.FC]
 comm_operator = [OperatorType.SEND, OperatorType.RECV]
 io_operator = [OperatorType.LOAD_FEAT, OperatorType.LOAD_WGT, OperatorType.STORE]
-
-
-def ceil(a: int, b: float) -> int:
-    return math.ceil(a / b)
 
 
 class Direction(IntEnum):
@@ -260,7 +254,6 @@ def dma_port_layout(
 
 def compute_flit_count(
     payload_bytes: int,
-    payload_capacity_bytes: int = 512,
 ) -> int:
     """Return the measured logical flit count for a payload.
 
@@ -270,9 +263,7 @@ def compute_flit_count(
     """
     if payload_bytes < 0:
         raise ValueError("payload size cannot be negative")
-    if payload_capacity_bytes <= 0:
-        raise ValueError("flit payload capacity must be positive")
-    return max(1, ceil(payload_bytes, payload_capacity_bytes))
+    return max(1, (payload_bytes + FLIT_BYTES - 1) // FLIT_BYTES)
 
 
 class DimSlice(BaseModel):
@@ -310,7 +301,7 @@ class Flit(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     flit_type: FlitType              # HEAD/BODY/TAIL
-    payload_bytes: int               # B, payload carried by this flit
+    payload_bytes: int = Field(ge=0, le=FLIT_BYTES)  # B, actual payload carried
     msg_id: int                      # message index for reordering/correlation
     fabric_id: NoCChannel            # physical NoC fabric carrying this flit
     dst_router: int                  # destination router ID
@@ -329,6 +320,11 @@ class Flit(BaseModel):
     @property
     def is_tail(self) -> bool:
         return self.flit_type in (FlitType.SINGLE, FlitType.TAIL)
+
+    @property
+    def transfer_bytes(self) -> int:
+        """Fixed hardware transfer cost, including padding of partial flits."""
+        return FLIT_BYTES
 
 
 class EndpointAddress(BaseModel):
@@ -403,19 +399,16 @@ class Message(BaseModel):
             raise ValueError("message endpoints must use the same NoC fabric")
         return self
 
-    def flit_count(self, payload_capacity_bytes: int = 512) -> int:
+    def flit_count(self) -> int:
         """Number of flits this message is packetized into."""
-        return compute_flit_count(self.payload_bytes(), payload_capacity_bytes)
+        return compute_flit_count(self.payload_bytes())
 
     def payload_bytes(self) -> int:
         """Total payload size in bytes."""
         return Slice(tensor_slice=self.data).size()
 
-    def packetize(
-        self,
-        flit_config: "FlitConfig",
-    ) -> list[Flit]:
-        """Split this addressed message into payload-bearing flits."""
+    def packetize(self) -> list[Flit]:
+        """Split this addressed message into fixed-capacity hardware flits."""
         if self.trans_type is not TransType.SINGLECAST:
             raise NotImplementedError(
                 f"Phase 2 transport does not implement {self.trans_type.name}"
@@ -429,8 +422,7 @@ class Message(BaseModel):
             )
 
         payload_bytes = self.payload_bytes()
-        payload_capacity_bytes = flit_config.payload_capacity_bytes
-        flit_count = compute_flit_count(payload_bytes, payload_capacity_bytes)
+        flit_count = compute_flit_count(payload_bytes)
         remaining_bytes = payload_bytes
         flits: list[Flit] = []
 
@@ -444,7 +436,7 @@ class Message(BaseModel):
             else:
                 flit_type = FlitType.BODY
 
-            flit_payload_bytes = min(remaining_bytes, payload_capacity_bytes)
+            flit_payload_bytes = min(remaining_bytes, FLIT_BYTES)
             remaining_bytes -= flit_payload_bytes
             flits.append(
                 Flit(

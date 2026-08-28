@@ -155,7 +155,6 @@ class Link:
         self,
         env: simpy.Environment,
         config: LinkConfig,
-        physical_flit_bytes: int,
         fabric_id: NoCChannel,
         tracer: NoCTracer,
         link_name: str = "",
@@ -171,7 +170,6 @@ class Link:
             )
         self.env = env
         self.config = config
-        self.physical_flit_bytes = physical_flit_bytes
         self.fabric_id = fabric_id
         self.tracer = tracer
         self.link_name = f"{fabric_id.name}:{link_name or 'unnamed-link'}"
@@ -192,11 +190,8 @@ class Link:
                 dst_router=dst_router,
             )
         )
-        self.serialization_noc_cycles = config.serialization_noc_cycles(
-            physical_flit_bytes
-        )
+        self.serialization_noc_cycles = config.serialization_noc_cycles()
         self.serialization_aci_cycles = config.serialization_aci_cycles(
-            physical_flit_bytes,
             noc_cycles_per_aci_cycle,
         )
         if config.launch_interval_aci_cycles < self.serialization_aci_cycles:
@@ -584,7 +579,6 @@ class NoC:
         self.x = config.x
         self.y = config.y
         self.tracer = tracer
-        self.physical_flit_bytes = config.router.flit.physical_flit_bytes
         self.r2r_links: List[Link] = []
         self.routers: List[Router] = []
 
@@ -635,7 +629,6 @@ class NoC:
         link_ab = Link(
             env=self.env,
             config=self.config.link,
-            physical_flit_bytes=self.physical_flit_bytes,
             fabric_id=self.fabric_id,
             tracer=self.tracer,
             link_name=f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
@@ -647,7 +640,6 @@ class NoC:
         link_ba = Link(
             env=self.env,
             config=self.config.link,
-            physical_flit_bytes=self.physical_flit_bytes,
             fabric_id=self.fabric_id,
             tracer=self.tracer,
             link_name=f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",

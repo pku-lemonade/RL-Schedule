@@ -36,6 +36,7 @@ from simulator_detailed.utils.definitions import (
     PORT_GM_WDMA_CH1,
     PORT_GM_WDMA_LOC,
     PORT_PE,
+    FLIT_BYTES,
     Direction,
     DimSlice,
     EndpointAddress,
@@ -69,7 +70,6 @@ class MeshHarness:
         c2r = Link(
             self.env,
             self.config.c2r_link,
-            self.config.router.flit.physical_flit_bytes,
             self.fabric_id,
             self.tracer,
             f"PE{router_id}->R{router_id}",
@@ -78,7 +78,6 @@ class MeshHarness:
         r2c = Link(
             self.env,
             self.config.c2r_link,
-            self.config.router.flit.physical_flit_bytes,
             self.fabric_id,
             self.tracer,
             f"R{router_id}->PE{router_id}",
@@ -408,14 +407,13 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(harness.config.noc_clock_mhz, 2250.0)
         self.assertEqual(harness.config.noc_cycles_per_aci_cycle, 2.0)
         self.assertEqual(harness.config.router.vc, 1)
-        self.assertEqual(flit_config.physical_flit_bytes, 512)
-        self.assertEqual(flit_config.payload_capacity_bytes, 512)
+        self.assertEqual(flit_config.physical_flit_bytes, FLIT_BYTES)
+        self.assertEqual(flit_config.payload_capacity_bytes, FLIT_BYTES)
         self.assertEqual(link_config.wire_bits_per_noc_cycle, 579)
         self.assertEqual(link_config.payload_bits_per_noc_cycle, 512)
-        self.assertEqual(link_config.serialization_noc_cycles(512), 8)
+        self.assertEqual(link_config.serialization_noc_cycles(), 8)
         self.assertEqual(
             link_config.serialization_aci_cycles(
-                512,
                 harness.config.noc_cycles_per_aci_cycle,
             ),
             4.0,
@@ -477,6 +475,8 @@ class Phase2NoCTests(unittest.TestCase):
             FlitConfig.model_validate({"flit_size": 512})
         with self.assertRaises(ValidationError):
             FlitConfig(physical_flit_bytes=256, payload_capacity_bytes=512)
+        with self.assertRaises(ValidationError):
+            FlitConfig(physical_flit_bytes=512, payload_capacity_bytes=256)
         with self.assertRaises(ValidationError):
             LinkConfig.model_validate({"phit_width": 128})
         with self.assertRaises(ValidationError):
@@ -590,10 +590,8 @@ class Phase2NoCTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             compute_flit_count(-1)
-        with self.assertRaises(ValueError):
-            compute_flit_count(1, payload_capacity_bytes=0)
 
-    def test_message_packetize_uses_config_and_preserves_metadata(self) -> None:
+    def test_message_packetize_uses_fixed_capacity_and_preserves_metadata(self) -> None:
         pe_registry = EndpointRegistry(NoCConfig())
         boundary_cases = {
             0: ([FlitType.SINGLE], [0]),
@@ -622,11 +620,15 @@ class Phase2NoCTests(unittest.TestCase):
                     trans_type=TransType.SINGLECAST,
                 )
 
-                flits = message.packetize(FlitConfig(payload_capacity_bytes=512))
+                flits = message.packetize()
 
                 self.assertEqual([flit.flit_type for flit in flits], expected_types)
                 self.assertEqual([flit.payload_bytes for flit in flits], expected_payloads)
                 self.assertEqual(sum(flit.payload_bytes for flit in flits), payload_bytes)
+                self.assertEqual(
+                    sum(flit.transfer_bytes for flit in flits),
+                    len(flits) * FLIT_BYTES,
+                )
                 for flit in flits:
                     self.assertEqual(flit.msg_id, message.index)
                     self.assertIs(flit.fabric_id, NoCChannel.CH0)
@@ -675,16 +677,14 @@ class Phase2NoCTests(unittest.TestCase):
             index=7,
             data=[DimSlice(start=0, end=513)],
         )
-        configured_flits = configured_message.packetize(
-            FlitConfig(payload_capacity_bytes=256)
-        )
+        configured_flits = configured_message.packetize()
         self.assertEqual(
             [flit.flit_type for flit in configured_flits],
-            [FlitType.HEAD, FlitType.BODY, FlitType.TAIL],
+            [FlitType.HEAD, FlitType.TAIL],
         )
         self.assertEqual(
             [flit.payload_bytes for flit in configured_flits],
-            [256, 256, 1],
+            [512, 1],
         )
         for flit in configured_flits:
             self.assertIs(flit.fabric_id, NoCChannel.CH1)
@@ -706,6 +706,16 @@ class Phase2NoCTests(unittest.TestCase):
                 ),
                 index=8,
                 data=[DimSlice(start=0, end=1)],
+            )
+
+        with self.assertRaises(ValidationError):
+            Flit(
+                flit_type=FlitType.SINGLE,
+                payload_bytes=FLIT_BYTES + 1,
+                msg_id=8,
+                fabric_id=NoCChannel.CH0,
+                src_router=0,
+                dst_router=1,
             )
         with self.assertRaisesRegex(ValueError, "GM_RDMA cannot consume"):
             Message(
@@ -746,7 +756,7 @@ class Phase2NoCTests(unittest.TestCase):
                     NotImplementedError,
                     f"does not implement {trans_type.name}",
                 ):
-                    message.packetize(FlitConfig())
+                    message.packetize()
 
     def test_endpoint_registry_requires_explicit_fabric_and_path(self) -> None:
         registry = EndpointRegistry(
@@ -994,7 +1004,7 @@ class Phase2NoCTests(unittest.TestCase):
             data=[DimSlice(start=0, end=512)],
         )
         with self.assertRaisesRegex(NotImplementedError, "AIU-local"):
-            message.packetize(FlitConfig())
+            message.packetize()
 
     def test_endpoint_registry_rejects_invalid_mappings(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a 4x8 NoC"):
@@ -1099,16 +1109,15 @@ class Phase2NoCTests(unittest.TestCase):
         link = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             tracer,
             "probe",
             noc_cycles_per_aci_cycle=2.0,
         )
         flits = [
-            self._standalone_flit(FlitType.HEAD, 10),
+            self._standalone_flit(FlitType.HEAD, 10, payload_bytes=1),
             self._standalone_flit(FlitType.BODY, 10),
-            self._standalone_flit(FlitType.TAIL, 10),
+            self._standalone_flit(FlitType.TAIL, 10, payload_bytes=17),
         ]
         arrivals = []
 
@@ -1135,7 +1144,6 @@ class Phase2NoCTests(unittest.TestCase):
         link = Link(
             env,
             LinkConfig(sync_credit_return_aci_cycles=2.0),
-            512,
             NoCChannel.CH1,
             tracer,
             "credit-probe",
@@ -1169,7 +1177,6 @@ class Phase2NoCTests(unittest.TestCase):
         link = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             tracer,
             "probe",
@@ -1201,7 +1208,6 @@ class Phase2NoCTests(unittest.TestCase):
         ingress = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             tracer,
             "router-ingress",
@@ -1210,7 +1216,6 @@ class Phase2NoCTests(unittest.TestCase):
         egress = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             tracer,
             "router-egress",
@@ -1237,7 +1242,6 @@ class Phase2NoCTests(unittest.TestCase):
         link_in = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             link_tracer,
             "foreign-tracer-in",
@@ -1246,7 +1250,6 @@ class Phase2NoCTests(unittest.TestCase):
         link_out = Link(
             env,
             LinkConfig(),
-            512,
             NoCChannel.CH0,
             link_tracer,
             "foreign-tracer-out",
@@ -1417,10 +1420,10 @@ class Phase2NoCTests(unittest.TestCase):
             self.assertFalse(router._sa_reqs)
 
     @staticmethod
-    def _standalone_flit(flit_type, msg_id):
+    def _standalone_flit(flit_type, msg_id, payload_bytes=FLIT_BYTES):
         return Flit(
             flit_type=flit_type,
-            payload_bytes=512,
+            payload_bytes=payload_bytes,
             msg_id=msg_id,
             fabric_id=NoCChannel.CH0,
             src_router=0,

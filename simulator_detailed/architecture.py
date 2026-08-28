@@ -65,7 +65,6 @@ class Arch:
                 tx_link = Link(
                     env=env,
                     config=noc_config.c2r_link,
-                    physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                     fabric_id=fabric_id,
                     tracer=noc.tracer,
                     link_name=f"PE{id}->R{id}",
@@ -74,7 +73,6 @@ class Arch:
                 rx_link = Link(
                     env=env,
                     config=noc_config.c2r_link,
-                    physical_flit_bytes=noc_config.router.flit.physical_flit_bytes,
                     fabric_id=fabric_id,
                     tracer=noc.tracer,
                     link_name=f"R{id}->PE{id}",
