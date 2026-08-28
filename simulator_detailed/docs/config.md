@@ -5,7 +5,7 @@ The relevant configuration objects are:
 - `FlitConfig`: fixed `physical_flit_bytes=512` and
   `payload_capacity_bytes=512`; non-512 values are rejected.
 - `RouterPipelineConfig`: effective RC=1, SA=2, and ST=1 ACI cycles.
-- `RouterConfig`: XY routing, one VC, FIFO round-robin arbitration, and an
+- `RouterConfig`: XY routing, one VC, burst-level round-robin arbitration, and an
   optional explicit `default_burst_len_mode` used only to resolve a transfer's
   `BURST_LEN_DEFAULT` mode.
 - `LinkConfig`: `wire_bits_per_noc_cycle=579`,

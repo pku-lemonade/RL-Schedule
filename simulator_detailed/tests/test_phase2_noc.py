@@ -7,9 +7,9 @@ from pydantic import ValidationError
 
 from simulator_detailed.architecture import Arch
 from simulator_detailed.configs.schemas.arch_config import (
+    CoreConfig,
     DMAEngineConfig,
     DMAType,
-    CoreConfig,
     FlitConfig,
     LinkConfig,
     NMCConfig,
@@ -19,11 +19,19 @@ from simulator_detailed.configs.schemas.arch_config import (
 )
 from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
 from simulator_detailed.endpoint_registry import EndpointRegistry
-from simulator_detailed.noc import FlitAction, Link, NoC, NoCTracer
+from simulator_detailed.noc import (
+    FlitAction,
+    Link,
+    NoC,
+    NoCTracer,
+    RoundRobinArbiter,
+)
 from simulator_detailed.pe_channel import PEChannelBinding
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
 from simulator_detailed.tracing import collect_noc_link_events, process_events
 from simulator_detailed.utils.definitions import (
+    DIR_EAST,
+    FLIT_BYTES,
     PORT_DDR_RDMA,
     PORT_DDR_RDMA_LOC,
     PORT_DDR_WDMA,
@@ -37,27 +45,26 @@ from simulator_detailed.utils.definitions import (
     PORT_GM_WDMA_CH1,
     PORT_GM_WDMA_LOC,
     PORT_PE,
-    FLIT_BYTES,
-    Direction,
-    DimSlice,
-    EndpointAddress,
     BurstLenMode,
+    DimSlice,
+    Direction,
+    DMAAttachmentMode,
+    EndpointAddress,
     Flit,
     FlitType,
     Message,
     NoCChannel,
     NoCPlane,
     NodeType,
-    DMAAttachmentMode,
     TransType,
     compute_flit_count,
 )
 
 
 class MeshHarness:
-    def __init__(self, fabric_id=NoCChannel.CH0):
+    def __init__(self, fabric_id=NoCChannel.CH0, config=None):
         self.env = simpy.Environment()
-        self.config = NoCConfig()
+        self.config = config or NoCConfig()
         self.fabric_id = fabric_id
         self.tracer = NoCTracer(fabric_id)
         self.noc = NoC(
@@ -88,7 +95,15 @@ class MeshHarness:
         self.noc.routers[router_id].bind_link(PORT_PE, c2r, r2c)
         self.endpoints[router_id] = (c2r, r2c)
 
-    def flit(self, flit_type, msg_id, src, dst, payload=512):
+    def flit(
+        self,
+        flit_type,
+        msg_id,
+        src,
+        dst,
+        payload=512,
+        burst_len_mode=BurstLenMode.BURST_LEN_7,
+    ):
         return Flit(
             flit_type=flit_type,
             payload_bytes=payload,
@@ -96,6 +111,7 @@ class MeshHarness:
             fabric_id=self.fabric_id,
             src_router=src,
             dst_router=dst,
+            burst_len_mode=burst_len_mode,
         )
 
     def transfer(self, src, dst, flits, ack_delays=None):
@@ -147,7 +163,7 @@ class Phase2NoCTests(unittest.TestCase):
         arbiters = [
             arbiter
             for router in routers
-            for arbiter in router.out_channels.values()
+            for arbiter in router.output_arbiters.values()
         ]
         self.assertEqual(len({id(arbiter) for arbiter in arbiters}), len(arbiters))
         for fabric_id, noc in nocs.items():
@@ -1457,7 +1473,7 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CH1 flit cannot enter CH0:R0"):
             env.run()
         self.assertFalse(router.reservation)
-        self.assertFalse(router._sa_reqs)
+        self.assertFalse(router._switch_grants)
         self.assertFalse(tracer.events)
 
     def test_router_rejects_different_same_fabric_tracer(self):
@@ -1492,7 +1508,7 @@ class Phase2NoCTests(unittest.TestCase):
             router.bind_link(PORT_PE, link_in, link_out)
         self.assertIsNone(router.port_in.get(PORT_PE))
         self.assertIsNone(router.port_out.get(PORT_PE))
-        self.assertNotIn(PORT_PE, router.out_channels)
+        self.assertNotIn(PORT_PE, router.output_arbiters)
 
     def test_trace_records_distinguish_identical_fabric_local_ids(self):
         latencies = {}
@@ -1633,6 +1649,374 @@ class Phase2NoCTests(unittest.TestCase):
             any(e.action == FlitAction.STALL_SA for e in harness.tracer.events)
         )
 
+    def test_round_robin_arbiter_rotates_across_three_requesters(self):
+        env = simpy.Environment()
+        arbiter = RoundRobinArbiter(env)
+        grant_order = []
+
+        def contender(input_port):
+            for _ in range(4):
+                yield arbiter.request(input_port)
+                grant_order.append(input_port)
+                yield env.timeout(0)
+                arbiter.release(input_port)
+
+        for input_port in (10, 20, 30):
+            env.process(contender(input_port))
+        env.run()
+
+        self.assertEqual(grant_order, [10, 20, 30] * 4)
+        self.assertIsNone(arbiter.owner)
+        self.assertFalse(arbiter.pending_ports)
+
+    def test_round_robin_arbiter_wraps_and_rejects_invalid_ownership(self):
+        env = simpy.Environment()
+        arbiter = RoundRobinArbiter(env)
+
+        owner_request = arbiter.request(20)
+        self.assertTrue(owner_request.triggered)
+        self.assertEqual(arbiter.owner, 20)
+        with self.assertRaisesRegex(RuntimeError, "already owns"):
+            arbiter.request(20)
+
+        wrapped_request = arbiter.request(10)
+        next_request = arbiter.request(30)
+        self.assertFalse(wrapped_request.triggered)
+        self.assertFalse(next_request.triggered)
+        self.assertEqual(arbiter.pending_ports, (10, 30))
+        with self.assertRaisesRegex(RuntimeError, "already owns or awaits"):
+            arbiter.request(10)
+        with self.assertRaisesRegex(RuntimeError, "cannot release owner 20"):
+            arbiter.release(10)
+        self.assertEqual(arbiter.owner, 20)
+        self.assertEqual(arbiter.pending_ports, (10, 30))
+
+        arbiter.release(20)
+        self.assertTrue(next_request.triggered)
+        self.assertFalse(wrapped_request.triggered)
+        self.assertEqual(arbiter.owner, 30)
+        arbiter.release(30)
+        self.assertTrue(wrapped_request.triggered)
+        self.assertEqual(arbiter.owner, 10)
+        arbiter.release(10)
+        self.assertIsNone(arbiter.owner)
+        self.assertFalse(arbiter.pending_ports)
+        with self.assertRaisesRegex(RuntimeError, "cannot release owner None"):
+            arbiter.release(10)
+
+    def test_router_rejects_invalid_packet_state_transitions(self):
+        harness = MeshHarness()
+        router = harness.noc.routers[0]
+
+        unresolved = harness.flit(
+            FlitType.SINGLE,
+            70,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
+        )
+        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
+            router._rc_compute(PORT_PE, unresolved)
+        self.assertFalse(router.reservation)
+
+        body_without_head = harness.flit(FlitType.BODY, 71, 0, 1)
+        with self.assertRaisesRegex(RuntimeError, "BODY without HEAD"):
+            router._rc_compute(PORT_PE, body_without_head)
+        self.assertFalse(router.reservation)
+
+        head = harness.flit(
+            FlitType.HEAD,
+            72,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_3,
+        )
+        route_state = router._rc_compute(PORT_PE, head)
+        self.assertEqual(route_state.burst_quantum_flits, 4)
+
+        wrong_message = harness.flit(
+            FlitType.BODY,
+            73,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_3,
+        )
+        with self.assertRaisesRegex(RuntimeError, "message 73 before message 72"):
+            router._rc_compute(PORT_PE, wrong_message)
+        self.assertIs(router.reservation[PORT_PE], route_state)
+
+        changed_mode = harness.flit(
+            FlitType.BODY,
+            72,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_1,
+        )
+        with self.assertRaisesRegex(RuntimeError, "changed burst mode"):
+            router._rc_compute(PORT_PE, changed_mode)
+        self.assertIs(router.reservation[PORT_PE], route_state)
+
+        duplicate_head = harness.flit(
+            FlitType.HEAD,
+            74,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_3,
+        )
+        with self.assertRaisesRegex(RuntimeError, "HEAD before message 72"):
+            router._rc_compute(PORT_PE, duplicate_head)
+        self.assertIs(router.reservation[PORT_PE], route_state)
+
+        valid_body = harness.flit(
+            FlitType.BODY,
+            72,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_3,
+        )
+        self.assertIs(router._rc_compute(PORT_PE, valid_body), route_state)
+
+    def test_router_default_mode_requires_and_uses_configured_fallback(self):
+        unresolved_harness = MeshHarness()
+        unresolved_flit = unresolved_harness.flit(
+            FlitType.SINGLE,
+            75,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
+        )
+        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
+            unresolved_harness.transfer(0, 1, [unresolved_flit])
+        unresolved_router = unresolved_harness.noc.routers[0]
+        self.assertFalse(unresolved_router.reservation)
+        self.assertFalse(unresolved_router._switch_grants)
+        self.assertIsNone(unresolved_router.output_arbiters[DIR_EAST].owner)
+
+        config = NoCConfig(
+            router=RouterConfig(
+                default_burst_len_mode=BurstLenMode.BURST_LEN_1
+            )
+        )
+        configured_harness = MeshHarness(config=config)
+        flits = self._packet(
+            configured_harness,
+            msg_id=76,
+            src=0,
+            dst=1,
+            flit_count=5,
+            burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
+        )
+        configured_harness.transfer(0, 1, flits)
+        for router_id in (0, 1):
+            releases = [
+                event.grant_flits
+                for event in configured_harness.tracer.events
+                if event.action is FlitAction.ROUTER_SA_RELEASE
+                and event.router_id == router_id
+                and event.msg_id == 76
+            ]
+            self.assertEqual(releases, [2, 2, 1])
+            router = configured_harness.noc.routers[router_id]
+            self.assertFalse(router.reservation)
+            self.assertFalse(router._switch_grants)
+
+    def test_router_releases_grants_at_explicit_burst_boundaries(self):
+        expected_grants = {
+            BurstLenMode.BURST_LEN_0: [1] * 10,
+            BurstLenMode.BURST_LEN_1: [2] * 5,
+            BurstLenMode.BURST_LEN_3: [4, 4, 2],
+            BurstLenMode.BURST_LEN_7: [8, 2],
+        }
+        for mode, expected_lengths in expected_grants.items():
+            with self.subTest(mode=mode):
+                harness = MeshHarness()
+                flits = self._packet(
+                    harness,
+                    msg_id=42,
+                    src=0,
+                    dst=1,
+                    flit_count=10,
+                    burst_len_mode=mode,
+                )
+                arrivals = harness.transfer(0, 1, flits)
+                for router_id in (0, 1):
+                    release_events = [
+                        event
+                        for event in harness.tracer.events
+                        if event.action is FlitAction.ROUTER_SA_RELEASE
+                        and event.router_id == router_id
+                        and event.msg_id == 42
+                    ]
+                    self.assertEqual(
+                        [event.grant_flits for event in release_events],
+                        expected_lengths,
+                    )
+                    self.assertEqual(
+                        sum(event.grant_flits for event in release_events),
+                        len(flits),
+                    )
+                arrival_times = [time for _, time in arrivals]
+                for previous, current in zip(
+                    arrival_times,
+                    arrival_times[1:],
+                ):
+                    self.assertAlmostEqual(
+                        current - previous,
+                        harness.config.link.launch_interval_aci_cycles,
+                    )
+                for router_id in (0, 1):
+                    router = harness.noc.routers[router_id]
+                    self.assertFalse(router.reservation)
+                    self.assertFalse(router._switch_grants)
+
+    def test_output_credit_stall_does_not_consume_burst_grant(self):
+        harness = MeshHarness()
+        harness.attach(0)
+        harness.attach(1)
+        router = harness.noc.routers[0]
+        output_link = router.port_out[DIR_EAST]
+        assert output_link is not None
+
+        drain_credits = output_link.in_flight_credits.get(
+            output_link.in_flight_credits.capacity
+        )
+        harness.env.run(until=drain_credits)
+        flit = harness.flit(
+            FlitType.SINGLE,
+            77,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_0,
+        )
+        received = []
+
+        def sender():
+            yield harness.endpoints[0][0].send_flit(flit)
+
+        def receiver():
+            received_flit = yield harness.endpoints[1][1].recv_flit()
+            received.append(received_flit)
+            harness.endpoints[1][1].ack_credit()
+
+        sender_process = harness.env.process(sender())
+        receiver_process = harness.env.process(receiver())
+        harness.env.run(until=12.0)
+
+        grant_state = router._switch_grants[PORT_PE]
+        self.assertEqual(grant_state.transmitted_flits, 0)
+        self.assertEqual(router.reservation[PORT_PE].msg_id, 77)
+        self.assertEqual(router.output_arbiters[DIR_EAST].owner, PORT_PE)
+        self.assertFalse(
+            any(
+                event.action is FlitAction.ROUTER_SA_RELEASE
+                and event.router_id == 0
+                and event.msg_id == 77
+                for event in harness.tracer.events
+            )
+        )
+        self.assertTrue(
+            any(
+                event.action is FlitAction.STALL_CREDIT
+                and event.link_name == output_link.link_name
+                for event in harness.tracer.events
+            )
+        )
+
+        output_link.ack_credit()
+        harness.env.run(until=receiver_process)
+        harness.env.run()
+
+        self.assertTrue(sender_process.triggered)
+        self.assertEqual([item.msg_id for item in received], [77])
+        self.assertFalse(router.reservation)
+        self.assertFalse(router._switch_grants)
+        self.assertIsNone(router.output_arbiters[DIR_EAST].owner)
+        releases = [
+            event.grant_flits
+            for event in harness.tracer.events
+            if event.action is FlitAction.ROUTER_SA_RELEASE
+            and event.router_id == 0
+            and event.msg_id == 77
+        ]
+        self.assertEqual(releases, [1])
+
+    def test_competing_packets_rearbitrate_at_their_own_burst_boundaries(self):
+        harness = MeshHarness()
+        for router_id in (2, 7, 3):
+            harness.attach(router_id)
+        flows = {
+            50: self._packet(
+                harness,
+                msg_id=50,
+                src=2,
+                dst=3,
+                flit_count=8,
+                burst_len_mode=BurstLenMode.BURST_LEN_1,
+            ),
+            51: self._packet(
+                harness,
+                msg_id=51,
+                src=7,
+                dst=3,
+                flit_count=8,
+                burst_len_mode=BurstLenMode.BURST_LEN_3,
+            ),
+        }
+        received = []
+        arrival_times = []
+
+        def sender(src, flits):
+            for flit in flits:
+                yield harness.endpoints[src][0].send_flit(flit)
+
+        def receiver():
+            output_link = harness.endpoints[3][1]
+            for _ in range(16):
+                flit = yield output_link.recv_flit()
+                received.append(flit)
+                arrival_times.append(harness.env.now)
+                output_link.ack_credit()
+
+        harness.env.process(sender(2, flows[50]))
+        harness.env.process(sender(7, flows[51]))
+        done = harness.env.process(receiver())
+        harness.env.run(until=done)
+
+        releases = [
+            event
+            for event in harness.tracer.events
+            if event.action is FlitAction.ROUTER_SA_RELEASE
+            and event.router_id == 3
+            and event.out_port == PORT_PE
+        ]
+        contended_releases = releases[:4]
+        self.assertEqual(len(contended_releases), 4)
+        self.assertNotEqual(
+            contended_releases[0].msg_id,
+            contended_releases[1].msg_id,
+        )
+        self.assertEqual(
+            [event.msg_id for event in contended_releases[:2]],
+            [event.msg_id for event in contended_releases[2:]],
+        )
+        expected_quantum = {50: 2, 51: 4}
+        self.assertEqual(
+            [event.grant_flits for event in contended_releases],
+            [expected_quantum[event.msg_id] for event in contended_releases],
+        )
+        for msg_id, flits in flows.items():
+            self.assertEqual(
+                [flit.flit_type for flit in received if flit.msg_id == msg_id],
+                [flit.flit_type for flit in flits],
+            )
+        for previous, current in zip(arrival_times, arrival_times[1:]):
+            self.assertAlmostEqual(
+                current - previous,
+                harness.config.link.launch_interval_aci_cycles,
+            )
+        self.assertFalse(harness.noc.routers[3].reservation)
+        self.assertFalse(harness.noc.routers[3]._switch_grants)
+
     def test_fail_slow_scales_incident_links(self):
         harness = MeshHarness()
         harness.attach(0)
@@ -1652,7 +2036,38 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual([flit.msg_id for flit, _ in arrivals], [60, 61])
         for router in (harness.noc.routers[0], harness.noc.routers[1]):
             self.assertFalse(router.reservation)
-            self.assertFalse(router._sa_reqs)
+            self.assertFalse(router._switch_grants)
+
+    @staticmethod
+    def _packet(
+        harness,
+        *,
+        msg_id,
+        src,
+        dst,
+        flit_count,
+        burst_len_mode,
+    ):
+        flits = []
+        for index in range(flit_count):
+            if flit_count == 1:
+                flit_type = FlitType.SINGLE
+            elif index == 0:
+                flit_type = FlitType.HEAD
+            elif index == flit_count - 1:
+                flit_type = FlitType.TAIL
+            else:
+                flit_type = FlitType.BODY
+            flits.append(
+                harness.flit(
+                    flit_type,
+                    msg_id,
+                    src,
+                    dst,
+                    burst_len_mode=burst_len_mode,
+                )
+            )
+        return flits
 
     @staticmethod
     def _standalone_flit(flit_type, msg_id, payload_bytes=FLIT_BYTES):

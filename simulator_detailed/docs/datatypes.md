@@ -5,7 +5,7 @@
 - `SINGLE`: a complete one-flit packet; both `is_head` and `is_tail` are true.
 - `HEAD`: first flit of a multi-flit packet.
 - `BODY`: interior flit.
-- `TAIL`: final flit that releases the switch reservation.
+- `TAIL`: final flit that releases packet route state and any active burst grant.
 
 `is_head` and `is_tail` are derived properties, not stored booleans.
 
@@ -71,7 +71,8 @@ packetization raises `NotImplementedError` for the other representable types so
 they cannot silently follow the unicast path.
 
 `FlitEvent` stores `fabric_id` with explicit `out_port` and fabric-qualified
-`link_name` fields. It intentionally does not duplicate flit type or tail state.
+`link_name` fields. `ROUTER_SA_RELEASE` events also record `grant_flits`; the
+trace intentionally does not duplicate flit type or tail state.
 `NoCTracer.per_msg_latency()` keys results by `(fabric_id, msg_id)`, so equal
 router, link, and message IDs on NoC0 and NoC1 remain distinct. Callers inspect
 `NoCTracer.events` directly with normal list comprehensions.

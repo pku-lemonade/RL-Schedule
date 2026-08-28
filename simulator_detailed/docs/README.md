@@ -13,8 +13,8 @@ The Phase 2 model is deterministic:
 - native serialization converted into the 1125 MHz ACI simulation timebase;
 - an effective calibrated ACI link stage kept separate from physical wire facts;
 - deterministic X-first XY routing;
-- wormhole switch reservation from HEAD through TAIL;
-- FIFO switch allocation using `simpy.Resource`;
+- wormhole packet route reservation from HEAD through TAIL;
+- burst-level rotating round-robin output arbitration;
 - mandatory event tracing through `NoCTracer`.
 
 Run the standalone validation suite with a Python environment containing

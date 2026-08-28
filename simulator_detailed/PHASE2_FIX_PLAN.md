@@ -356,10 +356,9 @@ Tests:
 
 ## Fix 8: Implement Explicit Round-Robin Output Arbitration
 
-Status: partially implemented. Fixes 8A-1 and 8A-2 carry the variable burst
-contract and explicitly resolve configured defaults; the current router still
-uses FIFO `simpy.Resource` ownership from HEAD through TAIL and does not enforce
-burst boundaries.
+Status: implemented. Fixes 8A-1 and 8A-2 carry the variable burst contract and
+explicitly resolve configured defaults. Fix 8B uses independent rotating
+output arbiters and releases temporary switch ownership at burst boundaries.
 
 ### Fix 8A-1: Carry the Variable Burst Contract
 
@@ -404,6 +403,9 @@ Tests:
 
 ### Fix 8B: Arbitrate and Release at Burst Boundaries
 
+Status: implemented. Packet route state remains live through TAIL, while each
+temporary round-robin grant is limited by the transfer's resolved burst quantum.
+
 Code changes:
 
 - Replace FIFO `simpy.Resource` grants with one rotating arbiter per output port.
@@ -417,9 +419,9 @@ Code changes:
   bypassing their HEAD.
 - Keep arbiters independent per output port, router, and NoC fabric. Do not add
   the old profiling simulator's unmeasured fixed one-cycle burst bubble.
-- Carry `shrBufPortPriority` as separate shared-buffer metadata, but do not use
-  it to override measured equal-priority switch round-robin unless its coupling
-  to switch arbitration is confirmed.
+- Defer `shrBufPortPriority` until shared-buffer topology, capacity, allocation,
+  release, and priority behavior are known. Do not map it onto the measured
+  equal-priority output round-robin arbiter.
 
 Tests:
 
@@ -559,8 +561,8 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 | Fixed endpoint local-port modes (§2.5) | Fix 2 | Represent and validate |
 | Hardware `TransType` encoding (§3.2) | Fix 1 | Encode all; execute unicast only |
 | Deterministic XY and one VC (§3.3) | Fixes 1, 4, and 8 | Implement fully |
-| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | Fix 8A implemented; burst-level RR remains pending |
-| Shared-buffer priority (§3.6) | Fix 8B boundary | Carry metadata only; switch-arbiter coupling remains unconfirmed |
+| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | Implemented; hardware DEFAULT value remains configurable/TBD |
+| Shared-buffer priority (§3.6) | Fix 8B boundary | Deferred until shared-buffer allocation behavior is confirmed |
 | One-flit input buffering and sync credit flow (§2.0, §3.7) | Fixes 3B and 7 | Bounded calibrated model; exact sync topology/FIFO internals unresolved |
 | 1125 MHz ACI and 2250 MHz NoC clocks (§1.3, §2.4) | Fix 3A | Explicit two-domain conversion; ACI simulation timebase |
 | 4 MiB PE Local SRAM and explicit GM/DDR clocks (§1.2-1.3) | Fix 3C | Canonical config only; endpoint execution deferred |

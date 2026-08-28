@@ -4,8 +4,8 @@ from enum import IntEnum
 from typing import Dict, List, Optional, cast
 
 import simpy
+from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
-from simpy.resources.resource import Request as SimpyRequest
 
 from .configs.schemas.arch_config import LinkConfig, NoCConfig, RouterConfig
 from .utils.definitions import (
@@ -14,6 +14,7 @@ from .utils.definitions import (
     DIR_SOUTH,
     DIR_WEST,
     PORT_PE,
+    BurstLenMode,
     Direction,
     Event,
     Flit,
@@ -37,6 +38,7 @@ class FlitAction(IntEnum):
     LINK_RECV = 8
     STALL_CREDIT = 9
     CREDIT_RETURN = 10
+    ROUTER_SA_RELEASE = 11
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class FlitEvent:
     dst_router: int = -1
     out_port: int = -1
     link_name: str = ""
+    grant_flits: int = 0
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class NoCTracer:
         out_port: int = -1,
         link_name: str = "",
         plane: NoCPlane = NoCPlane.DATA,
+        grant_flits: int = 0,
     ):
         if not self._enabled:
             return
@@ -113,6 +117,7 @@ class NoCTracer:
                 dst_router=-1 if flit is None else flit.dst_router,
                 out_port=out_port,
                 link_name=link_name,
+                grant_flits=grant_flits,
             )
         )
 
@@ -146,6 +151,79 @@ class NoCTracer:
             f"messages={len(latencies)} avg_latency={avg_latency:.3f} "
             + " ".join(f"{name}={count}" for name, count in counts.items())
         )
+
+
+class RoundRobinArbiter:
+    """One rotating grant owner with at most one request per input port."""
+
+    def __init__(self, env: simpy.Environment):
+        self.env = env
+        self._owner: int | None = None
+        self._last_owner: int | None = None
+        self._pending: dict[int, SimpyEvent] = {}
+
+    @property
+    def owner(self) -> int | None:
+        return self._owner
+
+    @property
+    def pending_ports(self) -> tuple[int, ...]:
+        return tuple(sorted(self._pending))
+
+    def request(self, input_port: int) -> SimpyEvent:
+        if self._owner == input_port or input_port in self._pending:
+            raise RuntimeError(
+                f"input port {input_port} already owns or awaits this arbiter"
+            )
+        request = self.env.event()
+        self._pending[input_port] = request
+        self._grant_next()
+        return request
+
+    def release(self, input_port: int) -> None:
+        if self._owner != input_port:
+            raise RuntimeError(
+                f"input port {input_port} cannot release owner {self._owner}"
+            )
+        self._owner = None
+        self._last_owner = input_port
+        self._grant_next()
+
+    def _grant_next(self) -> None:
+        if self._owner is not None or not self._pending:
+            return
+        ordered_ports = sorted(self._pending)
+        next_port = ordered_ports[0]
+        if self._last_owner is not None:
+            next_port = next(
+                (
+                    port
+                    for port in ordered_ports
+                    if port > self._last_owner
+                ),
+                next_port,
+            )
+        request = self._pending.pop(next_port)
+        self._owner = next_port
+        request.succeed()
+
+
+@dataclass(frozen=True)
+class PacketRouteState:
+    """HEAD-established route metadata retained through TAIL."""
+
+    msg_id: int
+    out_port: int
+    burst_len_mode: BurstLenMode
+    burst_quantum_flits: int
+
+
+@dataclass
+class SwitchGrantState:
+    """Temporary output ownership for one packet burst."""
+
+    out_port: int
+    transmitted_flits: int = 0
 
 
 class Link:
@@ -349,7 +427,7 @@ class Link:
 
 
 class Router:
-    """One-VC wormhole router with FIFO switch allocation."""
+    """One-VC wormhole router with burst-level round-robin allocation."""
 
     def __init__(
         self,
@@ -370,6 +448,10 @@ class Router:
             )
         if config.vc != 1:
             raise ValueError(f"{self.name} requires exactly one VC per port")
+        if config.arbitration != "round_robin":
+            raise ValueError(
+                f"{self.name} supports only round-robin output arbitration"
+            )
         if tracer.fabric_id is not fabric_id:
             raise ValueError(
                 f"{self.name} cannot use {tracer.fabric_id.name} tracer"
@@ -395,9 +477,9 @@ class Router:
         self.port_out: Dict[int, Optional[Link]] = {
             port: None for port in direction_ports
         }
-        self.out_channels: Dict[int, simpy.Resource] = {}
-        self.reservation: Dict[int, int] = {}
-        self._sa_reqs: Dict[int, SimpyRequest] = {}
+        self.output_arbiters: Dict[int, RoundRobinArbiter] = {}
+        self.reservation: Dict[int, PacketRouteState] = {}
+        self._switch_grants: Dict[int, SwitchGrantState] = {}
         self._forwarder_started: Dict[int, bool] = {}
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
@@ -414,7 +496,7 @@ class Router:
             raise ValueError(f"{self.name} port {port} is already bound")
         self.port_in[port] = link_in
         self.port_out[port] = link_out
-        self.out_channels[port] = simpy.Resource(self.env, capacity=1)
+        self.output_arbiters[port] = RoundRobinArbiter(self.env)
         self._forwarder_started[port] = True
         self.env.process(self._port_forwarder(port))
 
@@ -450,7 +532,8 @@ class Router:
                     flit=flit,
                 )
 
-            out_port = self._rc_compute(in_port, flit)
+            route_state = self._rc_compute(in_port, flit)
+            out_port = route_state.out_port
             if flit.is_head:
                 self.tracer.log(
                     self.env.now,
@@ -464,33 +547,11 @@ class Router:
                     self.config.pipeline.effective_rc_aci_cycles
                 )
 
-                out_channel = self.out_channels.get(out_port)
-                if out_channel is None:
-                    raise RuntimeError(
-                        f"{self.name} output port {out_port} is unbound"
-                    )
-                if out_channel.count >= out_channel.capacity:
-                    self.tracer.log(
-                        self.env.now,
-                        FlitAction.STALL_SA,
-                        router_id=self.id,
-                        port=in_port,
-                        flit=flit,
-                        out_port=out_port,
-                    )
-                sa_req = out_channel.request()
-                yield sa_req
-                self.tracer.log(
-                    self.env.now,
-                    FlitAction.ROUTER_SA_GRANT,
-                    router_id=self.id,
-                    port=in_port,
-                    flit=flit,
-                    out_port=out_port,
-                )
-                self._sa_reqs[in_port] = sa_req
-                yield self.env.timeout(
-                    self.config.pipeline.effective_sa_aci_cycles
+            if in_port not in self._switch_grants:
+                yield from self._acquire_switch_grant(
+                    in_port,
+                    out_port,
+                    flit,
                 )
 
             in_link.ack_credit()
@@ -523,13 +584,30 @@ class Router:
                 )
             self._post_send(in_port, out_port, flit)
 
-    def _rc_compute(self, in_port: int, flit: Flit) -> int:
+    def _rc_compute(self, in_port: int, flit: Flit) -> PacketRouteState:
         if not flit.is_head:
-            if in_port not in self.reservation:
+            route_state = self.reservation.get(in_port)
+            if route_state is None:
                 raise RuntimeError(
                     f"{self.name} received {flit.flit_type.name} without HEAD"
                 )
-            return self.reservation[in_port]
+            if route_state.msg_id != flit.msg_id:
+                raise RuntimeError(
+                    f"{self.name} received message {flit.msg_id} before "
+                    f"message {route_state.msg_id} reached TAIL"
+                )
+            if route_state.burst_len_mode is not flit.burst_len_mode:
+                raise RuntimeError(
+                    f"{self.name} message {flit.msg_id} changed burst mode"
+                )
+            return route_state
+
+        if in_port in self.reservation:
+            active_msg_id = self.reservation[in_port].msg_id
+            raise RuntimeError(
+                f"{self.name} received message {flit.msg_id} HEAD before "
+                f"message {active_msg_id} reached TAIL"
+            )
 
         if not 0 <= flit.dst_router < self.x_dim * self.y_dim:
             raise ValueError(f"destination router {flit.dst_router} is out of range")
@@ -543,19 +621,91 @@ class Router:
             out_port = direction_to_port(direction)
         else:
             out_port = flit.dst_local_port
-        self.reservation[in_port] = out_port
-        return out_port
+        route_state = PacketRouteState(
+            msg_id=flit.msg_id,
+            out_port=out_port,
+            burst_len_mode=flit.burst_len_mode,
+            burst_quantum_flits=self.config.resolve_burst_quantum_flits(
+                flit.burst_len_mode
+            ),
+        )
+        self.reservation[in_port] = route_state
+        return route_state
+
+    def _acquire_switch_grant(
+        self,
+        in_port: int,
+        out_port: int,
+        flit: Flit,
+    ) -> ProcessGenerator:
+        arbiter = self.output_arbiters.get(out_port)
+        if arbiter is None:
+            raise RuntimeError(
+                f"{self.name} output port {out_port} is unbound"
+            )
+        request = arbiter.request(in_port)
+        if not request.triggered:
+            self.tracer.log(
+                self.env.now,
+                FlitAction.STALL_SA,
+                router_id=self.id,
+                port=in_port,
+                flit=flit,
+                out_port=out_port,
+            )
+        yield request
+        self._switch_grants[in_port] = SwitchGrantState(out_port=out_port)
+        self.tracer.log(
+            self.env.now,
+            FlitAction.ROUTER_SA_GRANT,
+            router_id=self.id,
+            port=in_port,
+            flit=flit,
+            out_port=out_port,
+        )
+        yield self.env.timeout(
+            self.config.pipeline.effective_sa_aci_cycles
+        )
 
     def _post_send(self, in_port: int, out_port: int, flit: Flit):
-        if not flit.is_tail:
-            return
-        request = self._sa_reqs.pop(in_port, None)
-        if request is None:
+        route_state = self.reservation.get(in_port)
+        if route_state is None:
             raise RuntimeError(
-                f"{self.name} tail flit has no switch reservation"
+                f"{self.name} transmitted message {flit.msg_id} without a route"
             )
-        self.out_channels[out_port].release(request)
-        del self.reservation[in_port]
+        grant_state = self._switch_grants.get(in_port)
+        if grant_state is None or grant_state.out_port != out_port:
+            raise RuntimeError(
+                f"{self.name} transmitted message {flit.msg_id} without a grant"
+            )
+        grant_state.transmitted_flits += 1
+        release_grant = (
+            flit.is_tail
+            or grant_state.transmitted_flits
+            >= route_state.burst_quantum_flits
+        )
+        if not release_grant:
+            return
+
+        grant_flits = grant_state.transmitted_flits
+        del self._switch_grants[in_port]
+        arbiter = self.output_arbiters.get(out_port)
+        if arbiter is None:
+            raise RuntimeError(
+                f"{self.name} output port {out_port} is unbound"
+            )
+        arbiter.release(in_port)
+        self.tracer.log(
+            self.env.now,
+            FlitAction.ROUTER_SA_RELEASE,
+            router_id=self.id,
+            port=in_port,
+            flit=flit,
+            out_port=out_port,
+            grant_flits=grant_flits,
+        )
+        if flit.is_tail:
+            del self.reservation[in_port]
 
     def to_id(self, x: int, y: int) -> int:
         return y * self.x_dim + x
@@ -672,6 +822,7 @@ __all__ = [
     "FlitEvent",
     "NoCLinkIdentity",
     "NoCTracer",
+    "RoundRobinArbiter",
     "TraceMessageKey",
     "Link",
     "Router",
