@@ -2,9 +2,16 @@ import math
 from enum import IntEnum
 from typing import List
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
-from ...utils.definitions import FLIT_BYTES, NoCChannel
+from ...utils.definitions import BurstLenMode, FLIT_BYTES, NoCChannel
 
 
 class DMAType(IntEnum):
@@ -71,11 +78,32 @@ class RouterPipelineConfig(BaseModel):
 
 class RouterConfig(BaseModel):
     """Router microarchitecture config."""
+
     type: str = "XY"                  # routing algorithm, "XY" = X-first deterministic
     vc: int = 1                       # number of virtual channels per port
     arbitration: str = "round_robin"  # arbitration policy, "round_robin" on ADA2S
+    default_burst_len_mode: BurstLenMode | None = None
     flit: FlitConfig = Field(default_factory=FlitConfig)
     pipeline: RouterPipelineConfig = Field(default_factory=RouterPipelineConfig)
+
+    @field_validator("default_burst_len_mode")
+    @classmethod
+    def validate_default_burst_len_mode(
+        cls,
+        mode: BurstLenMode | None,
+    ) -> BurstLenMode | None:
+        if mode is BurstLenMode.BURST_LEN_DEFAULT:
+            raise ValueError("router burst fallback must be an explicit mode")
+        return mode
+
+    def resolve_burst_quantum_flits(self, mode: BurstLenMode) -> int:
+        """Resolve a transfer mode to an explicit arbitration quantum."""
+        resolved_mode = mode
+        if mode is BurstLenMode.BURST_LEN_DEFAULT:
+            if self.default_burst_len_mode is None:
+                raise ValueError("BURST_LEN_DEFAULT has no configured router fallback")
+            resolved_mode = self.default_burst_len_mode
+        return resolved_mode.explicit_quantum_flits()
 
 
 class LinkConfig(BaseModel):

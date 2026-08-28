@@ -40,9 +40,9 @@ port.
 `BURST_LEN_0/1/3/7=0/1/3/7`. The four explicit modes map to arbitration quanta
 of 1, 2, 4, and 8 flits without changing packetization or 512 B transfer cost.
 `Message.packetize()` copies the selected mode to every immutable `Flit`. The
-hardware default remains unresolved, so `BURST_LEN_DEFAULT` cannot yet be
-converted to a quantum; architecture-level default resolution belongs to Fix
-8A-2.
+hardware default remains unresolved; `RouterConfig` converts
+`BURST_LEN_DEFAULT` only when an explicit fallback mode is configured and
+otherwise raises instead of silently granting the whole message.
 
 Addresses should come from the architecture-owned `EndpointRegistry`. It rejects
 out-of-topology routers, invalid type/port combinations, duplicate physical port

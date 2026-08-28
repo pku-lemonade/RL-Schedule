@@ -14,6 +14,7 @@ from simulator_detailed.configs.schemas.arch_config import (
     LinkConfig,
     NMCConfig,
     NoCConfig,
+    RouterConfig,
     RouterPipelineConfig,
 )
 from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
@@ -480,6 +481,51 @@ class Phase2NoCTests(unittest.TestCase):
             BurstLenMode(2)
         with self.assertRaises(ValueError):
             NoCChannel(2)
+
+    def test_router_burst_default_resolution_is_explicit_and_validated(self):
+        explicit_quanta = {
+            BurstLenMode.BURST_LEN_0: 1,
+            BurstLenMode.BURST_LEN_1: 2,
+            BurstLenMode.BURST_LEN_3: 4,
+            BurstLenMode.BURST_LEN_7: 8,
+        }
+        unresolved = RouterConfig()
+        for mode, expected_quantum in explicit_quanta.items():
+            with self.subTest(explicit_mode=mode):
+                self.assertEqual(
+                    unresolved.resolve_burst_quantum_flits(mode),
+                    expected_quantum,
+                )
+        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
+            unresolved.resolve_burst_quantum_flits(
+                BurstLenMode.BURST_LEN_DEFAULT
+            )
+
+        for fallback_mode, expected_quantum in explicit_quanta.items():
+            with self.subTest(fallback_mode=fallback_mode):
+                configured = RouterConfig(default_burst_len_mode=fallback_mode)
+                self.assertEqual(
+                    configured.resolve_burst_quantum_flits(
+                        BurstLenMode.BURST_LEN_DEFAULT
+                    ),
+                    expected_quantum,
+                )
+                self.assertEqual(
+                    configured.resolve_burst_quantum_flits(
+                        BurstLenMode.BURST_LEN_0
+                    ),
+                    1,
+                )
+
+        with self.assertRaisesRegex(
+            ValidationError,
+            "router burst fallback must be an explicit mode",
+        ):
+            RouterConfig(
+                default_burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT
+            )
+        with self.assertRaises(ValidationError):
+            RouterConfig.model_validate({"default_burst_len_mode": 2})
 
     def test_failure_targets_are_fabric_qualified(self):
         legacy_router_failure = RouterFail(

@@ -356,9 +356,10 @@ Tests:
 
 ## Fix 8: Implement Explicit Round-Robin Output Arbitration
 
-Status: partially implemented. Fix 8A-1 carries the variable burst contract;
-the current router still uses FIFO `simpy.Resource` ownership from HEAD through
-TAIL and does not enforce burst boundaries.
+Status: partially implemented. Fixes 8A-1 and 8A-2 carry the variable burst
+contract and explicitly resolve configured defaults; the current router still
+uses FIFO `simpy.Resource` ownership from HEAD through TAIL and does not enforce
+burst boundaries.
 
 ### Fix 8A-1: Carry the Variable Burst Contract
 
@@ -386,7 +387,9 @@ Tests:
 
 ### Fix 8A-2: Resolve the Hardware Default
 
-Status: not implemented.
+Status: implemented. Explicit transfer modes resolve independently, while
+`BURST_LEN_DEFAULT` uses an optional validated router fallback and fails clearly
+when the unknown hardware default has not been configured.
 
 Code changes:
 
@@ -556,7 +559,7 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 | Fixed endpoint local-port modes (§2.5) | Fix 2 | Represent and validate |
 | Hardware `TransType` encoding (§3.2) | Fix 1 | Encode all; execute unicast only |
 | Deterministic XY and one VC (§3.3) | Fixes 1, 4, and 8 | Implement fully |
-| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | 8A-1 implemented; DEFAULT resolution and burst-level RR remain pending |
+| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | Fix 8A implemented; burst-level RR remains pending |
 | Shared-buffer priority (§3.6) | Fix 8B boundary | Carry metadata only; switch-arbiter coupling remains unconfirmed |
 | One-flit input buffering and sync credit flow (§2.0, §3.7) | Fixes 3B and 7 | Bounded calibrated model; exact sync topology/FIFO internals unresolved |
 | 1125 MHz ACI and 2250 MHz NoC clocks (§1.3, §2.4) | Fix 3A | Explicit two-domain conversion; ACI simulation timebase |
