@@ -205,7 +205,7 @@ Tests:
 
 - Returning a credit does not enqueue a data flit or consume CH0/CH1 link
   bandwidth.
-- Credit backpressure and recovery preserve the calibrated single-flit-window
+- Credit backpressure and recovery preserve the calibrated bounded-window
   behavior without double-counting hop latency.
 - Credit traces identify both the SYNC plane and owning CH0/CH1 data channel;
   flit traces identify the DATA plane and channel.
@@ -321,6 +321,14 @@ Tests:
 - Control metadata cannot change flit count, payload capacity, or link timing.
 
 ## Fix 7: Correct Link Throughput and Bounded Backpressure
+
+Status: implemented. The physical downstream input buffer remains one flit,
+while a separately named two-flit effective in-flight window covers serializer,
+link-stage, and buffer occupancy. Zero-load launches sustain `512 / 120` ACI
+cycles, credit exhaustion is bounded, and fail-slow scaling remains reversible.
+The window size follows from the calibrated contract:
+`ceil(4.5 / (512 / 120)) = 2`; a one-flit end-to-end window would limit the link
+to `512 / 4.5`, approximately 113.78 B/ACI-cycle instead of 120 B/ACI-cycle.
 
 Code changes:
 

@@ -196,6 +196,14 @@ class Link:
         )
         if config.launch_interval_aci_cycles < self.serialization_aci_cycles:
             raise ValueError("launch interval cannot be shorter than serialization")
+        required_window = config.required_in_flight_window_flits(
+            noc_cycles_per_aci_cycle
+        )
+        if config.effective_in_flight_window_flits < required_window:
+            raise ValueError(
+                "effective in-flight window must contain at least "
+                f"{required_window} flits for the configured zero-load timing"
+            )
         self.launch_interval_aci_cycles = config.launch_interval_aci_cycles
         self.effective_link_stage_aci_cycles = (
             config.effective_link_stage_aci_cycles
@@ -207,10 +215,10 @@ class Link:
             env,
             capacity=config.input_buffer_depth_flits,
         )
-        self.credits = simpy.Container(
+        self.in_flight_credits = simpy.Container(
             env,
-            init=config.flow_control_window_flits,
-            capacity=config.flow_control_window_flits,
+            init=config.effective_in_flight_window_flits,
+            capacity=config.effective_in_flight_window_flits,
         )
         self._out_queue = simpy.Store(env, capacity=1)
         self.env.process(self._transmit_loop())
@@ -231,6 +239,11 @@ class Link:
         if self._identity is None:
             raise ValueError(f"{self.link_name} is not an inter-router link")
         return self._identity
+
+    @property
+    def in_flight_flits(self) -> int:
+        """Return flits holding effective pipeline/window capacity."""
+        return int(self.in_flight_credits.capacity - self.in_flight_credits.level)
 
     def utilization_events(self) -> list[Event]:
         """Build non-duplicated link occupancy intervals from tracer events."""
@@ -277,14 +290,15 @@ class Link:
             )
 
     def _send_flit(self, flit: Flit) -> ProcessGenerator:
-        if self.credits.level < 1:
+        credit_request = self.in_flight_credits.get(1)
+        if not credit_request.triggered:
             self.tracer.log(
                 self.env.now,
                 FlitAction.STALL_CREDIT,
                 flit=flit,
                 link_name=self.link_name,
             )
-        yield self.credits.get(1)
+        yield credit_request
         yield self._out_queue.put(flit)
 
     def _recv_flit(self) -> ProcessGenerator:
@@ -325,7 +339,7 @@ class Link:
     def _return_credit(self) -> ProcessGenerator:
         if self.sync_credit_return_aci_cycles > 0:
             yield self.env.timeout(self.sync_credit_return_aci_cycles)
-        yield self.credits.put(1)
+        yield self.in_flight_credits.put(1)
         self.tracer.log(
             self.env.now,
             FlitAction.CREDIT_RETURN,

@@ -63,7 +63,7 @@
       "effective_link_stage_aci_cycles": 0.5,
       "sync_credit_return_aci_cycles": 0.0,
       "input_buffer_depth_flits": 1,
-      "flow_control_window_flits": 1
+      "effective_in_flight_window_flits": 2
     },
     "c2r_link": {
       "wire_bits_per_noc_cycle": 579,
@@ -72,7 +72,7 @@
       "effective_link_stage_aci_cycles": 0.5,
       "sync_credit_return_aci_cycles": 0.0,
       "input_buffer_depth_flits": 1,
-      "flow_control_window_flits": 1
+      "effective_in_flight_window_flits": 2
     },
     "dma_engines": [],
     "mem_controllers": []

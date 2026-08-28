@@ -89,8 +89,8 @@ class LinkConfig(BaseModel):
     effective_link_stage_aci_cycles: float = Field(default=0.5, ge=0)
     # Zero preserves measured ACI hop timing until sync_noc latency is isolated.
     sync_credit_return_aci_cycles: float = Field(default=0.0, ge=0)
-    input_buffer_depth_flits: int = Field(default=1, gt=0)
-    flow_control_window_flits: int = Field(default=1, gt=0)
+    input_buffer_depth_flits: int = Field(default=1, gt=0, strict=True)
+    effective_in_flight_window_flits: int = Field(default=2, gt=0, strict=True)
 
     @model_validator(mode="after")
     def validate_native_width(self) -> "LinkConfig":
@@ -98,6 +98,8 @@ class LinkConfig(BaseModel):
             raise ValueError("payload bits cannot exceed physical wire bits")
         if self.payload_bits_per_noc_cycle % 8 != 0:
             raise ValueError("payload width must contain a whole number of bytes")
+        if self.input_buffer_depth_flits != 1:
+            raise ValueError("hardware downstream input buffer depth must be one flit")
         return self
 
     def serialization_noc_cycles(self) -> int:
@@ -119,6 +121,21 @@ class LinkConfig(BaseModel):
         return (
             self.serialization_noc_cycles()
             / noc_cycles_per_aci_cycle
+        )
+
+    def required_in_flight_window_flits(
+        self,
+        noc_cycles_per_aci_cycle: float,
+    ) -> int:
+        """Return the window needed to sustain the calibrated launch interval."""
+        zero_load_residence = (
+            self.serialization_aci_cycles(noc_cycles_per_aci_cycle)
+            + self.effective_link_stage_aci_cycles
+            + self.sync_credit_return_aci_cycles
+        )
+        return max(
+            1,
+            math.ceil(zero_load_residence / self.launch_interval_aci_cycles),
         )
 
 

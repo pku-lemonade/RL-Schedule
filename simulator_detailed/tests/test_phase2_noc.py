@@ -139,7 +139,7 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(len({id(router.reservation) for router in routers}), 64)
         self.assertEqual(len({id(link) for link in links}), 208)
         self.assertEqual(len({id(link.flit_buffer) for link in links}), 208)
-        self.assertEqual(len({id(link.credits) for link in links}), 208)
+        self.assertEqual(len({id(link.in_flight_credits) for link in links}), 208)
         self.assertEqual(len({id(link._out_queue) for link in links}), 208)
 
         arbiters = [
@@ -425,7 +425,13 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(link_config.effective_link_stage_aci_cycles, 0.5)
         self.assertEqual(link_config.sync_credit_return_aci_cycles, 0.0)
         self.assertEqual(link_config.input_buffer_depth_flits, 1)
-        self.assertEqual(link_config.flow_control_window_flits, 1)
+        self.assertEqual(link_config.effective_in_flight_window_flits, 2)
+        self.assertEqual(
+            link_config.required_in_flight_window_flits(
+                harness.config.noc_cycles_per_aci_cycle
+            ),
+            2,
+        )
         self.assertIsNot(nmc_config.ch0, nmc_config.ch1)
         for channel in NoCChannel:
             channel_config = nmc_config.channel_config(channel)
@@ -485,6 +491,10 @@ class Phase2NoCTests(unittest.TestCase):
             LinkConfig.model_validate({"launch_interval_cycles": 4.0})
         with self.assertRaises(ValidationError):
             LinkConfig.model_validate({"wire_delay_cycles": 0.5})
+        with self.assertRaises(ValidationError):
+            LinkConfig.model_validate({"flow_control_window_flits": 2})
+        with self.assertRaises(ValidationError):
+            LinkConfig(input_buffer_depth_flits=2)
         with self.assertRaises(ValidationError):
             RouterPipelineConfig.model_validate({"rc_cycles": 1.0})
         with self.assertRaises(ValidationError):
@@ -1135,8 +1145,146 @@ class Phase2NoCTests(unittest.TestCase):
         done = env.process(receiver())
         env.run(until=done)
         self.assertAlmostEqual(arrivals[0], 4.5)
-        self.assertAlmostEqual(arrivals[1] - arrivals[0], 4.5)
-        self.assertAlmostEqual(arrivals[2] - arrivals[1], 4.5)
+        expected_gap = FLIT_BYTES / 120.0
+        self.assertAlmostEqual(arrivals[1] - arrivals[0], expected_gap)
+        self.assertAlmostEqual(arrivals[2] - arrivals[1], expected_gap)
+        self.assertAlmostEqual(FLIT_BYTES / (arrivals[2] - arrivals[1]), 120.0)
+
+    def test_effective_window_must_cover_zero_load_link_residence(self) -> None:
+        env = simpy.Environment()
+        tracer = NoCTracer(NoCChannel.CH0)
+        with self.assertRaisesRegex(
+            ValueError,
+            "effective in-flight window must contain at least 2 flits",
+        ):
+            Link(
+                env,
+                LinkConfig(effective_in_flight_window_flits=1),
+                NoCChannel.CH0,
+                tracer,
+                "undersized-window",
+                noc_cycles_per_aci_cycle=2.0,
+            )
+
+    def test_backpressure_is_bounded_and_recovers_at_launch_interval(self) -> None:
+        env = simpy.Environment()
+        tracer = NoCTracer(NoCChannel.CH0)
+        config = LinkConfig()
+        link = Link(
+            env,
+            config,
+            NoCChannel.CH0,
+            tracer,
+            "backpressure-probe",
+            noc_cycles_per_aci_cycle=2.0,
+        )
+        flits = [
+            self._standalone_flit(FlitType.SINGLE, msg_id)
+            for msg_id in range(20, 26)
+        ]
+        arrivals = []
+
+        def sender():
+            for flit in flits:
+                yield link.send_flit(flit)
+
+        def receiver():
+            for index in range(len(flits)):
+                flit = yield link.recv_flit()
+                arrivals.append((flit.msg_id, env.now))
+                if index == 0:
+                    yield env.timeout(20.0)
+                yield link.ack_credit()
+
+        sender_process = env.process(sender())
+        receiver_process = env.process(receiver())
+        env.run(until=10.0)
+
+        self.assertEqual(link.in_flight_flits, 2)
+        self.assertEqual(len(link.flit_buffer.items), 1)
+        self.assertLessEqual(len(link._out_queue.items), 1)
+        self.assertFalse(sender_process.triggered)
+        self.assertTrue(
+            any(event.action is FlitAction.STALL_CREDIT for event in tracer.events)
+        )
+
+        env.run(until=receiver_process)
+        env.run()
+
+        self.assertTrue(sender_process.triggered)
+        self.assertEqual([msg_id for msg_id, _ in arrivals], list(range(20, 26)))
+        self.assertEqual(link.in_flight_flits, 0)
+        self.assertFalse(link.flit_buffer.items)
+        self.assertFalse(link._out_queue.items)
+
+        expected_gap = config.launch_interval_aci_cycles
+        recovered_arrivals = [time for _, time in arrivals[2:]]
+        for previous, current in zip(
+            recovered_arrivals,
+            recovered_arrivals[1:],
+        ):
+            self.assertAlmostEqual(current - previous, expected_gap)
+
+    def test_fail_slow_scales_link_timing_and_reciprocal_recovers(self) -> None:
+        env = simpy.Environment()
+        tracer = NoCTracer(NoCChannel.CH0)
+        config = LinkConfig()
+        link = Link(
+            env,
+            config,
+            NoCChannel.CH0,
+            tracer,
+            "fail-slow-probe",
+            noc_cycles_per_aci_cycle=2.0,
+        )
+
+        def transfer(msg_ids):
+            arrivals = []
+
+            def sender():
+                for msg_id in msg_ids:
+                    yield link.send_flit(
+                        self._standalone_flit(FlitType.SINGLE, msg_id)
+                    )
+
+            def receiver():
+                for _ in msg_ids:
+                    flit = yield link.recv_flit()
+                    arrivals.append((flit.msg_id, env.now))
+                    yield link.ack_credit()
+
+            start_time = env.now
+            env.process(sender())
+            receiver_process = env.process(receiver())
+            env.run(until=receiver_process)
+            env.run()
+            return start_time, arrivals
+
+        link.scale_link_delay(2.0)
+        slow_start, slow_arrivals = transfer(range(30, 33))
+        self.assertEqual([msg_id for msg_id, _ in slow_arrivals], [30, 31, 32])
+        self.assertAlmostEqual(slow_arrivals[0][1] - slow_start, 9.0)
+        for (_, previous), (_, current) in zip(
+            slow_arrivals,
+            slow_arrivals[1:],
+        ):
+            self.assertAlmostEqual(
+                current - previous,
+                2.0 * config.launch_interval_aci_cycles,
+            )
+
+        link.scale_link_delay(0.5)
+        normal_start, normal_arrivals = transfer(range(33, 36))
+        self.assertEqual([msg_id for msg_id, _ in normal_arrivals], [33, 34, 35])
+        self.assertAlmostEqual(normal_arrivals[0][1] - normal_start, 4.5)
+        for (_, previous), (_, current) in zip(
+            normal_arrivals,
+            normal_arrivals[1:],
+        ):
+            self.assertAlmostEqual(
+                current - previous,
+                config.launch_interval_aci_cycles,
+            )
 
     def test_credit_return_uses_sync_plane_without_data_traffic(self) -> None:
         env = simpy.Environment()
@@ -1150,13 +1298,13 @@ class Phase2NoCTests(unittest.TestCase):
             noc_cycles_per_aci_cycle=2.0,
         )
 
-        consumed = link.credits.get(1)
+        consumed = link.in_flight_credits.get(1)
         env.run(until=consumed)
         returned = link.ack_credit()
         env.run(until=returned)
 
         self.assertEqual(env.now, 2.0)
-        self.assertEqual(link.credits.level, 1)
+        self.assertEqual(link.in_flight_credits.level, 2)
         self.assertFalse(link._out_queue.items)
         self.assertFalse(link.flit_buffer.items)
         self.assertFalse(
@@ -1191,10 +1339,10 @@ class Phase2NoCTests(unittest.TestCase):
             dst_router=1,
         )
 
-        initial_credits = link.credits.level
+        initial_credits = link.in_flight_credits.level
         with self.assertRaisesRegex(ValueError, "CH1 flit cannot enter CH0:probe"):
             link.send_flit(foreign_flit)
-        self.assertEqual(link.credits.level, initial_credits)
+        self.assertEqual(link.in_flight_credits.level, initial_credits)
         self.assertFalse(link._out_queue.items)
         self.assertFalse(tracer.events)
 
@@ -1347,7 +1495,11 @@ class Phase2NoCTests(unittest.TestCase):
         ]
         arrivals = harness.transfer(0, 3, flits)
         times = [time for _, time in arrivals]
-        for actual, expected in zip(times, (38.5, 43.0, 47.5)):
+        expected_gap = FLIT_BYTES / 120.0
+        for actual, expected in zip(
+            times,
+            (38.5, 38.5 + expected_gap, 38.5 + 2 * expected_gap),
+        ):
             self.assertAlmostEqual(actual, expected)
         self.assertFalse(harness.noc.routers[0].reservation)
         self.assertFalse(harness.noc.routers[3].reservation)
@@ -1361,7 +1513,7 @@ class Phase2NoCTests(unittest.TestCase):
         ]
         arrivals = harness.transfer(0, 1, flits, ack_delays=[50, 0, 0])
         self.assertEqual(len(arrivals), 3)
-        self.assertGreater(arrivals[1][1] - arrivals[0][1], 50)
+        self.assertEqual(arrivals[1][1] - arrivals[0][1], 50)
         self.assertTrue(
             any(e.action == FlitAction.STALL_CREDIT for e in harness.tracer.events)
         )

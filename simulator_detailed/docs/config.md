@@ -9,8 +9,9 @@ The relevant configuration objects are:
 - `LinkConfig`: `wire_bits_per_noc_cycle=579`,
   `payload_bits_per_noc_cycle=512`,
   `launch_interval_aci_cycles=512/120`,
-  `effective_link_stage_aci_cycles=0.5`, one-flit input/flow-control limits,
-  and a separately calibrated `sync_credit_return_aci_cycles`.
+  `effective_link_stage_aci_cycles=0.5`, a fixed one-flit input buffer, a
+  two-flit `effective_in_flight_window_flits`, and a separately calibrated
+  `sync_credit_return_aci_cycles`.
 - `NMCChannelConfig`: independent TX/RX rates of 120 B/ACI-cycle, a 57-ACI-cycle
   descriptor issue cost, and 24 outstanding descriptors.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
@@ -31,7 +32,10 @@ measured launch interval is a separate calibrated value of approximately 4.267
 ACI cycles. The 0.5-ACI-cycle link stage is an effective calibration term, not a
 claim about physical wire propagation. The confirmed one-flit downstream input
 buffer and effective bounded flow-control window are also separate concepts.
-The window is a simulator parameter, not a claim about another hardware FIFO.
+The canonical two-flit window covers a flit in the physical input buffer while
+the next flit occupies serializer/link-stage capacity. It is a simulator
+parameter, not a claim about another hardware FIFO. A Link rejects a window too
+small to sustain its configured zero-load launch interval.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero
