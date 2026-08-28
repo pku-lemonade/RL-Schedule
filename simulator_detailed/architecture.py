@@ -6,7 +6,7 @@ from .utils.dfg import DFGNode
 from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
 from .noc import Link, NoC, NoCTracer
 from .core import Core
-from .pe_channel import PEChannelBinding
+from .pe_channel import NMCChannel, PEChannelBinding
 from .endpoint_registry import EndpointRegistry
 from .configs.schemas.arch_config import *
 from .configs.schemas.failure_configs import *
@@ -85,8 +85,13 @@ class Arch:
                     rx_link=rx_link,
                     router=router,
                 )
+                channel = NMCChannel(
+                    env=env,
+                    config=config.nmc.channel_config(fabric_id),
+                    binding=binding,
+                )
 
-                core.bind_channel(binding)
+                core.bind_channel(channel)
                 router.bind_link(PORT_PE, tx_link, rx_link)
 
             core.validate_channel_bindings()

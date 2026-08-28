@@ -23,7 +23,10 @@ creates one PE-to-router TX Link and one router-to-PE RX Link for every PE on
 each fabric, producing 128 distinct endpoint Links. Both fabrics use local port
 0 in their own router instances. A `Core` exposes these attachments through its
 read-only `channel_bindings` mapping; each `PEChannelBinding` contains the
-resolved endpoint address, TX Link, RX Link, and fabric-local Router.
+resolved endpoint address, TX Link, RX Link, and fabric-local Router. Its
+read-only `nmc_channels` mapping exposes the corresponding runtime
+`NMCChannel`, with independent TX/RX datapath resources and data queues for each
+fabric.
 
 The legacy task contract names CH0 explicitly until Fix 11 adds channel
 selection to DFG communication operations. This compatibility choice does not

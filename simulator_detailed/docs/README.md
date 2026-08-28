@@ -1,8 +1,10 @@
 # simulator_detailed Phase 2
 
 `simulator_detailed` is the cycle-level ADA2S-32 simulator. Phase 2 models the
-on-chip 4-column by 8-row NoC at flit granularity. It intentionally excludes
-the Phase 3 PE NMC command and packetization path and all Phase 4 DMA nodes.
+on-chip 4-column by 8-row NoC at flit granularity. It includes independent
+runtime resources for both full-duplex PE NMC channels, while descriptor
+processing and the Task SEND/RECV packetization path remain later Phase 2 fixes.
+DMA endpoint execution remains outside this phase.
 
 The Phase 2 model is deterministic:
 
@@ -15,6 +17,7 @@ The Phase 2 model is deterministic:
 - deterministic X-first XY routing;
 - wormhole packet route reservation from HEAD through TAIL;
 - burst-level rotating round-robin output arbitration;
+- independent CH0/CH1 PE NMC TX and RX runtime resources;
 - mandatory event tracing through `NoCTracer`.
 
 Run the standalone validation suite with a Python environment containing

@@ -8,7 +8,7 @@ for _p in (_parent_dir, _pkg_dir):
         _sys.path.insert(0, _p)
 
 from .core import Core
-from .pe_channel import PEChannelBinding
+from .pe_channel import NMCChannel, PEChannelBinding
 from .noc import Link, Router, NoC
 from .architecture import Arch
 

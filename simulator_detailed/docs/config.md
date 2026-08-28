@@ -6,8 +6,8 @@ The relevant configuration objects are:
   `payload_capacity_bytes=512`; non-512 values are rejected.
 - `RouterPipelineConfig`: effective RC=1, SA=2, and ST=1 ACI cycles.
 - `RouterConfig`: XY routing, one VC, burst-level round-robin arbitration, and an
-  optional explicit `default_burst_len_mode` used only to resolve a transfer's
-  `BURST_LEN_DEFAULT` mode.
+  invariant `default_burst_len_mode=BURST_LEN_7` used only to resolve a
+  transfer's `BURST_LEN_DEFAULT` mode.
 - `LinkConfig`: `wire_bits_per_noc_cycle=579`,
   `payload_bits_per_noc_cycle=512`,
   `launch_interval_aci_cycles=512/120`,
@@ -28,12 +28,10 @@ the confirmed 512 B logical payload capacity used by `Message.flit_count()`.
 The size is a hardware invariant, not a simulator tuning parameter.
 
 The four explicit burst modes always resolve to 1, 2, 4, or 8 flits and ignore
-the router fallback. Because the hardware meaning of `BURST_LEN_DEFAULT` remains
-unknown, the canonical configuration leaves `default_burst_len_mode` unset. A
-router can still resolve every explicit transfer mode, but resolving
-`BURST_LEN_DEFAULT` raises until an explicit fallback is configured. The
-fallback itself cannot be `BURST_LEN_DEFAULT`, preventing recursive or silent
-whole-message interpretation.
+the router default. The confirmed hardware `BURST_LEN_DEFAULT` value is
+`BURST_LEN_7`, so the canonical configuration resolves it to an eight-flit
+arbitration quantum. Contradictory configured values are rejected rather than
+silently changing hardware behavior.
 
 The Link derives native serialization from the fixed `FLIT_BYTES` constant as
 `512 B * 8 / 512 bits = 8` NoC cycles,

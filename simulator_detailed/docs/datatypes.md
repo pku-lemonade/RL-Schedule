@@ -40,9 +40,9 @@ port.
 `BURST_LEN_0/1/3/7=0/1/3/7`. The four explicit modes map to arbitration quanta
 of 1, 2, 4, and 8 flits without changing packetization or 512 B transfer cost.
 `Message.packetize()` copies the selected mode to every immutable `Flit`. The
-hardware default remains unresolved; `RouterConfig` converts
-`BURST_LEN_DEFAULT` only when an explicit fallback mode is configured and
-otherwise raises instead of silently granting the whole message.
+confirmed hardware default equals `BURST_LEN_7`; `RouterConfig` therefore
+converts `BURST_LEN_DEFAULT` to an eight-flit arbitration quantum while
+rejecting contradictory default configuration.
 
 Addresses should come from the architecture-owned `EndpointRegistry`. It rejects
 out-of-topology routers, invalid type/port combinations, duplicate physical port
@@ -55,8 +55,12 @@ an AIU DMA endpoint model exists.
 
 `PEChannelBinding` is a concrete physical attachment, not a type or mode. It
 groups one PE address with distinct TX and RX Links and the matching
-fabric-local Router. Every `Core` must own exactly one binding for CH0 and one
-for CH1.
+fabric-local Router. `NMCChannel` is the corresponding runtime transport object.
+It owns separate TX and RX datapath resources and separate data queues while
+retaining the immutable physical binding. Hardware data-FIFO depths remain
+unknown, so these data queues are unbounded; the measured descriptor capacity
+is a separate Fix 10 command-queue constraint. Every `Core` owns exactly one
+runtime channel and one binding for CH0 and CH1.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA

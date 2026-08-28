@@ -43,8 +43,8 @@ Phase 2 must treat the following as its architectural baseline:
 Vendor-confirmed facts supersede older derived hypotheses in the architecture
 document. Measured behavior and inferred microarchitecture must remain separate.
 The `sync_noc` credit path is established, but its exact topology, arbitration,
-and latency decomposition are not. Default burst length and detailed FIFO depths
-also remain unresolved.
+and latency decomposition are not. Detailed FIFO depths remain unresolved. The
+confirmed `BURST_LEN_DEFAULT` value is `BURST_LEN_7`, an eight-flit grant.
 
 ## Phase 2 Scope
 
@@ -387,19 +387,17 @@ Tests:
 ### Fix 8A-2: Resolve the Hardware Default
 
 Status: implemented. Explicit transfer modes resolve independently, while
-`BURST_LEN_DEFAULT` uses an optional validated router fallback and fails clearly
-when the unknown hardware default has not been configured.
+`BURST_LEN_DEFAULT` resolves to the confirmed `BURST_LEN_7` hardware value.
 
 Code changes:
 
-- Resolve `BURST_LEN_DEFAULT` through a validated architecture configuration
-  value rather than treating it as an unlimited whole-message grant; the
-  hardware default remains unknown.
+- Resolve `BURST_LEN_DEFAULT` through a validated `BURST_LEN_7` architecture
+  value rather than treating it as an unlimited whole-message grant.
 
 Tests:
 
-- Invalid configured defaults are rejected, and explicit transfer modes remain
-  independent of the configured default.
+- Contradictory configured defaults are rejected, DEFAULT resolves to eight
+  flits, and explicit transfer modes remain independent of that default.
 
 ### Fix 8B: Arbitrate and Release at Burst Boundaries
 
@@ -437,11 +435,40 @@ Tests:
 
 ## Fix 9: Add Full-Duplex PE NMC Channels
 
+Status: in progress. Fix 9A adds the runtime channel ownership and independent
+directional resources. Calibrated data movement through those resources remains
+the next Fix 9 sub-step; descriptor capacity remains assigned to Fix 10.
+
+### Fix 9A: Create Independent Runtime Channel Resources
+
+Status: implemented. `PEChannelBinding` remains immutable topology, while every
+PE now owns CH0 and CH1 `NMCChannel` runtime objects. Each channel has distinct
+TX/RX datapath resources and unbounded data queues. The queues intentionally do
+not reuse the measured descriptor depth as an unconfirmed data-FIFO depth.
+
 Code changes:
 
 - Add an `NMCChannel` transport object and create CH0 and CH1 for every PE.
 - Give each channel separate TX and RX datapath resources and data queues.
 - Do not serialize same-channel TX against RX or CH0 traffic against CH1.
+
+Tests:
+
+- Every PE owns exactly two runtime channels using its existing physical
+  bindings.
+- TX and RX resources are distinct within one channel and across CH0/CH1.
+- Repeated requests serialize only on the same directional resource.
+- Runtime channels cannot cross PE, fabric, or SimPy-environment boundaries.
+
+### Fix 9B: Apply Calibrated Directional Data Service
+
+Code changes:
+
+- Service queued TX and RX data independently at each channel's configured
+  bytes-per-ACI-cycle rate without adding that rate serially to an equivalent
+  Link delay.
+- Preserve streaming overlap between endpoint service and flit injection or
+  ejection so steady-state throughput is not double-counted.
 - Keep descriptor queue ownership at the channel level unless later evidence
   proves separate TX and RX command queues.
 - Keep SRAM/Matrix/Vector contention outside the base transport resource; later
@@ -561,7 +588,7 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 | Fixed endpoint local-port modes (§2.5) | Fix 2 | Represent and validate |
 | Hardware `TransType` encoding (§3.2) | Fix 1 | Encode all; execute unicast only |
 | Deterministic XY and one VC (§3.3) | Fixes 1, 4, and 8 | Implement fully |
-| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | Implemented; hardware DEFAULT value remains configurable/TBD |
+| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | Implemented; DEFAULT is confirmed as `BURST_LEN_7` |
 | Shared-buffer priority (§3.6) | Fix 8B boundary | Deferred until shared-buffer allocation behavior is confirmed |
 | One-flit input buffering and sync credit flow (§2.0, §3.7) | Fixes 3B and 7 | Bounded calibrated model; exact sync topology/FIFO internals unresolved |
 | 1125 MHz ACI and 2250 MHz NoC clocks (§1.3, §2.4) | Fix 3A | Explicit two-domain conversion; ACI simulation timebase |

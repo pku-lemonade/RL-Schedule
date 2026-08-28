@@ -9,7 +9,7 @@ from .utils.dfg import *
 from .utils.mapper import NetworkMapper
 from .configs.schemas.arch_config import *
 from .endpoint_registry import EndpointRegistry
-from .pe_channel import PEChannelBinding
+from .pe_channel import NMCChannel, PEChannelBinding
 from .utils.task import Task
 from .utils.definitions import Event, NoCChannel, NodeType
 from .utils.definitions import comp_operator, comm_operator
@@ -175,6 +175,10 @@ class Core:
         self.id = core_id
         self.mapper = mapper
         self.endpoint_registry = endpoint_registry
+        self._nmc_channels: Dict[NoCChannel, NMCChannel] = {}
+        self.nmc_channels: Mapping[NoCChannel, NMCChannel] = MappingProxyType(
+            self._nmc_channels
+        )
         self._channel_bindings: Dict[NoCChannel, PEChannelBinding] = {}
         self.channel_bindings: Mapping[NoCChannel, PEChannelBinding] = (
             MappingProxyType(self._channel_bindings)
@@ -207,22 +211,36 @@ class Core:
         self.lsu.width *= times
         
 
-    def bind_channel(self, binding: PEChannelBinding) -> None:
-        fabric_id = binding.address.fabric_id
-        if fabric_id in self._channel_bindings:
+    def bind_channel(self, channel: NMCChannel) -> None:
+        fabric_id = channel.fabric_id
+        if fabric_id in self._nmc_channels:
             raise ValueError(
-                f"core {self.id} already has a {fabric_id.name} binding"
+                f"core {self.id} already has a {fabric_id.name} NMC channel"
+            )
+        if channel.env is not self.env:
+            raise ValueError(
+                f"core {self.id} and {fabric_id.name} NMC channel "
+                "must use the same SimPy environment"
             )
         expected_address = self.endpoint_registry.resolve(
             NodeType.PE,
             self.id,
             fabric_id=fabric_id,
         )
-        if binding.address != expected_address:
+        if channel.binding.address != expected_address:
             raise ValueError(
-                f"core {self.id} received a mismatched {fabric_id.name} binding"
+                f"core {self.id} received a mismatched {fabric_id.name} NMC channel"
             )
-        self._channel_bindings[fabric_id] = binding
+        self._nmc_channels[fabric_id] = channel
+        self._channel_bindings[fabric_id] = channel.binding
+
+    def nmc_channel_for(self, fabric_id: NoCChannel) -> NMCChannel:
+        channel = self._nmc_channels.get(fabric_id)
+        if channel is None:
+            raise RuntimeError(
+                f"core {self.id} has no {fabric_id.name} NMC channel"
+            )
+        return channel
 
     def binding_for(self, fabric_id: NoCChannel) -> PEChannelBinding:
         binding = self._channel_bindings.get(fabric_id)
@@ -234,12 +252,17 @@ class Core:
 
     def validate_channel_bindings(self) -> None:
         expected_fabrics = set(NoCChannel)
-        if set(self._channel_bindings) != expected_fabrics:
-            missing = expected_fabrics - set(self._channel_bindings)
-            unexpected = set(self._channel_bindings) - expected_fabrics
+        actual_fabrics = set(self._nmc_channels)
+        if actual_fabrics != expected_fabrics:
+            missing = expected_fabrics - actual_fabrics
+            unexpected = actual_fabrics - expected_fabrics
             raise ValueError(
-                f"core {self.id} channel bindings are incomplete; "
+                f"core {self.id} NMC channels are incomplete; "
                 f"missing={missing}, unexpected={unexpected}"
+            )
+        if set(self._channel_bindings) != actual_fabrics:
+            raise RuntimeError(
+                f"core {self.id} NMC channels and bindings disagree"
             )
 
 

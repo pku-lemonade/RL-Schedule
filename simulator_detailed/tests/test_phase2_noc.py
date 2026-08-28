@@ -12,12 +12,14 @@ from simulator_detailed.configs.schemas.arch_config import (
     DMAType,
     FlitConfig,
     LinkConfig,
+    NMCChannelConfig,
     NMCConfig,
     NoCConfig,
     RouterConfig,
     RouterPipelineConfig,
 )
 from simulator_detailed.configs.schemas.failure_configs import LinkFail, RouterFail
+from simulator_detailed.core import Core
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import (
     FlitAction,
@@ -26,7 +28,7 @@ from simulator_detailed.noc import (
     NoCTracer,
     RoundRobinArbiter,
 )
-from simulator_detailed.pe_channel import PEChannelBinding
+from simulator_detailed.pe_channel import NMCChannel, PEChannelBinding
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
 from simulator_detailed.tracing import collect_noc_link_events, process_events
 from simulator_detailed.utils.definitions import (
@@ -194,14 +196,20 @@ class Phase2NoCTests(unittest.TestCase):
 
         self.assertEqual(len(cores), 32)
         endpoint_links = []
+        nmc_channels = []
         for core in cores:
             self.assertEqual(set(core.channel_bindings), set(NoCChannel))
+            self.assertEqual(set(core.nmc_channels), set(NoCChannel))
             self.assertFalse(hasattr(core, "data_in"))
             self.assertFalse(hasattr(core, "data_out"))
             self.assertFalse(hasattr(core, "router"))
 
             for fabric_id in NoCChannel:
+                channel = core.nmc_channel_for(fabric_id)
                 binding = core.binding_for(fabric_id)
+                self.assertIs(channel.binding, binding)
+                self.assertIs(channel.fabric_id, fabric_id)
+                self.assertIs(channel.env, env)
                 expected_address = arch.endpoint_registry.resolve(
                     NodeType.PE,
                     core.id,
@@ -221,6 +229,7 @@ class Phase2NoCTests(unittest.TestCase):
                 self.assertIs(binding.rx_link.fabric_id, fabric_id)
                 self.assertIsNot(binding.tx_link, binding.rx_link)
                 endpoint_links.extend((binding.tx_link, binding.rx_link))
+                nmc_channels.append(channel)
 
             ch0 = core.binding_for(NoCChannel.CH0)
             ch1 = core.binding_for(NoCChannel.CH1)
@@ -240,6 +249,17 @@ class Phase2NoCTests(unittest.TestCase):
 
         self.assertEqual(len(endpoint_links), 128)
         self.assertEqual(len({id(link) for link in endpoint_links}), 128)
+        self.assertEqual(len(nmc_channels), 64)
+        for attribute in (
+            "tx_datapath",
+            "rx_datapath",
+            "tx_data_queue",
+            "rx_data_queue",
+        ):
+            self.assertEqual(
+                len({id(getattr(channel, attribute)) for channel in nmc_channels}),
+                64,
+            )
 
         core0_ch0 = cores[0].binding_for(NoCChannel.CH0)
         core0_ch1 = cores[0].binding_for(NoCChannel.CH1)
@@ -250,8 +270,95 @@ class Phase2NoCTests(unittest.TestCase):
                 rx_link=core0_ch1.rx_link,
                 router=core0_ch1.router,
             )
-        with self.assertRaisesRegex(ValueError, "already has a CH0 binding"):
-            cores[0].bind_channel(core0_ch0)
+        with self.assertRaisesRegex(ValueError, "already has a CH0 NMC channel"):
+            cores[0].bind_channel(
+                cores[0].nmc_channel_for(NoCChannel.CH0)
+            )
+
+    def test_nmc_channels_have_independent_directional_resources(self):
+        env = simpy.Environment()
+        noc_config = NoCConfig()
+        arch = object.__new__(Arch)
+        arch.env = env
+        arch.x_size = noc_config.x
+        arch.y_size = noc_config.y
+        arch.endpoint_registry = EndpointRegistry(noc_config)
+        arch.nocs = Arch.build_nocs(env, noc_config)
+        core_config = CoreConfig(
+            nmc=NMCConfig(
+                ch0=NMCChannelConfig(
+                    tx_bytes_per_cycle=117.0,
+                    rx_bytes_per_cycle=118.0,
+                ),
+                ch1=NMCChannelConfig(
+                    tx_bytes_per_cycle=119.0,
+                    rx_bytes_per_cycle=120.0,
+                ),
+            )
+        )
+        core = arch.build_cores(
+            env=env,
+            config=core_config,
+            noc_config=noc_config,
+            mapper=Mock(),
+        )[0]
+        ch0 = core.nmc_channel_for(NoCChannel.CH0)
+        ch1 = core.nmc_channel_for(NoCChannel.CH1)
+
+        self.assertEqual(ch0.config.tx_bytes_per_cycle, 117.0)
+        self.assertEqual(ch0.config.rx_bytes_per_cycle, 118.0)
+        self.assertEqual(ch1.config.tx_bytes_per_cycle, 119.0)
+        self.assertEqual(ch1.config.rx_bytes_per_cycle, 120.0)
+
+        intervals = {}
+
+        def occupy(resource, name, duration):
+            with resource.request() as request:
+                yield request
+                intervals[name] = [env.now, None]
+                yield env.timeout(duration)
+                intervals[name][1] = env.now
+
+        env.process(occupy(ch0.tx_datapath, "ch0_tx_first", 10))
+        env.process(occupy(ch0.tx_datapath, "ch0_tx_second", 2))
+        env.process(occupy(ch0.rx_datapath, "ch0_rx", 3))
+        env.process(occupy(ch1.tx_datapath, "ch1_tx", 4))
+        env.process(occupy(ch1.rx_datapath, "ch1_rx", 5))
+        env.run()
+
+        self.assertEqual(intervals["ch0_tx_first"], [0, 10])
+        self.assertEqual(intervals["ch0_tx_second"], [10, 12])
+        self.assertEqual(intervals["ch0_rx"], [0, 3])
+        self.assertEqual(intervals["ch1_tx"], [0, 4])
+        self.assertEqual(intervals["ch1_rx"], [0, 5])
+
+        ch0.tx_data_queue.put("ch0-tx")
+        ch0.rx_data_queue.put("ch0-rx")
+        ch1.tx_data_queue.put("ch1-tx")
+        ch1.rx_data_queue.put("ch1-rx")
+        env.run()
+        self.assertEqual(ch0.tx_data_queue.items, ["ch0-tx"])
+        self.assertEqual(ch0.rx_data_queue.items, ["ch0-rx"])
+        self.assertEqual(ch1.tx_data_queue.items, ["ch1-tx"])
+        self.assertEqual(ch1.rx_data_queue.items, ["ch1-rx"])
+
+        with self.assertRaisesRegex(ValueError, "same SimPy environment"):
+            NMCChannel(
+                env=simpy.Environment(),
+                config=NMCChannelConfig(),
+                binding=ch0.binding,
+            )
+
+        other_env = simpy.Environment()
+        other_core = Core(
+            env=other_env,
+            core_id=0,
+            config=CoreConfig(),
+            mapper=Mock(),
+            endpoint_registry=arch.endpoint_registry,
+        )
+        with self.assertRaisesRegex(ValueError, "same SimPy environment"):
+            other_core.bind_channel(ch0)
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()
@@ -498,48 +605,43 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             NoCChannel(2)
 
-    def test_router_burst_default_resolution_is_explicit_and_validated(self):
+    def test_router_burst_default_resolves_to_hardware_burst_len_7(self):
         explicit_quanta = {
             BurstLenMode.BURST_LEN_0: 1,
             BurstLenMode.BURST_LEN_1: 2,
             BurstLenMode.BURST_LEN_3: 4,
             BurstLenMode.BURST_LEN_7: 8,
         }
-        unresolved = RouterConfig()
+        configured = RouterConfig()
+        self.assertIs(
+            configured.default_burst_len_mode,
+            BurstLenMode.BURST_LEN_7,
+        )
         for mode, expected_quantum in explicit_quanta.items():
             with self.subTest(explicit_mode=mode):
                 self.assertEqual(
-                    unresolved.resolve_burst_quantum_flits(mode),
+                    configured.resolve_burst_quantum_flits(mode),
                     expected_quantum,
                 )
-        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
-            unresolved.resolve_burst_quantum_flits(
+        self.assertEqual(
+            configured.resolve_burst_quantum_flits(
                 BurstLenMode.BURST_LEN_DEFAULT
-            )
+            ),
+            8,
+        )
 
-        for fallback_mode, expected_quantum in explicit_quanta.items():
-            with self.subTest(fallback_mode=fallback_mode):
-                configured = RouterConfig(default_burst_len_mode=fallback_mode)
-                self.assertEqual(
-                    configured.resolve_burst_quantum_flits(
-                        BurstLenMode.BURST_LEN_DEFAULT
-                    ),
-                    expected_quantum,
-                )
-                self.assertEqual(
-                    configured.resolve_burst_quantum_flits(
-                        BurstLenMode.BURST_LEN_0
-                    ),
-                    1,
-                )
-
-        with self.assertRaisesRegex(
-            ValidationError,
-            "router burst fallback must be an explicit mode",
+        for contradictory_mode in (
+            BurstLenMode.BURST_LEN_DEFAULT,
+            BurstLenMode.BURST_LEN_0,
+            BurstLenMode.BURST_LEN_1,
+            BurstLenMode.BURST_LEN_3,
         ):
-            RouterConfig(
-                default_burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT
-            )
+            with self.subTest(contradictory_mode=contradictory_mode):
+                with self.assertRaisesRegex(
+                    ValidationError,
+                    "must resolve to BURST_LEN_7",
+                ):
+                    RouterConfig(default_burst_len_mode=contradictory_mode)
         with self.assertRaises(ValidationError):
             RouterConfig.model_validate({"default_burst_len_mode": 2})
 
@@ -1708,15 +1810,16 @@ class Phase2NoCTests(unittest.TestCase):
         harness = MeshHarness()
         router = harness.noc.routers[0]
 
-        unresolved = harness.flit(
+        defaulted = harness.flit(
             FlitType.SINGLE,
             70,
             0,
             1,
             burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
         )
-        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
-            router._rc_compute(PORT_PE, unresolved)
+        default_route = router._rc_compute(PORT_PE, defaulted)
+        self.assertEqual(default_route.burst_quantum_flits, 8)
+        del router.reservation[PORT_PE]
         self.assertFalse(router.reservation)
 
         body_without_head = harness.flit(FlitType.BODY, 71, 0, 1)
@@ -1776,47 +1879,27 @@ class Phase2NoCTests(unittest.TestCase):
         )
         self.assertIs(router._rc_compute(PORT_PE, valid_body), route_state)
 
-    def test_router_default_mode_requires_and_uses_configured_fallback(self):
-        unresolved_harness = MeshHarness()
-        unresolved_flit = unresolved_harness.flit(
-            FlitType.SINGLE,
-            75,
-            0,
-            1,
-            burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
-        )
-        with self.assertRaisesRegex(ValueError, "no configured router fallback"):
-            unresolved_harness.transfer(0, 1, [unresolved_flit])
-        unresolved_router = unresolved_harness.noc.routers[0]
-        self.assertFalse(unresolved_router.reservation)
-        self.assertFalse(unresolved_router._switch_grants)
-        self.assertIsNone(unresolved_router.output_arbiters[DIR_EAST].owner)
-
-        config = NoCConfig(
-            router=RouterConfig(
-                default_burst_len_mode=BurstLenMode.BURST_LEN_1
-            )
-        )
-        configured_harness = MeshHarness(config=config)
+    def test_router_default_mode_uses_hardware_burst_len_7(self):
+        harness = MeshHarness()
         flits = self._packet(
-            configured_harness,
+            harness,
             msg_id=76,
             src=0,
             dst=1,
-            flit_count=5,
+            flit_count=10,
             burst_len_mode=BurstLenMode.BURST_LEN_DEFAULT,
         )
-        configured_harness.transfer(0, 1, flits)
+        harness.transfer(0, 1, flits)
         for router_id in (0, 1):
             releases = [
                 event.grant_flits
-                for event in configured_harness.tracer.events
+                for event in harness.tracer.events
                 if event.action is FlitAction.ROUTER_SA_RELEASE
                 and event.router_id == router_id
                 and event.msg_id == 76
             ]
-            self.assertEqual(releases, [2, 2, 1])
-            router = configured_harness.noc.routers[router_id]
+            self.assertEqual(releases, [8, 2])
+            router = harness.noc.routers[router_id]
             self.assertFalse(router.reservation)
             self.assertFalse(router._switch_grants)
 

@@ -289,12 +289,13 @@ Each transfer specifies a `burstLenMode` controlling the maximum burst size:
 
 | Enum | Value | Max Burst Size |
 |------|-------|---------------|
-| BURST_LEN_DEFAULT | -1 | Hardware default [TBD: exact value] |
+| BURST_LEN_DEFAULT | -1 | 8 beats (same as `BURST_LEN_7`) |
 | BURST_LEN_0 | 0 | 1 beat |
 | BURST_LEN_1 | 1 | 2 beats |
 | BURST_LEN_3 | 3 | 4 beats |
 | BURST_LEN_7 | 7 | 8 beats |
 
+> The hardware default is confirmed to use the `BURST_LEN_7` maximum burst.
 > [TBD: Beat size in bytes. The minimum transfer granularity for gather table entries is 128 B, which may correspond to one beat or flit.]
 
 ### 3.6 Shared Buffer Priority
