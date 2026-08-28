@@ -1,10 +1,21 @@
 from dataclasses import dataclass
+from typing import cast
 
 import simpy
+from simpy.events import Event as SimpyEvent
+from simpy.events import Process, ProcessGenerator
+from simpy.resources.resource import Resource
 
 from .configs.schemas.arch_config import NMCChannelConfig
 from .noc import Link, Router
-from .utils.definitions import EndpointAddress, NoCChannel, NodeType
+from .utils.definitions import (
+    FLIT_BYTES,
+    EndpointAddress,
+    Flit,
+    Message,
+    NoCChannel,
+    NodeType,
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +53,22 @@ class PEChannelBinding:
             )
 
 
+@dataclass(frozen=True)
+class NMCTransmitEntry:
+    """One packetized message waiting for the directional upload engine."""
+
+    flits: tuple[Flit, ...]
+    completion: SimpyEvent
+
+
+@dataclass(frozen=True)
+class NMCReceiveEntry:
+    """One flit after completion of the directional download service."""
+
+    flit: Flit
+    completion_time: float
+
+
 class NMCChannel:
     """Runtime resources for one independent, full-duplex PE NMC channel."""
 
@@ -67,14 +94,76 @@ class NMCChannel:
         self.env = env
         self.config = config
         self.binding = binding
-        self.tx_datapath = simpy.Resource(env, capacity=1)
-        self.rx_datapath = simpy.Resource(env, capacity=1)
+        self.tx_datapath = Resource(env, capacity=1)
+        self.rx_datapath = Resource(env, capacity=1)
 
         # Hardware data-FIFO depths are unresolved. Descriptor capacity is a
         # separate command-queue limit and is introduced in Fix 10.
         self.tx_data_queue = simpy.Store(env)
         self.rx_data_queue = simpy.Store(env)
+        self.env.process(self._tx_service_loop())
+        self.env.process(self._rx_service_loop())
 
     @property
     def fabric_id(self) -> NoCChannel:
         return self.binding.address.fabric_id
+
+    @property
+    def tx_service_interval_aci_cycles(self) -> float:
+        return FLIT_BYTES / self.config.tx_bytes_per_cycle
+
+    @property
+    def rx_service_interval_aci_cycles(self) -> float:
+        return FLIT_BYTES / self.config.rx_bytes_per_cycle
+
+    def send(self, message: Message) -> Process:
+        """Queue one source-owned message and complete after NMC TX service."""
+        if message.src != self.binding.address:
+            raise ValueError(
+                f"{self.fabric_id.name} NMC channel at PE "
+                f"{self.binding.address.node_id} cannot send from "
+                f"{message.src.node_type.name}[{message.src.node_id}]"
+            )
+        flits = tuple(message.packetize())
+        return self.env.process(self._submit_tx(flits))
+
+    def recv_flit(self) -> Process:
+        """Wait for one flit after calibrated NMC RX service."""
+        return self.env.process(self._recv_flit())
+
+    def _submit_tx(self, flits: tuple[Flit, ...]) -> ProcessGenerator:
+        completion = self.env.event()
+        yield self.tx_data_queue.put(
+            NMCTransmitEntry(flits=flits, completion=completion)
+        )
+        yield completion
+
+    def _recv_flit(self) -> ProcessGenerator:
+        entry = cast(NMCReceiveEntry, (yield self.rx_data_queue.get()))
+        return entry.flit
+
+    def _tx_service_loop(self) -> ProcessGenerator:
+        while True:
+            entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
+            request = self.tx_datapath.request()
+            with request:
+                yield request
+                for flit in entry.flits:
+                    yield self.env.timeout(self.tx_service_interval_aci_cycles)
+                    yield self.binding.tx_link.send_flit(flit)
+            entry.completion.succeed()
+
+    def _rx_service_loop(self) -> ProcessGenerator:
+        while True:
+            flit = cast(Flit, (yield self.binding.rx_link.recv_flit()))
+            request = self.rx_datapath.request()
+            with request:
+                yield request
+                yield self.env.timeout(self.rx_service_interval_aci_cycles)
+                yield self.rx_data_queue.put(
+                    NMCReceiveEntry(
+                        flit=flit,
+                        completion_time=float(self.env.now),
+                    )
+                )
+                yield self.binding.rx_link.ack_credit()

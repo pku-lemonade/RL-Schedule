@@ -3,8 +3,8 @@
 `simulator_detailed` is the cycle-level ADA2S-32 simulator. Phase 2 models the
 on-chip 4-column by 8-row NoC at flit granularity. It includes independent
 runtime resources for both full-duplex PE NMC channels, while descriptor
-processing and the Task SEND/RECV packetization path remain later Phase 2 fixes.
-DMA endpoint execution remains outside this phase.
+processing and Task SEND/RECV integration remain later Phase 2 fixes. DMA
+endpoint execution remains outside this phase.
 
 The Phase 2 model is deterministic:
 
@@ -17,7 +17,8 @@ The Phase 2 model is deterministic:
 - deterministic X-first XY routing;
 - wormhole packet route reservation from HEAD through TAIL;
 - burst-level rotating round-robin output arbitration;
-- independent CH0/CH1 PE NMC TX and RX runtime resources;
+- independent CH0/CH1 PE NMC TX and RX workers with calibrated directional
+  service rates;
 - mandatory event tracing through `NoCTracer`.
 
 Run the standalone validation suite with a Python environment containing
@@ -27,5 +28,5 @@ SimPy and Pydantic:
 python -m unittest simulator_detailed.tests.test_phase2_noc
 ```
 
-The tests inject flits directly into PE-to-router links. The existing Core and
-Task SEND/RECV path remains a Phase 3 responsibility.
+The tests cover both direct flit injection and `NMCChannel` packet service. The
+existing Core and Task SEND/RECV path remains assigned to Fix 11.

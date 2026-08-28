@@ -7,10 +7,27 @@ for _p in (_parent_dir, _pkg_dir):
     if _p not in _sys.path:
         _sys.path.insert(0, _p)
 
-from .core import Core
-from .pe_channel import NMCChannel, PEChannelBinding
-from .noc import Link, Router, NoC
 from .architecture import Arch
+from .core import Core
+from .noc import Link, NoC, Router
+from .pe_channel import (
+    NMCChannel,
+    NMCReceiveEntry,
+    NMCTransmitEntry,
+    PEChannelBinding,
+)
+
+__all__ = [
+    "Arch",
+    "Core",
+    "Link",
+    "NMCChannel",
+    "NMCReceiveEntry",
+    "NMCTransmitEntry",
+    "NoC",
+    "PEChannelBinding",
+    "Router",
+]
 
 for _name, _mod in list(_sys.modules.items()):
     if _mod is not None and hasattr(_mod, '__file__') and _mod.__file__:

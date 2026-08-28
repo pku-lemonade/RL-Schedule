@@ -62,6 +62,15 @@ unknown, so these data queues are unbounded; the measured descriptor capacity
 is a separate Fix 10 command-queue constraint. Every `Core` owns exactly one
 runtime channel and one binding for CH0 and CH1.
 
+`NMCTransmitEntry` stores one immutable tuple of packetized flits plus its local
+TX-service completion event. `NMCReceiveEntry` stores one serviced flit and its
+ACI-cycle completion timestamp. `NMCChannel.send()` validates that the message
+source exactly matches the channel binding and packetizes before enqueueing, so
+later mutation cannot alter an in-flight packet. Its returned process means the
+packet has completed NMC TX service and has been handed to the source Link; it
+does not mean remote delivery. `recv_flit()` returns one flit only after NMC RX
+service. Packet reassembly and TAIL-based receive completion belong to Fix 11.
+
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
 work are not payload `Message` objects and belong to the later endpoint model.

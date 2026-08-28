@@ -15,7 +15,9 @@ The relevant configuration objects are:
   two-flit `effective_in_flight_window_flits`, and a separately calibrated
   `sync_credit_return_aci_cycles`.
 - `NMCChannelConfig`: independent TX/RX rates of 120 B/ACI-cycle, a 57-ACI-cycle
-  descriptor issue cost, and 24 outstanding descriptors.
+  descriptor issue cost, and 24 outstanding descriptors. Fix 9B converts each
+  directional rate to a `512 / bytes_per_cycle` flit service interval. The
+  descriptor fields remain unused until Fix 10.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
   106 B/cycle channel budget.
 - `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated
@@ -44,6 +46,12 @@ The canonical two-flit window covers a flit in the physical input buffer while
 the next flit occupies serializer/link-stage capacity. It is a simulator
 parameter, not a claim about another hardware FIFO. A Link rejects a window too
 small to sustain its configured zero-load launch interval.
+
+NMC directional service and Link transport are consecutive pipeline stages,
+not additive whole-message delays. TX can service the next flit while the Link
+transmits the previous flit; RX Link delivery can overlap service of the prior
+flit. Sustained throughput is therefore limited by the slowest TX, Link, or RX
+rate, with credit backpressure propagating a slow receiver to the sender.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero

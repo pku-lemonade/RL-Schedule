@@ -435,9 +435,10 @@ Tests:
 
 ## Fix 9: Add Full-Duplex PE NMC Channels
 
-Status: in progress. Fix 9A adds the runtime channel ownership and independent
-directional resources. Calibrated data movement through those resources remains
-the next Fix 9 sub-step; descriptor capacity remains assigned to Fix 10.
+Status: implemented. Fix 9A adds runtime channel ownership and independent
+directional resources. Fix 9B services immutable flits through those resources
+at calibrated rates while preserving endpoint/Link pipeline overlap. Descriptor
+capacity remains assigned to Fix 10.
 
 ### Fix 9A: Create Independent Runtime Channel Resources
 
@@ -462,6 +463,15 @@ Tests:
 
 ### Fix 9B: Apply Calibrated Directional Data Service
 
+Status: implemented. `NMCChannel.send()` validates exact source ownership,
+packetizes once, and queues one ordered packet operation. Independent upload and
+download workers apply `512 / bytes_per_cycle` service intervals. Link queues,
+router flow control, and NMC service overlap as pipeline stages, so the slower
+stage controls sustained throughput. RX returns credit only after directional
+service. SEND completion currently means all flits have completed NMC TX service
+and entered the source Link; remote packet completion remains assigned to Fix
+11.
+
 Code changes:
 
 - Service queued TX and RX data independently at each channel's configured
@@ -481,6 +491,10 @@ Tests:
 - Dual-channel same-direction traffic approaches 234-240 B/ACI-cycle aggregate.
 - Dual-channel full duplex approaches 468 B/ACI-cycle aggregate for bulk
   traffic.
+- Slower TX, RX, or PE-side Link rates become the measured bottleneck; a slow RX
+  throttles source injection through normal credit backpressure.
+- Concurrent packet submissions retain packet and flit order, and a channel
+  rejects a message owned by another source endpoint.
 
 ## Fix 10: Add Descriptor Limits and Explicit Latency Profiles
 

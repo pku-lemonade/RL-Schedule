@@ -64,8 +64,13 @@ from simulator_detailed.utils.definitions import (
 
 
 class MeshHarness:
-    def __init__(self, fabric_id=NoCChannel.CH0, config=None):
-        self.env = simpy.Environment()
+    def __init__(
+        self,
+        fabric_id=NoCChannel.CH0,
+        config=None,
+        env=None,
+    ):
+        self.env = env if env is not None else simpy.Environment()
         self.config = config or NoCConfig()
         self.fabric_id = fabric_id
         self.tracer = NoCTracer(fabric_id)
@@ -76,6 +81,8 @@ class MeshHarness:
             self.tracer,
         ).build_connection_mesh()
         self.endpoints = {}
+        self.nmc_channels = {}
+        self.registry = EndpointRegistry(self.config)
 
     def attach(self, router_id):
         c2r = Link(
@@ -96,6 +103,45 @@ class MeshHarness:
         )
         self.noc.routers[router_id].bind_link(PORT_PE, c2r, r2c)
         self.endpoints[router_id] = (c2r, r2c)
+
+    def attach_nmc(self, router_id, channel_config=None):
+        if router_id in self.nmc_channels:
+            raise ValueError(f"PE{router_id} already has an NMC channel")
+        if router_id not in self.endpoints:
+            self.attach(router_id)
+        tx_link, rx_link = self.endpoints[router_id]
+        channel = NMCChannel(
+            env=self.env,
+            config=channel_config or NMCChannelConfig(),
+            binding=PEChannelBinding(
+                address=self.registry.resolve(
+                    NodeType.PE,
+                    router_id,
+                    fabric_id=self.fabric_id,
+                ),
+                tx_link=tx_link,
+                rx_link=rx_link,
+                router=self.noc.routers[router_id],
+            ),
+        )
+        self.nmc_channels[router_id] = channel
+        return channel
+
+    def message(self, msg_id, src, dst, flit_count):
+        return Message(
+            src=self.registry.resolve(
+                NodeType.PE,
+                src,
+                fabric_id=self.fabric_id,
+            ),
+            dst=self.registry.resolve(
+                NodeType.PE,
+                dst,
+                fabric_id=self.fabric_id,
+            ),
+            index=msg_id,
+            data=[DimSlice(start=0, end=flit_count * FLIT_BYTES)],
+        )
 
     def flit(
         self,
@@ -332,15 +378,10 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(intervals["ch1_tx"], [0, 4])
         self.assertEqual(intervals["ch1_rx"], [0, 5])
 
-        ch0.tx_data_queue.put("ch0-tx")
-        ch0.rx_data_queue.put("ch0-rx")
-        ch1.tx_data_queue.put("ch1-tx")
-        ch1.rx_data_queue.put("ch1-rx")
-        env.run()
-        self.assertEqual(ch0.tx_data_queue.items, ["ch0-tx"])
-        self.assertEqual(ch0.rx_data_queue.items, ["ch0-rx"])
-        self.assertEqual(ch1.tx_data_queue.items, ["ch1-tx"])
-        self.assertEqual(ch1.rx_data_queue.items, ["ch1-rx"])
+        self.assertFalse(ch0.tx_data_queue.items)
+        self.assertFalse(ch0.rx_data_queue.items)
+        self.assertFalse(ch1.tx_data_queue.items)
+        self.assertFalse(ch1.rx_data_queue.items)
 
         with self.assertRaisesRegex(ValueError, "same SimPy environment"):
             NMCChannel(
@@ -359,6 +400,206 @@ class Phase2NoCTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "same SimPy environment"):
             other_core.bind_channel(ch0)
+
+    def test_nmc_directional_service_uses_the_slowest_pipeline_stage(self):
+        cases = (
+            (64.0, 120.0, 120.0, 64.0),
+            (120.0, 64.0, 120.0, 64.0),
+            (120.0, 120.0, 80.0, 80.0),
+            (117.0, 118.0, 120.0, 117.0),
+        )
+        flit_count = 64
+
+        for tx_rate, rx_rate, link_rate, expected_rate in cases:
+            with self.subTest(
+                tx_rate=tx_rate,
+                rx_rate=rx_rate,
+                link_rate=link_rate,
+            ):
+                link_config = LinkConfig(
+                    launch_interval_aci_cycles=FLIT_BYTES / link_rate
+                )
+                harness = MeshHarness(
+                    config=NoCConfig(c2r_link=link_config)
+                )
+                source = harness.attach_nmc(
+                    0,
+                    NMCChannelConfig(
+                        tx_bytes_per_cycle=tx_rate,
+                        rx_bytes_per_cycle=120.0,
+                    ),
+                )
+                destination = harness.attach_nmc(
+                    1,
+                    NMCChannelConfig(
+                        tx_bytes_per_cycle=120.0,
+                        rx_bytes_per_cycle=rx_rate,
+                    ),
+                )
+                message = harness.message(80, 0, 1, flit_count)
+                arrival_times = []
+
+                def receive_packet(channel, times, env):
+                    for _ in range(flit_count):
+                        yield channel.recv_flit()
+                        times.append(float(env.now))
+
+                send_process = source.send(message)
+                receive_process = harness.env.process(
+                    receive_packet(
+                        destination,
+                        arrival_times,
+                        harness.env,
+                    )
+                )
+                harness.env.run(
+                    until=harness.env.all_of(
+                        (send_process, receive_process)
+                    )
+                )
+
+                observed_rate = (
+                    (flit_count - 1) * FLIT_BYTES
+                    / (arrival_times[-1] - arrival_times[0])
+                )
+                source_launch_times = [
+                    event.time
+                    for event in harness.tracer.events
+                    if event.action is FlitAction.LINK_SEND
+                    and event.link_name == source.binding.tx_link.link_name
+                    and event.msg_id == message.index
+                ]
+                source_launch_rate = (
+                    (flit_count - 1) * FLIT_BYTES
+                    / (source_launch_times[-1] - source_launch_times[0])
+                )
+                source_cap = min(tx_rate, link_rate)
+                self.assertLessEqual(source_launch_rate, source_cap + 1e-6)
+                if rx_rate >= source_cap:
+                    self.assertAlmostEqual(
+                        source_launch_rate,
+                        source_cap,
+                        places=6,
+                    )
+                self.assertAlmostEqual(
+                    observed_rate,
+                    expected_rate,
+                    delta=expected_rate * 0.02,
+                )
+
+    def test_nmc_channels_reach_full_duplex_aggregate_rates(self):
+        env = simpy.Environment()
+        channel_config = NMCChannelConfig(
+            tx_bytes_per_cycle=117.0,
+            rx_bytes_per_cycle=117.0,
+        )
+        harnesses = {
+            fabric_id: MeshHarness(fabric_id=fabric_id, env=env)
+            for fabric_id in NoCChannel
+        }
+        channels = {
+            (fabric_id, pe_id): harness.attach_nmc(pe_id, channel_config)
+            for fabric_id, harness in harnesses.items()
+            for pe_id in (0, 1)
+        }
+        flit_count = 64
+        flows = (
+            (NoCChannel.CH0, 0, 1, 90),
+            (NoCChannel.CH0, 1, 0, 91),
+            (NoCChannel.CH1, 0, 1, 92),
+            (NoCChannel.CH1, 1, 0, 93),
+        )
+        arrival_times = {msg_id: [] for _, _, _, msg_id in flows}
+        processes = []
+
+        def receive_packet(channel, msg_id):
+            for _ in range(flit_count):
+                flit = yield channel.recv_flit()
+                self.assertEqual(flit.msg_id, msg_id)
+                arrival_times[msg_id].append(float(env.now))
+
+        for fabric_id, src, dst, msg_id in flows:
+            harness = harnesses[fabric_id]
+            processes.append(
+                channels[(fabric_id, src)].send(
+                    harness.message(msg_id, src, dst, flit_count)
+                )
+            )
+            processes.append(
+                env.process(
+                    receive_packet(channels[(fabric_id, dst)], msg_id)
+                )
+            )
+
+        env.run(until=env.all_of(processes))
+
+        def aggregate_rate(msg_ids):
+            start = min(arrival_times[msg_id][0] for msg_id in msg_ids)
+            end = max(arrival_times[msg_id][-1] for msg_id in msg_ids)
+            return len(msg_ids) * (flit_count - 1) * FLIT_BYTES / (end - start)
+
+        for _, _, _, msg_id in flows:
+            self.assertAlmostEqual(
+                aggregate_rate((msg_id,)),
+                117.0,
+                delta=117.0 * 0.02,
+            )
+        self.assertAlmostEqual(
+            aggregate_rate((90, 91)),
+            234.0,
+            delta=234.0 * 0.02,
+        )
+        self.assertAlmostEqual(
+            aggregate_rate((90, 92)),
+            234.0,
+            delta=234.0 * 0.02,
+        )
+        self.assertAlmostEqual(
+            aggregate_rate((90, 91, 92, 93)),
+            468.0,
+            delta=468.0 * 0.02,
+        )
+
+    def test_nmc_send_validates_source_and_preserves_packet_order(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        destination = harness.attach_nmc(1)
+        wrong_source = harness.message(100, 1, 0, 1)
+
+        with self.assertRaisesRegex(ValueError, r"cannot send from PE\[1\]"):
+            source.send(wrong_source)
+
+        first = harness.message(101, 0, 1, 3)
+        second = harness.message(102, 0, 1, 2)
+        received = []
+
+        def receive_packets():
+            for _ in range(first.flit_count() + second.flit_count()):
+                received.append((yield destination.recv_flit()))
+
+        send_first = source.send(first)
+        send_second = source.send(second)
+        receive_process = harness.env.process(receive_packets())
+        harness.env.run(
+            until=harness.env.all_of(
+                (send_first, send_second, receive_process)
+            )
+        )
+
+        self.assertEqual(
+            [flit.msg_id for flit in received],
+            [101, 101, 101, 102, 102],
+        )
+        self.assertEqual(
+            [flit.flit_type for flit in received],
+            [
+                FlitType.HEAD,
+                FlitType.BODY,
+                FlitType.TAIL,
+                FlitType.HEAD,
+                FlitType.TAIL,
+            ],
+        )
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()

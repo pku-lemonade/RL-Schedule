@@ -22,10 +22,11 @@ quantum. Only flits accepted by the output Link count against the grant. A
 packet with remaining flits keeps its route and requests another grant; this
 prevents BODY/TAIL bypass while allowing competing packets to alternate.
 
-Re-arbitration adds no fixed bubble. With no waiting competitor, the request is
-granted at the same simulation time, and configured SA/ST work overlaps the
-previous flit's link serialization. An input blocked in SA retains its input
-credit, preserving head-of-line backpressure.
+Re-arbitration adds no fixed bubble. A HEAD or a grant that waited behind a
+competitor pays the configured SA delay. With no waiting competitor, a
+continuing packet is re-granted at the same simulation time and resumes without
+a second SA delay. An input blocked in SA retains its input credit, preserving
+head-of-line backpressure.
 
 `ROUTER_SA_RELEASE` trace events record `grant_flits`, allowing exact burst
 lengths and early TAIL release to be inspected.

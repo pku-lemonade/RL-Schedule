@@ -644,7 +644,8 @@ class Router:
                 f"{self.name} output port {out_port} is unbound"
             )
         request = arbiter.request(in_port)
-        if not request.triggered:
+        granted_immediately = request.triggered
+        if not granted_immediately:
             self.tracer.log(
                 self.env.now,
                 FlitAction.STALL_SA,
@@ -663,9 +664,10 @@ class Router:
             flit=flit,
             out_port=out_port,
         )
-        yield self.env.timeout(
-            self.config.pipeline.effective_sa_aci_cycles
-        )
+        if flit.is_head or not granted_immediately:
+            yield self.env.timeout(
+                self.config.pipeline.effective_sa_aci_cycles
+            )
 
     def _post_send(self, in_port: int, out_port: int, flit: Flit):
         route_state = self.reservation.get(in_port)
