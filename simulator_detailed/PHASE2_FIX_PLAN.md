@@ -356,26 +356,79 @@ Tests:
 
 ## Fix 8: Implement Explicit Round-Robin Output Arbitration
 
+Status: partially implemented. Fix 8A-1 carries the variable burst contract;
+the current router still uses FIFO `simpy.Resource` ownership from HEAD through
+TAIL and does not enforce burst boundaries.
+
+### Fix 8A-1: Carry the Variable Burst Contract
+
+Status: implemented. Messages and immutable flits preserve the hardware mode,
+and explicit modes expose their 1/2/4/8-flit quantum without changing transport
+behavior.
+
+Code changes:
+
+- Add the hardware `BurstLenMode` values `BURST_LEN_DEFAULT=-1`,
+  `BURST_LEN_0=0`, `BURST_LEN_1=1`, `BURST_LEN_3=3`, and `BURST_LEN_7=7` to
+  the Phase 2 data contract.
+- Map the explicit modes to arbitration quanta of 1, 2, 4, and 8 flits,
+  respectively. Burst mode does not change the fixed 512 B flit size or
+  `ceil(payload / 512)` packetization.
+- Add `burst_len_mode` to each `Message` and preserve it in immutable flit
+  metadata so every traversed output can enforce the same transfer contract.
+
+Tests:
+
+- All explicit enum values resolve to 1, 2, 4, and 8 flits, invalid encodings
+  are rejected, and unresolved `DEFAULT` cannot silently become a quantum.
+- Message packetization preserves burst metadata without changing flit count,
+  payload bytes, transfer bytes, or HEAD/BODY/TAIL sequencing.
+
+### Fix 8A-2: Resolve the Hardware Default
+
+Status: not implemented.
+
+Code changes:
+
+- Resolve `BURST_LEN_DEFAULT` through a validated architecture configuration
+  value rather than treating it as an unlimited whole-message grant; the
+  hardware default remains unknown.
+
+Tests:
+
+- Invalid configured defaults are rejected, and explicit transfer modes remain
+  independent of the configured default.
+
+### Fix 8B: Arbitrate and Release at Burst Boundaries
+
 Code changes:
 
 - Replace FIFO `simpy.Resource` grants with one rotating arbiter per output port.
-- Track requests by input port and advance the pointer after a reservation or
-  configured burst quantum releases the output.
-- Keep wormhole ordering and prevent BODY/TAIL flits from bypassing their HEAD.
-- Make the burst arbitration quantum configurable because the hardware default
-  `BurstLenMode` remains unknown.
-- Carry shared-buffer priority in the packet contract and arbitrate priority
-  classes before round-robin selection within one class. Default traffic uses
-  the measured equal-priority round-robin behavior.
+- Track requests by input port and advance the pointer whenever a burst grant is
+  released.
+- Count only successfully transmitted flits against the grant. Release on the
+  earlier of the configured 1/2/4/8-flit quantum or TAIL; if the packet has
+  remaining flits, retain its route state and request the output again.
+- Separate packet route state (HEAD through TAIL) from temporary switch ownership
+  (one burst). Preserve wormhole ordering and prevent BODY/TAIL flits from
+  bypassing their HEAD.
+- Keep arbiters independent per output port, router, and NoC fabric. Do not add
+  the old profiling simulator's unmeasured fixed one-cycle burst bubble.
+- Carry `shrBufPortPriority` as separate shared-buffer metadata, but do not use
+  it to override measured equal-priority switch round-robin unless its coupling
+  to switch arbitration is confirmed.
 
 Tests:
 
 - Two and three saturated inputs alternate fairly with bounded waiting.
 - No requester starves and aggregate output remains near link capacity.
 - Different fabrics arbitrate independently.
-- Mixed packet sizes obey the configured burst quantum.
-- Higher shared-buffer priority wins when configured, while equal-priority
-  requesters remain round-robin and starvation-free.
+- A ten-flit packet produces grant lengths `[1, ...]`, `[2, ...]`, `[4, 4, 2]`,
+  or `[8, 2]` under the four explicit modes, with TAIL releasing early.
+- Competing transfers with different burst modes re-arbitrate at their own burst
+  boundaries and preserve each packet's flit order.
+- With no competitor, re-arbitration does not add an unmeasured bubble; link
+  serialization and per-flit credit behavior remain unchanged.
 
 ## Fix 9: Add Full-Duplex PE NMC Channels
 
@@ -503,8 +556,8 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 | Fixed endpoint local-port modes (§2.5) | Fix 2 | Represent and validate |
 | Hardware `TransType` encoding (§3.2) | Fix 1 | Encode all; execute unicast only |
 | Deterministic XY and one VC (§3.3) | Fixes 1, 4, and 8 | Implement fully |
-| Round-robin and burst behavior (§3.5, §9.15-9.16) | Fix 8 | RR implemented; default burst remains configurable |
-| Shared-buffer priority (§3.6) | Fix 8 | Priority classes plus RR within a class |
+| Round-robin and variable burst behavior (§3.5, §9.15-9.16) | Fixes 8A-1, 8A-2, and 8B | 8A-1 implemented; DEFAULT resolution and burst-level RR remain pending |
+| Shared-buffer priority (§3.6) | Fix 8B boundary | Carry metadata only; switch-arbiter coupling remains unconfirmed |
 | One-flit input buffering and sync credit flow (§2.0, §3.7) | Fixes 3B and 7 | Bounded calibrated model; exact sync topology/FIFO internals unresolved |
 | 1125 MHz ACI and 2250 MHz NoC clocks (§1.3, §2.4) | Fix 3A | Explicit two-domain conversion; ACI simulation timebase |
 | 4 MiB PE Local SRAM and explicit GM/DDR clocks (§1.2-1.3) | Fix 3C | Canonical config only; endpoint execution deferred |

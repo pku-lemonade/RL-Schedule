@@ -40,6 +40,7 @@ from simulator_detailed.utils.definitions import (
     Direction,
     DimSlice,
     EndpointAddress,
+    BurstLenMode,
     Flit,
     FlitType,
     Message,
@@ -454,6 +455,29 @@ class Phase2NoCTests(unittest.TestCase):
             {member.name: member.value for member in NoCChannel},
             {"CH0": 0, "CH1": 1},
         )
+        self.assertEqual(
+            {member.name: member.value for member in BurstLenMode},
+            {
+                "BURST_LEN_DEFAULT": -1,
+                "BURST_LEN_0": 0,
+                "BURST_LEN_1": 1,
+                "BURST_LEN_3": 3,
+                "BURST_LEN_7": 7,
+            },
+        )
+        expected_quanta = {
+            BurstLenMode.BURST_LEN_0: 1,
+            BurstLenMode.BURST_LEN_1: 2,
+            BurstLenMode.BURST_LEN_3: 4,
+            BurstLenMode.BURST_LEN_7: 8,
+        }
+        for mode, expected_quantum in expected_quanta.items():
+            with self.subTest(mode=mode):
+                self.assertEqual(mode.explicit_quantum_flits(), expected_quantum)
+        with self.assertRaisesRegex(ValueError, "requires architecture resolution"):
+            BurstLenMode.BURST_LEN_DEFAULT.explicit_quantum_flits()
+        with self.assertRaises(ValueError):
+            BurstLenMode(2)
         with self.assertRaises(ValueError):
             NoCChannel(2)
 
@@ -628,6 +652,7 @@ class Phase2NoCTests(unittest.TestCase):
                     index=100 + payload_bytes,
                     data=[DimSlice(start=0, end=payload_bytes)],
                     trans_type=TransType.SINGLECAST,
+                    burst_len_mode=BurstLenMode.BURST_LEN_3,
                 )
 
                 flits = message.packetize()
@@ -650,6 +675,10 @@ class Phase2NoCTests(unittest.TestCase):
                     self.assertEqual(flit.broadcast_dst_mask, 0)
                     self.assertEqual(flit.reduce_op, -1)
                     self.assertEqual(flit.sync_mode, 0)
+                    self.assertIs(
+                        flit.burst_len_mode,
+                        BurstLenMode.BURST_LEN_3,
+                    )
 
         dma_registry = EndpointRegistry(
             NoCConfig(
@@ -688,6 +717,10 @@ class Phase2NoCTests(unittest.TestCase):
             data=[DimSlice(start=0, end=513)],
         )
         configured_flits = configured_message.packetize()
+        self.assertIs(
+            configured_message.burst_len_mode,
+            BurstLenMode.BURST_LEN_DEFAULT,
+        )
         self.assertEqual(
             [flit.flit_type for flit in configured_flits],
             [FlitType.HEAD, FlitType.TAIL],
@@ -697,6 +730,10 @@ class Phase2NoCTests(unittest.TestCase):
             [512, 1],
         )
         for flit in configured_flits:
+            self.assertIs(
+                flit.burst_len_mode,
+                BurstLenMode.BURST_LEN_DEFAULT,
+            )
             self.assertIs(flit.fabric_id, NoCChannel.CH1)
             self.assertEqual(flit.src_router, 28)
             self.assertEqual(flit.src_local_port, PORT_GM_RDMA)

@@ -80,6 +80,22 @@ class TransType(IntEnum):
     BROADCAST = 3   # Broadcast to all PEs (multicast with full mask)
 
 
+class BurstLenMode(IntEnum):
+    """Hardware burst-length encoding carried by each NoC transfer."""
+
+    BURST_LEN_DEFAULT = -1
+    BURST_LEN_0 = 0
+    BURST_LEN_1 = 1
+    BURST_LEN_3 = 3
+    BURST_LEN_7 = 7
+
+    def explicit_quantum_flits(self) -> int:
+        """Return the encoded explicit arbitration quantum in flits."""
+        if self is BurstLenMode.BURST_LEN_DEFAULT:
+            raise ValueError("BURST_LEN_DEFAULT requires architecture resolution")
+        return int(self.value) + 1
+
+
 PORT_PE           = 0   # local port: PE NMC
 PORT_DDR_WDMA_CH0 = 3   # local port: DDR write DMA channel 0
 PORT_DDR_WDMA_CH1 = 4   # local port: DDR write DMA channel 1
@@ -312,6 +328,7 @@ class Flit(BaseModel):
     broadcast_dst_mask: int = 0      # bitmask of destination PE/router IDs for broadcast
     reduce_op: int = -1              # reduce operation type (-1 = none, >=0 = reduce mode)
     sync_mode: int = 0               # sync mode: 0=normal,1=bcast-incl-self,2=reduce-intermediate,3=reduce-last
+    burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
 
     @property
     def is_head(self) -> bool:
@@ -383,6 +400,7 @@ class Message(BaseModel):
     index: int                        # unique message index (DFG task index)
     data: List[DimSlice]              # tensor slice(s) describing payload
     trans_type: TransType = TransType.SINGLECAST  # transmission type
+    burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
     is_broadcast: bool = False        # whether this is a broadcast message
     broadcast_dst_mask: int = 0       # destination bitmask for broadcast/multicast
     reduce_op: int = -1               # reduce operation (-1 = none)
@@ -452,6 +470,7 @@ class Message(BaseModel):
                     broadcast_dst_mask=self.broadcast_dst_mask,
                     reduce_op=self.reduce_op,
                     sync_mode=self.sync_mode,
+                    burst_len_mode=self.burst_len_mode,
                 )
             )
 
