@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import simpy
 from pydantic import ValidationError
@@ -1057,6 +1057,46 @@ class Phase2NoCTests(unittest.TestCase):
                 )
         with self.assertRaises(ValueError):
             NMCShapeMode("send_with_sync")
+
+    def test_nmc_shape_mode_reaches_send_admission_but_not_flits(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        destination = harness.attach_nmc(1)
+        dynamic_message = harness.message(150, 0, 1, 2)
+        static_message = dynamic_message.model_copy(
+            update={"nmc_shape_mode": NMCShapeMode.STATIC}
+        )
+
+        self.assertIs(
+            dynamic_message.nmc_shape_mode,
+            NMCShapeMode.DYNAMIC,
+        )
+        self.assertEqual(
+            static_message.packetize(),
+            dynamic_message.packetize(),
+        )
+        self.assertNotIn("nmc_shape_mode", Flit.model_fields)
+
+        received = []
+
+        def receive_message():
+            for _ in range(static_message.flit_count()):
+                received.append((yield destination.recv_flit()))
+
+        with patch.object(
+            source.tx_data_queue,
+            "put",
+            wraps=source.tx_data_queue.put,
+        ) as queue_put:
+            send_process = source.send(static_message)
+            receive_process = harness.env.process(receive_message())
+            harness.env.run(
+                until=harness.env.all_of((send_process, receive_process))
+            )
+
+        admitted_entry = queue_put.call_args.args[0]
+        self.assertIs(admitted_entry.shape_mode, NMCShapeMode.STATIC)
+        self.assertEqual(received, static_message.packetize())
 
     def test_router_burst_default_resolves_to_hardware_burst_len_7(self):
         explicit_quanta = {

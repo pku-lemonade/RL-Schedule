@@ -570,6 +570,12 @@ Tests:
 
 ### Fix 10C-2: Carry Shape Mode on Endpoint Commands
 
+Status: implemented for the current SEND command boundary. `Message` carries
+the source command's mode with a dynamic compatibility default, and
+`NMCTransmitEntry` preserves it through admission without adding it to `Flit`.
+The current `recv_flit()` API is not a receive command; Fix 11 will bind an
+independently selected mode to command-level receive admission.
+
 Code changes:
 
 - Add shape mode to SEND and RECV command metadata with `DYNAMIC` as the

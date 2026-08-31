@@ -406,6 +406,7 @@ class Message(BaseModel):
     dst: EndpointAddress              # resolved destination endpoint attachment
     index: int                        # unique message index (DFG task index)
     data: List[DimSlice]              # tensor slice(s) describing payload
+    nmc_shape_mode: NMCShapeMode = NMCShapeMode.DYNAMIC
     trans_type: TransType = TransType.SINGLECAST  # transmission type
     burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
     is_broadcast: bool = False        # whether this is a broadcast message

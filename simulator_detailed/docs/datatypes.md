@@ -26,6 +26,8 @@ to the node type: PE IDs are 0-31 and each DMA type has instance IDs 0-3.
 `Message` stores source and destination `EndpointAddress` values when it is
 initialized, avoiding independent fabric, node, router, and port fields that
 could contradict one another. Both addresses must belong to the same fabric.
+Its `nmc_shape_mode` is local SEND-command metadata and defaults to `DYNAMIC`;
+the source NMC consumes it during command admission.
 
 `Message.packetize()` converts an addressed message into fixed-capacity,
 payload-bearing flits. It copies fabric identity and routing from the stored
@@ -34,7 +36,10 @@ packet count and Link transfer cost. `FlitConfig` retains the corresponding
 fields for explicit configuration validation but rejects any non-512 value.
 The source route is simulator metadata used for injection tracing; the
 documented hardware routing word carries only the destination route and local
-port.
+port. Static and dynamic shape modes produce identical Flits because shape
+construction changes endpoint setup timing, not packetization or fabric
+service. The destination's future RECV command selects its own shape mode; the
+sender's mode is therefore not copied into a Flit.
 
 `BurstLenMode` preserves the hardware encodings `BURST_LEN_DEFAULT=-1` and
 `BURST_LEN_0/1/3/7=0/1/3/7`. The four explicit modes map to arbitration quanta
@@ -62,14 +67,17 @@ unknown, so these data queues are unbounded. Each channel separately owns a FIFO
 descriptor slot pool with `max_outstanding_descriptors` entries. Every `Core`
 owns exactly one runtime channel and one binding for CH0 and CH1.
 
-`NMCTransmitEntry` stores one immutable tuple of packetized flits plus its local
-TX-service completion event. `NMCReceiveEntry` stores one serviced flit and its
-ACI-cycle completion timestamp. `NMCChannel.send()` validates that the message
-source exactly matches the channel binding and packetizes before enqueueing, so
-later mutation cannot alter an in-flight packet. Its returned process means the
-packet has completed NMC TX service and has been handed to the source Link; it
-does not mean remote delivery. `recv_flit()` returns one flit only after NMC RX
-service. Packet reassembly and TAIL-based receive completion belong to Fix 11.
+`NMCTransmitEntry` stores one immutable tuple of packetized flits, the source
+command's shape mode, and its local TX-service completion event.
+`NMCReceiveEntry` stores one serviced flit and its ACI-cycle completion
+timestamp. `NMCChannel.send()` validates that the message source exactly
+matches the channel binding and packetizes before enqueueing, so later mutation
+cannot alter an in-flight packet. Its returned process means the packet has
+completed NMC TX service and has been handed to the source Link; it does not
+mean remote delivery. `recv_flit()` returns one flit only after NMC RX service;
+it is not a command-level receive API and therefore does not select a shape
+mode. Packet reassembly, independent RECV metadata, and TAIL-based receive
+completion belong to Fix 11.
 
 A TX command must acquire one channel descriptor slot before its immutable flit
 tuple enters `tx_data_queue`. The slot remains occupied until local TX service

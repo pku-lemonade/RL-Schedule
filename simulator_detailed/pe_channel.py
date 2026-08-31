@@ -13,6 +13,7 @@ from .utils.definitions import (
     EndpointAddress,
     Flit,
     Message,
+    NMCShapeMode,
     NoCChannel,
     NodeType,
 )
@@ -58,6 +59,7 @@ class NMCTransmitEntry:
     """One packetized message waiting for the directional upload engine."""
 
     flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
     completion: SimpyEvent
 
 
@@ -134,13 +136,19 @@ class NMCChannel:
                 f"{message.src.node_type.name}[{message.src.node_id}]"
             )
         flits = tuple(message.packetize())
-        return self.env.process(self._submit_tx(flits))
+        return self.env.process(
+            self._submit_tx(flits, message.nmc_shape_mode)
+        )
 
     def recv_flit(self) -> Process:
         """Wait for one flit after calibrated NMC RX service."""
         return self.env.process(self._recv_flit())
 
-    def _submit_tx(self, flits: tuple[Flit, ...]) -> ProcessGenerator:
+    def _submit_tx(
+        self,
+        flits: tuple[Flit, ...],
+        shape_mode: NMCShapeMode,
+    ) -> ProcessGenerator:
         descriptor_request: Request | None = None
         try:
             issue_request = self.descriptor_issuer.request()
@@ -152,7 +160,11 @@ class NMCChannel:
 
             completion = self.env.event()
             yield self.tx_data_queue.put(
-                NMCTransmitEntry(flits=flits, completion=completion)
+                NMCTransmitEntry(
+                    flits=flits,
+                    shape_mode=shape_mode,
+                    completion=completion,
+                )
             )
             yield completion
         finally:
