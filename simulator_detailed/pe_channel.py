@@ -4,7 +4,7 @@ from typing import cast
 import simpy
 from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
-from simpy.resources.resource import Resource
+from simpy.resources.resource import Request, Resource
 
 from .configs.schemas.arch_config import NMCChannelConfig
 from .noc import Link, Router
@@ -100,6 +100,7 @@ class NMCChannel:
             env,
             capacity=config.max_outstanding_descriptors,
         )
+        self.descriptor_issuer = Resource(env, capacity=1)
 
         # Hardware data-FIFO depths are unresolved and remain distinct from the
         # measured descriptor capacity enforced above.
@@ -140,14 +141,26 @@ class NMCChannel:
         return self.env.process(self._recv_flit())
 
     def _submit_tx(self, flits: tuple[Flit, ...]) -> ProcessGenerator:
-        descriptor_request = self.descriptor_slots.request()
-        with descriptor_request:
-            yield descriptor_request
+        descriptor_request: Request | None = None
+        try:
+            issue_request = self.descriptor_issuer.request()
+            with issue_request:
+                yield issue_request
+                descriptor_request = self.descriptor_slots.request()
+                yield descriptor_request
+                yield self.env.timeout(self.config.descriptor_issue_cycles)
+
             completion = self.env.event()
             yield self.tx_data_queue.put(
                 NMCTransmitEntry(flits=flits, completion=completion)
             )
             yield completion
+        finally:
+            if descriptor_request is not None:
+                if descriptor_request.triggered:
+                    self.descriptor_slots.release(descriptor_request)
+                else:
+                    descriptor_request.cancel()
 
     def _recv_flit(self) -> ProcessGenerator:
         entry = cast(NMCReceiveEntry, (yield self.rx_data_queue.get()))

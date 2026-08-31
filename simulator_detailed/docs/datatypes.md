@@ -79,6 +79,13 @@ is full. CH0 and CH1 use distinct pools. `recv_flit()` is not a receive command,
 so it does not consume one descriptor per flit; Fix 11 will connect receive
 command admission to the same per-channel pool.
 
+Each channel also owns one `descriptor_issuer`. Same-channel commands serialize
+through this resource, acquire descriptor capacity in submission order, and
+spend `descriptor_issue_cycles` before entering `tx_data_queue`. The issuer is
+released after posting so descriptor programming can overlap earlier data
+service. The descriptor slot itself remains held through local TX completion.
+Separate CH0 and CH1 issuers allow their posting intervals to overlap.
+
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
 work are not payload `Message` objects and belong to the later endpoint model.

@@ -18,8 +18,8 @@ The relevant configuration objects are:
   descriptor issue cost, and 24 outstanding descriptors. Fix 9B converts each
   directional rate to a `512 / bytes_per_cycle` flit service interval. Fix 10A
   uses `max_outstanding_descriptors` as the capacity of each channel's runtime
-  descriptor slot pool. `descriptor_issue_cycles` remains unused until the next
-  Fix 10 sub-step.
+  descriptor slot pool. Fix 10B uses `descriptor_issue_cycles` as the serialized
+  posting time before an admitted command enters directional data service.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
   106 B/cycle channel budget.
 - `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated
@@ -54,6 +54,11 @@ not additive whole-message delays. TX can service the next flit while the Link
 transmits the previous flit; RX Link delivery can overlap service of the prior
 flit. Sustained throughput is therefore limited by the slowest TX, Link, or RX
 rate, with credit backpressure propagating a slow receiver to the sender.
+
+Descriptor posting is a per-command stage, not a per-flit penalty. Commands on
+one channel are issued at `descriptor_issue_cycles` intervals, while CH0 and CH1
+have independent issuers. A full descriptor pool stalls the oldest command at
+the channel issuer until an earlier command completes and releases a slot.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero

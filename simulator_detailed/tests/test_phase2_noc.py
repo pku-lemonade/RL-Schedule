@@ -300,6 +300,7 @@ class Phase2NoCTests(unittest.TestCase):
             "tx_datapath",
             "rx_datapath",
             "descriptor_slots",
+            "descriptor_issuer",
             "tx_data_queue",
             "rx_data_queue",
         ):
@@ -367,6 +368,7 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(ch0.descriptor_slots.capacity, 2)
         self.assertEqual(ch1.descriptor_slots.capacity, 3)
         self.assertIsNot(ch0.descriptor_slots, ch1.descriptor_slots)
+        self.assertIsNot(ch0.descriptor_issuer, ch1.descriptor_issuer)
 
         intervals = {}
 
@@ -437,18 +439,29 @@ class Phase2NoCTests(unittest.TestCase):
         receive_process = harness.env.process(receive_messages())
 
         harness.env.run(until=1.0)
+        self.assertEqual(source.outstanding_descriptor_count, 1)
+        self.assertEqual(len(source.descriptor_issuer.users), 1)
+        self.assertEqual(len(source.descriptor_issuer.queue), 2)
+        self.assertFalse(source.descriptor_slots.queue)
+        self.assertFalse(source.tx_data_queue.items)
+        self.assertFalse(any(process.triggered for process in send_processes))
+
+        harness.env.run(until=115.0)
         self.assertEqual(source.outstanding_descriptor_count, 2)
         self.assertEqual(len(source.descriptor_slots.queue), 1)
+        self.assertEqual(len(source.descriptor_issuer.users), 1)
+        self.assertFalse(source.descriptor_issuer.queue)
         self.assertEqual(len(source.tx_data_queue.items), 1)
         self.assertFalse(any(process.triggered for process in send_processes))
 
-        harness.env.run(until=513.0)
+        harness.env.run(until=570.0)
         self.assertTrue(send_processes[0].triggered)
         self.assertFalse(send_processes[1].triggered)
         self.assertFalse(send_processes[2].triggered)
         self.assertEqual(source.outstanding_descriptor_count, 2)
         self.assertFalse(source.descriptor_slots.queue)
-        self.assertEqual(len(source.tx_data_queue.items), 1)
+        self.assertEqual(len(source.descriptor_issuer.users), 1)
+        self.assertFalse(source.tx_data_queue.items)
 
         harness.env.run(
             until=harness.env.all_of((*send_processes, receive_process))
@@ -458,6 +471,103 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(
             [flit.msg_id for flit in received],
             [110, 111, 112],
+        )
+
+    def test_nmc_descriptor_issue_is_serialized_and_payload_independent(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(
+            0,
+            NMCChannelConfig(descriptor_issue_cycles=13.0),
+        )
+        destination = harness.attach_nmc(1)
+        messages = [
+            harness.message(msg_id, 0, 1, flit_count)
+            for msg_id, flit_count in ((120, 1), (121, 2), (122, 4))
+        ]
+        received = []
+
+        def receive_messages():
+            for _ in range(sum(message.flit_count() for message in messages)):
+                received.append((yield destination.recv_flit()))
+
+        send_processes = [source.send(message) for message in messages]
+        receive_process = harness.env.process(receive_messages())
+        harness.env.run(
+            until=harness.env.all_of((*send_processes, receive_process))
+        )
+
+        first_launch_times = {}
+        for event in harness.tracer.events:
+            if (
+                event.action is FlitAction.LINK_SEND
+                and event.link_name == source.binding.tx_link.link_name
+            ):
+                first_launch_times.setdefault(event.msg_id, event.time)
+
+        first_service_completion = (
+            source.config.descriptor_issue_cycles
+            + source.tx_service_interval_aci_cycles
+        )
+        self.assertEqual(set(first_launch_times), {120, 121, 122})
+        for index, msg_id in enumerate((120, 121, 122), start=1):
+            self.assertAlmostEqual(
+                first_launch_times[msg_id],
+                first_service_completion
+                + (index - 1) * source.config.descriptor_issue_cycles,
+            )
+
+    def test_nmc_descriptor_issuers_are_independent_across_channels(self):
+        env = simpy.Environment()
+        harnesses = {
+            fabric_id: MeshHarness(fabric_id=fabric_id, env=env)
+            for fabric_id in NoCChannel
+        }
+        sources = {
+            fabric_id: harness.attach_nmc(0)
+            for fabric_id, harness in harnesses.items()
+        }
+        destinations = {
+            fabric_id: harness.attach_nmc(1)
+            for fabric_id, harness in harnesses.items()
+        }
+        processes = []
+
+        for fabric_id, msg_id in (
+            (NoCChannel.CH0, 130),
+            (NoCChannel.CH1, 131),
+        ):
+            harness = harnesses[fabric_id]
+            processes.append(
+                sources[fabric_id].send(
+                    harness.message(msg_id, 0, 1, 1)
+                )
+            )
+            processes.append(destinations[fabric_id].recv_flit())
+
+        env.run(until=env.all_of(processes))
+
+        first_launch_times = {}
+        for fabric_id, msg_id in (
+            (NoCChannel.CH0, 130),
+            (NoCChannel.CH1, 131),
+        ):
+            source = sources[fabric_id]
+            first_launch_times[fabric_id] = next(
+                event.time
+                for event in harnesses[fabric_id].tracer.events
+                if event.action is FlitAction.LINK_SEND
+                and event.link_name == source.binding.tx_link.link_name
+                and event.msg_id == msg_id
+            )
+
+        self.assertAlmostEqual(
+            first_launch_times[NoCChannel.CH0],
+            first_launch_times[NoCChannel.CH1],
+        )
+        self.assertAlmostEqual(
+            first_launch_times[NoCChannel.CH0],
+            sources[NoCChannel.CH0].config.descriptor_issue_cycles
+            + sources[NoCChannel.CH0].tx_service_interval_aci_cycles,
         )
 
     def test_nmc_directional_service_uses_the_slowest_pipeline_stage(self):

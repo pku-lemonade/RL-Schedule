@@ -499,8 +499,9 @@ Tests:
 ## Fix 10: Add Descriptor Limits and Explicit Latency Profiles
 
 Status: in progress. Fix 10A enforces the measured per-channel outstanding
-descriptor capacity without yet adding descriptor posting time. The 57-cycle
-posting cost and operation latency profiles remain separate follow-up changes.
+descriptor capacity. Fix 10B applies the configurable 57-cycle posting cost
+through independent channel-local issuers. Operation latency profiles remain
+separate follow-up changes.
 
 ### Fix 10A: Enforce Per-Channel Descriptor Capacity
 
@@ -521,11 +522,29 @@ Tests:
 - Descriptor gating preserves packet order and does not alter directional data
   service timing.
 
+### Fix 10B: Apply Serialized Descriptor Posting Cost
+
+Status: implemented. Every `NMCChannel` owns an independent single-command
+descriptor issuer. Same-channel commands post in FIFO order and each spends
+`descriptor_issue_cycles` (57 ACI cycles by default) before entering TX data
+service. An older command waiting for descriptor capacity retains issuer order,
+so a newer command cannot bypass it. CH0 and CH1 issuers operate concurrently.
+The descriptor slot remains occupied after posting until local TX completion.
+
+Tests:
+
+- Same-channel command posting is separated by the configured issue interval,
+  independent of payload size.
+- CH0 and CH1 can post descriptors over the same time interval.
+- Posting remains linear before capacity saturation; when full, the oldest
+  command backpressures the same-channel issuer until a slot is released.
+- Directional bulk throughput is unchanged because posting is a per-command
+  pipeline stage rather than a per-flit service delay.
+
 ### Remaining Fix 10 Work
 
 Code changes:
 
-- Model approximately 57 ACI cycles of descriptor programming per channel.
 - Represent static, dynamic, and `send_with_sync` timing as distinct operation
   profiles.
 - Keep fabric timing separate from endpoint timing and preserve the measured
@@ -539,8 +558,6 @@ Code changes:
 
 Tests:
 
-- Descriptor issue is linear before queue saturation and backpressures after the
-  configured depth.
 - Profile-level RTT in ACI cycles follows `159 + 17*hops` for static,
   `250 + 17*hops` for dynamic, and `204 + 17*hops` for the measured
   `send_with_sync` benchmark profile.
