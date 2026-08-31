@@ -496,12 +496,14 @@ Tests:
 - Concurrent packet submissions retain packet and flit order, and a channel
   rejects a message owned by another source endpoint.
 
-## Fix 10: Add Descriptor Limits and Explicit Latency Profiles
+## Fix 10: Add Descriptor Limits and Shape-Dependent Endpoint Timing
 
 Status: in progress. Fix 10A enforces the measured per-channel outstanding
 descriptor capacity. Fix 10B applies the configurable 57-cycle posting cost
-through independent channel-local issuers. Operation latency profiles remain
-separate follow-up changes.
+through independent channel-local issuers. The remaining work must model the
+two documented shape modes, static and dynamic. `send_with_sync` is the API used
+by those commands, not a third latency mode. The rb54 `204 + 17*hops` fit remains
+a benchmark result whose exact shape construction is not documented.
 
 ### Fix 10A: Enforce Per-Channel Descriptor Capacity
 
@@ -541,30 +543,94 @@ Tests:
 - Directional bulk throughput is unchanged because posting is a per-command
   pipeline stage rather than a per-flit service delay.
 
-### Remaining Fix 10 Work
+### Fix 10C-1: Define the Two Shape Modes
+
+Status: implemented. `NMCShapeMode` contains exactly `STATIC` and `DYNAMIC`,
+and `NMCShapeTimingConfig` stores their measured total per-endpoint setup
+targets. The removed profile draft is rejected by configuration validation.
 
 Code changes:
 
-- Represent static, dynamic, and `send_with_sync` timing as distinct operation
-  profiles.
-- Keep fabric timing separate from endpoint timing and preserve the measured
-  8.5-ACI-cycle one-way hop slope. Convert native NoC stages before composing
-  them with these ACI-domain profiles.
-- Support two mutually exclusive calibration modes:
-  - Empirical mode applies the measured operation-level RTT intercept directly.
-  - Compositional mode accounts for descriptor and endpoint stages explicitly.
-- Never add an empirical intercept on top of compositional descriptor/startup
-  costs; that would double-count endpoint latency.
+- Add `NMCShapeMode` with exactly `STATIC` and `DYNAMIC`.
+- Define measured endpoint setup targets in the ACI domain: 79.5 cycles for a
+  static endpoint and 125 cycles for a dynamic endpoint. These are the halves
+  of the measured RTT intercepts 159 and 250.
+- Remove `SEND_WITH_SYNC` from latency-profile selection. Do not expose rb54 as
+  a runtime mode or store its 204-cycle RTT intercept in the architecture
+  configuration.
+- Remove the empirical/compositional mode switch. Phase 2 uses one canonical
+  staged model so configuration cannot select a combination that double-counts
+  descriptor posting.
 
 Tests:
 
-- Profile-level RTT in ACI cycles follows `159 + 17*hops` for static,
-  `250 + 17*hops` for dynamic, and `204 + 17*hops` for the measured
-  `send_with_sync` benchmark profile.
+- The shape-mode enum contains only static and dynamic.
+- Defaults expose endpoint targets 79.5 and 125 ACI cycles.
+- Configuration rejects `send_with_sync`, rb54, and unknown shape modes.
+
+### Fix 10C-2: Carry Shape Mode on Endpoint Commands
+
+Code changes:
+
+- Add shape mode to SEND and RECV command metadata with `DYNAMIC` as the
+  compatibility default; static timing requires an explicit static command.
+- Pass shape mode to NMC command admission. Do not copy it into `Flit`, because
+  shape construction changes endpoint setup but not packetization, routing, or
+  fabric service.
+- Let send and receive select their modes independently. A mixed static/dynamic
+  pair is valid and its endpoint costs are additive.
+
+Tests:
+
+- Existing communication commands resolve to dynamic mode by default.
+- Explicit static mode reaches NMC admission unchanged.
+- Packetized flits are identical for static and dynamic commands with the same
+  payload, route, channel, and burst mode.
+
+### Fix 10C-3: Complete Endpoint Timing Without Double Counting
+
+Code changes:
+
+- Define operation submission, descriptor acceptance, and first fabric
+  injection timestamps in the ACI timebase.
+- Treat the existing 57-cycle descriptor-posting stage as part of the measured
+  79.5/125-cycle endpoint setup target. Add only the residual endpoint delay
+  not already represented by descriptor posting, NMC service, and PE-side
+  injection stages at the chosen timestamp boundary.
+- Apply the same accounting to receive commands when Fix 11 introduces
+  command-level receive admission. Never add a whole 79.5/125-cycle endpoint
+  delay on top of the existing 57-cycle posting delay.
+- Keep router/link fabric timing independent and preserve the measured
+  8.5-ACI-cycle one-way hop slope.
+
+Tests:
+
+- Two static endpoints plus fabric timing reproduce `159 + 17*hops` RTT.
+- Two dynamic endpoints plus fabric timing reproduce `250 + 17*hops` RTT.
+- Mixed endpoints reproduce `79.5 + 125 + 17*hops` RTT.
+- Fabric-only timestamps exclude descriptor and endpoint setup time.
+
+### Fix 10C-4: Use rb54 as Benchmark Validation, Not a Mode
+
+Code changes:
+
+- Preserve the rb54 `204 + 17*hops` result as benchmark metadata or a named
+  acceptance fixture, not as an `NMCShapeMode` or runtime latency profile.
+- Reconstruct rb54's exact command sequence and shape construction before using
+  its 204-cycle intercept as an acceptance requirement. Until then, use rb54 to
+  confirm the 17-cycle RTT hop slope, fixed 512 B flit packetization, hidden
+  serialization through 4 KB, and asymptotic service rate.
+- Do not tune endpoint residual delay to 204, because the architecture does not
+  identify rb54 as either the static or dynamic command path.
+
+Tests:
+
+- No runtime configuration can select rb54 or `send_with_sync` as a shape mode.
+- An rb54-equivalent fixture preserves the measured hop slope and payload-size
+  behavior without changing static/dynamic endpoint targets.
 - Under the benchmark-equivalent 32 KB batched schedule, effective throughput
   approaches approximately 87 B/ACI-cycle per channel and approximately
   340 B/ACI-cycle for dual-channel full duplex.
-- Fabric-only traces do not include descriptor or endpoint setup time.
 
 ## Fix 11: Repair SEND/RECV Integration
 
@@ -650,12 +716,12 @@ implements the measurements in `NOC_ARCHITECTURE.md`.
 | 4 MiB PE Local SRAM and explicit GM/DDR clocks (§1.2-1.3) | Fix 3C | Canonical config only; endpoint execution deferred |
 | Two independent, full-duplex NMC channels (§4.1-4.2, §9.19) | Fixes 5 and 9 | Implement fully for PE-to-PE |
 | NMC descriptor cost and depth (§9.14) | Fix 10 | Implement measured effective behavior |
-| Static, dynamic, and rb54 latency models (§9.1, §9.16) | Fix 10 | Separate profiles; no double counting |
+| Static/dynamic endpoint timing and rb54 benchmark (§9.1, §9.16) | Fix 10 | Two shape modes; rb54 is validation only; no double counting |
 | Link contention and fair sharing (§9.15) | Fixes 8 and 12 | Reproduce through offered load and arbitration |
 | Dual-channel bulk and 32 KB throughput (§9.13, §9.19) | Fixes 9, 10, and 12 | Calibration acceptance targets |
 | GM/DDR shared internal DMA bottlenecks (§2.5, §9.9-9.10, §9.17) | Fixes 2 and 11 | Addressable but execution deferred |
 | Multicast, broadcast, FIXPATH, and reduce (§3.2-3.4, §9.11-9.13) | Fixes 1 and 11 | Encoded or rejected; execution deferred |
 | Per-stream FIFO IDs/depths (§3.7) | Fix 7 boundary | Generic bounded flow control only; exact depths remain TBD |
-| Outer sync and global fences (§6) | Fix 10 boundary | Reflected by empirical profiles; protocol execution deferred |
+| Outer sync and global fences (§6) | Fix 10 boundary | Reflected by measured endpoint targets; protocol execution deferred |
 | Strided/gather NMC addressing (§4.4-4.6) | Fix 11 boundary | Contiguous payload timing only; descriptor shapes deferred |
 | Matrix/Vector/SRAM overlap (§9.18-9.20) | Fix 9 boundary | Deferred beyond Phase 2 |

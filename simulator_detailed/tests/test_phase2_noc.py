@@ -14,6 +14,7 @@ from simulator_detailed.configs.schemas.arch_config import (
     LinkConfig,
     NMCChannelConfig,
     NMCConfig,
+    NMCShapeTimingConfig,
     NoCConfig,
     RouterConfig,
     RouterPipelineConfig,
@@ -55,6 +56,7 @@ from simulator_detailed.utils.definitions import (
     Flit,
     FlitType,
     Message,
+    NMCShapeMode,
     NoCChannel,
     NoCPlane,
     NodeType,
@@ -1015,6 +1017,47 @@ class Phase2NoCTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             NoCChannel(2)
 
+    def test_nmc_shape_timing_has_exactly_two_endpoint_modes(self):
+        config = NMCConfig()
+        expected_targets = {
+            NMCShapeMode.STATIC: 79.5,
+            NMCShapeMode.DYNAMIC: 125.0,
+        }
+
+        self.assertEqual(
+            {member.name: member.value for member in NMCShapeMode},
+            {"STATIC": "static", "DYNAMIC": "dynamic"},
+        )
+        for shape_mode, expected_target in expected_targets.items():
+            with self.subTest(shape_mode=shape_mode):
+                self.assertEqual(
+                    config.shape_timing.endpoint_setup_target_aci_cycles(
+                        shape_mode
+                    ),
+                    expected_target,
+                )
+
+    def test_nmc_shape_timing_rejects_old_profiles_and_invalid_targets(self):
+        for old_config in (
+            {"latency_calibration_mode": "empirical"},
+            {"operation_latency_profiles": {}},
+            {"shape_timing": {"send_with_sync": 204.0}},
+        ):
+            with self.subTest(old_config=old_config), self.assertRaises(
+                ValidationError
+            ):
+                NMCConfig.model_validate(old_config)
+
+        for invalid_target in (-1.0, float("inf"), float("nan")):
+            with self.subTest(invalid_target=invalid_target), self.assertRaises(
+                ValidationError
+            ):
+                NMCShapeTimingConfig(
+                    static_endpoint_setup_aci_cycles=invalid_target
+                )
+        with self.assertRaises(ValueError):
+            NMCShapeMode("send_with_sync")
+
     def test_router_burst_default_resolves_to_hardware_burst_len_7(self):
         explicit_quanta = {
             BurstLenMode.BURST_LEN_0: 1,
@@ -1117,6 +1160,14 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(config.core.weight_spm.size, 16 * 1024 * 1024)
         self.assertEqual(config.noc.aci_clock_mhz, 1125.0)
         self.assertEqual(config.noc.noc_clock_mhz, 2250.0)
+        self.assertEqual(
+            config.core.nmc.shape_timing.static_endpoint_setup_aci_cycles,
+            79.5,
+        )
+        self.assertEqual(
+            config.core.nmc.shape_timing.dynamic_endpoint_setup_aci_cycles,
+            125.0,
+        )
 
         gm_dma = DMAEngineConfig(
             dma_type=DMAType.GM_RDMA,

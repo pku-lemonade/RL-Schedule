@@ -21,7 +21,8 @@ The relevant configuration objects are:
   descriptor slot pool. Fix 10B uses `descriptor_issue_cycles` as the serialized
   posting time before an admitted command enters directional data service.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
-  106 B/cycle channel budget.
+  106 B/cycle channel budget. Its `shape_timing` stores the measured static and
+  dynamic total endpoint setup targets.
 - `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated
   2:1 clock ratio, and separate r2r `link` and PE-side `c2r_link` configs.
 - `DMAEngineConfig`: a type-qualified DMA instance, attached router, channel
@@ -59,6 +60,15 @@ Descriptor posting is a per-command stage, not a per-flit penalty. Commands on
 one channel are issued at `descriptor_issue_cycles` intervals, while CH0 and CH1
 have independent issuers. A full descriptor pool stalls the oldest command at
 the channel issuer until an earlier command completes and releases a slot.
+
+`NMCShapeMode` contains exactly `STATIC` and `DYNAMIC`. `NMCShapeTimingConfig`
+stores their measured total per-endpoint setup targets as 79.5 and 125 ACI
+cycles. These targets already include descriptor programming, command decode,
+outer-sync ACQUIRE, and first-flit injection; they are not additive delays to
+place on top of every existing endpoint stage. Fix 10C-3 will apply only the
+residual needed at a precisely defined timing boundary. `send_with_sync` is an
+API used by the measured operations, not a shape mode, and the rb54 204-cycle
+RTT intercept is benchmark data rather than runtime configuration.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero

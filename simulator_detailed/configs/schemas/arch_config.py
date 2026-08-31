@@ -1,6 +1,5 @@
 import math
 from enum import IntEnum
-from typing import List
 
 from pydantic import (
     BaseModel,
@@ -11,7 +10,12 @@ from pydantic import (
     model_validator,
 )
 
-from ...utils.definitions import FLIT_BYTES, BurstLenMode, NoCChannel
+from ...utils.definitions import (
+    FLIT_BYTES,
+    BurstLenMode,
+    NMCShapeMode,
+    NoCChannel,
+)
 
 
 class DMAType(IntEnum):
@@ -167,6 +171,34 @@ class LinkConfig(BaseModel):
         )
 
 
+class NMCShapeTimingConfig(BaseModel):
+    """Measured total setup targets for one NMC endpoint in ACI cycles."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    static_endpoint_setup_aci_cycles: float = Field(
+        default=79.5,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    dynamic_endpoint_setup_aci_cycles: float = Field(
+        default=125.0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+
+    def endpoint_setup_target_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return the measured total target for one endpoint setup path."""
+        if shape_mode is NMCShapeMode.STATIC:
+            return self.static_endpoint_setup_aci_cycles
+        if shape_mode is NMCShapeMode.DYNAMIC:
+            return self.dynamic_endpoint_setup_aci_cycles
+        raise ValueError(f"unsupported NMC shape mode: {shape_mode!r}")
+
+
 class NMCChannelConfig(BaseModel):
     """Configuration of one independent, full-duplex PE NMC channel."""
 
@@ -179,12 +211,15 @@ class NMCChannelConfig(BaseModel):
 
 
 class NMCConfig(BaseModel):
-    """Two independent PE NMC channels; runtime resources are added in Fix 9."""
+    """Two independent PE NMC channels and measured shape timing targets."""
 
     model_config = ConfigDict(extra="forbid")
 
     ch0: NMCChannelConfig = Field(default_factory=NMCChannelConfig)
     ch1: NMCChannelConfig = Field(default_factory=NMCChannelConfig)
+    shape_timing: NMCShapeTimingConfig = Field(
+        default_factory=NMCShapeTimingConfig
+    )
 
     def channel_config(self, channel: NoCChannel) -> NMCChannelConfig:
         """Return the configuration for a validated hardware channel."""
@@ -218,7 +253,7 @@ class DMAEngineConfig(BaseModel):
     instance_id: int           # instance index within dma_type (0-3 for 4 GM/DDR controllers)
     router_id: int             # router ID this DMA is attached to
     channels: int = 1          # number of independent DMA channels (WDMA=2, RDMA=1)
-    local_ports: List[int] = Field(default_factory=list[int])
+    local_ports: list[int] = Field(default_factory=list[int])
     port_bw: float = 106.0     # effective B/ACI-cycle (GM=106, DDR~=91.5)
     cdc_penalty: int = 0       # effective ACI cycles (DDR=5, GM=0)
     dispatch_interval: int = 1  # ACI cycles between scalar-core dispatches
@@ -236,7 +271,7 @@ class MemoryControllerConfig(BaseModel):
     """Memory controller (GM/DDR) aggregate bandwidth model behind DMA engines."""
     mem_type: MemType          # memory type: GM (on-chip) or DDR (off-chip)
     aggregate_bw: float        # B/cycle, total bandwidth across all instances of this type
-    instances: List[int]       # instance IDs covered by this controller group
+    instances: list[int]       # instance IDs covered by this controller group
     atomic_supported: bool = True  # whether atomic read-modify-write ops are supported
     atomic_bw: float = 106.0   # B/cycle, bandwidth available for atomic (reduce) operations
 
@@ -254,10 +289,10 @@ class NoCConfig(BaseModel):
     router: RouterConfig = Field(default_factory=RouterConfig)
     link: LinkConfig = Field(default_factory=LinkConfig)
     c2r_link: LinkConfig = Field(default_factory=LinkConfig)
-    dma_engines: List[DMAEngineConfig] = Field(
+    dma_engines: list[DMAEngineConfig] = Field(
         default_factory=list[DMAEngineConfig]
     )
-    mem_controllers: List[MemoryControllerConfig] = Field(
+    mem_controllers: list[MemoryControllerConfig] = Field(
         default_factory=list[MemoryControllerConfig]
     )
 

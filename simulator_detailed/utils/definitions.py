@@ -55,6 +55,13 @@ class NoCChannel(IntEnum):
     CH1 = 1
 
 
+class NMCShapeMode(Enum):
+    """NMC endpoint setup path selected by transfer-shape construction."""
+
+    STATIC = "static"
+    DYNAMIC = "dynamic"
+
+
 class NoCPlane(Enum):
     """Physical NoC plane; values are labels, not hardware encodings."""
 

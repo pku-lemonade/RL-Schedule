@@ -33,6 +33,10 @@
         "rx_bytes_per_cycle": 120.0,
         "descriptor_issue_cycles": 57.0,
         "max_outstanding_descriptors": 24
+      },
+      "shape_timing": {
+        "static_endpoint_setup_aci_cycles": 79.5,
+        "dynamic_endpoint_setup_aci_cycles": 125.0
       }
     }
   },
