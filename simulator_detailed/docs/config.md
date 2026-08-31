@@ -16,8 +16,10 @@ The relevant configuration objects are:
   `sync_credit_return_aci_cycles`.
 - `NMCChannelConfig`: independent TX/RX rates of 120 B/ACI-cycle, a 57-ACI-cycle
   descriptor issue cost, and 24 outstanding descriptors. Fix 9B converts each
-  directional rate to a `512 / bytes_per_cycle` flit service interval. The
-  descriptor fields remain unused until Fix 10.
+  directional rate to a `512 / bytes_per_cycle` flit service interval. Fix 10A
+  uses `max_outstanding_descriptors` as the capacity of each channel's runtime
+  descriptor slot pool. `descriptor_issue_cycles` remains unused until the next
+  Fix 10 sub-step.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
   106 B/cycle channel budget.
 - `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated

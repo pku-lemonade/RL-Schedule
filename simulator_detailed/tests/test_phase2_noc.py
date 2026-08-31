@@ -299,6 +299,7 @@ class Phase2NoCTests(unittest.TestCase):
         for attribute in (
             "tx_datapath",
             "rx_datapath",
+            "descriptor_slots",
             "tx_data_queue",
             "rx_data_queue",
         ):
@@ -306,6 +307,12 @@ class Phase2NoCTests(unittest.TestCase):
                 len({id(getattr(channel, attribute)) for channel in nmc_channels}),
                 64,
             )
+        self.assertTrue(
+            all(
+                channel.descriptor_slots.capacity == 24
+                for channel in nmc_channels
+            )
+        )
 
         core0_ch0 = cores[0].binding_for(NoCChannel.CH0)
         core0_ch1 = cores[0].binding_for(NoCChannel.CH1)
@@ -335,10 +342,12 @@ class Phase2NoCTests(unittest.TestCase):
                 ch0=NMCChannelConfig(
                     tx_bytes_per_cycle=117.0,
                     rx_bytes_per_cycle=118.0,
+                    max_outstanding_descriptors=2,
                 ),
                 ch1=NMCChannelConfig(
                     tx_bytes_per_cycle=119.0,
                     rx_bytes_per_cycle=120.0,
+                    max_outstanding_descriptors=3,
                 ),
             )
         )
@@ -355,6 +364,9 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertEqual(ch0.config.rx_bytes_per_cycle, 118.0)
         self.assertEqual(ch1.config.tx_bytes_per_cycle, 119.0)
         self.assertEqual(ch1.config.rx_bytes_per_cycle, 120.0)
+        self.assertEqual(ch0.descriptor_slots.capacity, 2)
+        self.assertEqual(ch1.descriptor_slots.capacity, 3)
+        self.assertIsNot(ch0.descriptor_slots, ch1.descriptor_slots)
 
         intervals = {}
 
@@ -400,6 +412,53 @@ class Phase2NoCTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "same SimPy environment"):
             other_core.bind_channel(ch0)
+
+    def test_nmc_descriptor_capacity_backpressures_and_releases(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(
+            0,
+            NMCChannelConfig(
+                tx_bytes_per_cycle=1.0,
+                max_outstanding_descriptors=2,
+            ),
+        )
+        destination = harness.attach_nmc(1)
+        messages = [
+            harness.message(msg_id, 0, 1, 1)
+            for msg_id in (110, 111, 112)
+        ]
+        received = []
+
+        def receive_messages():
+            for _ in messages:
+                received.append((yield destination.recv_flit()))
+
+        send_processes = [source.send(message) for message in messages]
+        receive_process = harness.env.process(receive_messages())
+
+        harness.env.run(until=1.0)
+        self.assertEqual(source.outstanding_descriptor_count, 2)
+        self.assertEqual(len(source.descriptor_slots.queue), 1)
+        self.assertEqual(len(source.tx_data_queue.items), 1)
+        self.assertFalse(any(process.triggered for process in send_processes))
+
+        harness.env.run(until=513.0)
+        self.assertTrue(send_processes[0].triggered)
+        self.assertFalse(send_processes[1].triggered)
+        self.assertFalse(send_processes[2].triggered)
+        self.assertEqual(source.outstanding_descriptor_count, 2)
+        self.assertFalse(source.descriptor_slots.queue)
+        self.assertEqual(len(source.tx_data_queue.items), 1)
+
+        harness.env.run(
+            until=harness.env.all_of((*send_processes, receive_process))
+        )
+        self.assertEqual(source.outstanding_descriptor_count, 0)
+        self.assertFalse(source.descriptor_slots.queue)
+        self.assertEqual(
+            [flit.msg_id for flit in received],
+            [110, 111, 112],
+        )
 
     def test_nmc_directional_service_uses_the_slowest_pipeline_stage(self):
         cases = (

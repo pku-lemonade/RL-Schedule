@@ -96,9 +96,13 @@ class NMCChannel:
         self.binding = binding
         self.tx_datapath = Resource(env, capacity=1)
         self.rx_datapath = Resource(env, capacity=1)
+        self.descriptor_slots = Resource(
+            env,
+            capacity=config.max_outstanding_descriptors,
+        )
 
-        # Hardware data-FIFO depths are unresolved. Descriptor capacity is a
-        # separate command-queue limit and is introduced in Fix 10.
+        # Hardware data-FIFO depths are unresolved and remain distinct from the
+        # measured descriptor capacity enforced above.
         self.tx_data_queue = simpy.Store(env)
         self.rx_data_queue = simpy.Store(env)
         self.env.process(self._tx_service_loop())
@@ -116,6 +120,10 @@ class NMCChannel:
     def rx_service_interval_aci_cycles(self) -> float:
         return FLIT_BYTES / self.config.rx_bytes_per_cycle
 
+    @property
+    def outstanding_descriptor_count(self) -> int:
+        return len(self.descriptor_slots.users)
+
     def send(self, message: Message) -> Process:
         """Queue one source-owned message and complete after NMC TX service."""
         if message.src != self.binding.address:
@@ -132,11 +140,14 @@ class NMCChannel:
         return self.env.process(self._recv_flit())
 
     def _submit_tx(self, flits: tuple[Flit, ...]) -> ProcessGenerator:
-        completion = self.env.event()
-        yield self.tx_data_queue.put(
-            NMCTransmitEntry(flits=flits, completion=completion)
-        )
-        yield completion
+        descriptor_request = self.descriptor_slots.request()
+        with descriptor_request:
+            yield descriptor_request
+            completion = self.env.event()
+            yield self.tx_data_queue.put(
+                NMCTransmitEntry(flits=flits, completion=completion)
+            )
+            yield completion
 
     def _recv_flit(self) -> ProcessGenerator:
         entry = cast(NMCReceiveEntry, (yield self.rx_data_queue.get()))

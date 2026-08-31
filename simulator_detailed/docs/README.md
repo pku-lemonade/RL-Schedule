@@ -2,9 +2,9 @@
 
 `simulator_detailed` is the cycle-level ADA2S-32 simulator. Phase 2 models the
 on-chip 4-column by 8-row NoC at flit granularity. It includes independent
-runtime resources for both full-duplex PE NMC channels, while descriptor
-processing and Task SEND/RECV integration remain later Phase 2 fixes. DMA
-endpoint execution remains outside this phase.
+runtime resources for both full-duplex PE NMC channels and enforces per-channel
+descriptor capacity. Descriptor posting latency and Task SEND/RECV integration
+remain later Phase 2 fixes. DMA endpoint execution remains outside this phase.
 
 The Phase 2 model is deterministic:
 

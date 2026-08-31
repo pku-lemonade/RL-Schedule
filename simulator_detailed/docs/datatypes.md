@@ -58,9 +58,9 @@ groups one PE address with distinct TX and RX Links and the matching
 fabric-local Router. `NMCChannel` is the corresponding runtime transport object.
 It owns separate TX and RX datapath resources and separate data queues while
 retaining the immutable physical binding. Hardware data-FIFO depths remain
-unknown, so these data queues are unbounded; the measured descriptor capacity
-is a separate Fix 10 command-queue constraint. Every `Core` owns exactly one
-runtime channel and one binding for CH0 and CH1.
+unknown, so these data queues are unbounded. Each channel separately owns a FIFO
+descriptor slot pool with `max_outstanding_descriptors` entries. Every `Core`
+owns exactly one runtime channel and one binding for CH0 and CH1.
 
 `NMCTransmitEntry` stores one immutable tuple of packetized flits plus its local
 TX-service completion event. `NMCReceiveEntry` stores one serviced flit and its
@@ -70,6 +70,14 @@ later mutation cannot alter an in-flight packet. Its returned process means the
 packet has completed NMC TX service and has been handed to the source Link; it
 does not mean remote delivery. `recv_flit()` returns one flit only after NMC RX
 service. Packet reassembly and TAIL-based receive completion belong to Fix 11.
+
+A TX command must acquire one channel descriptor slot before its immutable flit
+tuple enters `tx_data_queue`. The slot remains occupied until local TX service
+hands the final flit to the source Link, matching the current SEND completion
+boundary. Additional commands wait in FIFO order when the configured capacity
+is full. CH0 and CH1 use distinct pools. `recv_flit()` is not a receive command,
+so it does not consume one descriptor per flit; Fix 11 will connect receive
+command admission to the same per-channel pool.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA

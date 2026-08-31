@@ -498,10 +498,34 @@ Tests:
 
 ## Fix 10: Add Descriptor Limits and Explicit Latency Profiles
 
+Status: in progress. Fix 10A enforces the measured per-channel outstanding
+descriptor capacity without yet adding descriptor posting time. The 57-cycle
+posting cost and operation latency profiles remain separate follow-up changes.
+
+### Fix 10A: Enforce Per-Channel Descriptor Capacity
+
+Status: implemented. Every `NMCChannel` owns a FIFO descriptor slot pool sized
+by `max_outstanding_descriptors` (24 by default). A TX command acquires one slot
+before entering the data-service queue and holds it until local TX completion.
+Further commands backpressure at admission when all slots are occupied. CH0 and
+CH1 own independent pools. The current receive API is flit-level; RX command
+admission will use the same channel pool when Fix 11 introduces receive
+descriptors.
+
+Tests:
+
+- Every runtime channel owns an independent descriptor pool with the configured
+  capacity.
+- Commands up to the configured capacity are admitted, the next command waits,
+  and completion releases a slot to the oldest waiter.
+- Descriptor gating preserves packet order and does not alter directional data
+  service timing.
+
+### Remaining Fix 10 Work
+
 Code changes:
 
-- Model approximately 57 ACI cycles of descriptor programming and a configurable
-  24-entry outstanding queue per NMC channel.
+- Model approximately 57 ACI cycles of descriptor programming per channel.
 - Represent static, dynamic, and `send_with_sync` timing as distinct operation
   profiles.
 - Keep fabric timing separate from endpoint timing and preserve the measured
