@@ -625,25 +625,37 @@ Tests:
 
 ### Fix 10C-4: Use rb54 as Benchmark Validation, Not a Mode
 
+Status: implemented as immutable benchmark references outside runtime
+configuration. The rb54 latency/packetization evidence is kept separate from
+the rb56/rb58 32 KB batched-throughput evidence. Executable checks bind rb54's
+flit count, default eight-flit burst boundary, and 17-cycle RTT hop slope to the
+current model. Replaying the 204-cycle RTT intercept and 32 KB command-level
+rates remains an end-to-end acceptance task after Fix 11 exposes the complete
+SEND/RECV workload boundary.
+
 Code changes:
 
 - Preserve the rb54 `204 + 17*hops` result as benchmark metadata or a named
   acceptance fixture, not as an `NMCShapeMode` or runtime latency profile.
 - Reconstruct rb54's exact command sequence and shape construction before using
   its 204-cycle intercept as an acceptance requirement. Until then, use rb54 to
-  confirm the 17-cycle RTT hop slope, fixed 512 B flit packetization, hidden
-  serialization through 4 KB, and asymptotic service rate.
+  confirm the 17-cycle RTT hop slope, fixed 512 B flit packetization, and hidden
+  serialization through 4 KB.
+- Keep the rb56/rb58 N=32, 32 KB batched-throughput measurements in a separate
+  reference; they are not rb54 results and must be replayed with their own
+  command schedule.
 - Do not tune endpoint residual delay to 204, because the architecture does not
   identify rb54 as either the static or dynamic command path.
 
 Tests:
 
 - No runtime configuration can select rb54 or `send_with_sync` as a shape mode.
-- An rb54-equivalent fixture preserves the measured hop slope and payload-size
-  behavior without changing static/dynamic endpoint targets.
-- Under the benchmark-equivalent 32 KB batched schedule, effective throughput
-  approaches approximately 87 B/ACI-cycle per channel and approximately
-  340 B/ACI-cycle for dual-channel full duplex.
+- The rb54 reference preserves the measured hop slope, packetization, and
+  payload-size evidence without changing static/dynamic endpoint targets.
+- The separate rb56/rb58 reference preserves approximately 87 B/ACI-cycle per
+  channel and approximately 340 B/ACI-cycle for dual-channel full duplex.
+- End-to-end benchmark replay after Fix 11 checks that the simulator approaches
+  those rates under the exact 32 KB batched command schedule.
 
 ## Fix 11: Repair SEND/RECV Integration
 

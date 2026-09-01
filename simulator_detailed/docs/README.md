@@ -10,6 +10,12 @@ stage calibrates idle first-flit injection to those targets. The command-level
 RECV path, Task SEND/RECV integration, and DMA endpoint execution remain later
 work.
 
+Hardware benchmark measurements live in `benchmark_references.py`, outside the
+runtime architecture configuration. The rb54 latency and packetization evidence
+is separate from the rb56/rb58 32 KB batched-throughput evidence. These values
+are validation targets; they cannot select a runtime shape mode or alter static
+and dynamic endpoint timing.
+
 The Phase 2 model is deterministic:
 
 - 512-byte payload flits serialized as eight native NoC cycles/four ACI cycles;

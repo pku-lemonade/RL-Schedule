@@ -6,6 +6,10 @@ import simpy
 from pydantic import ValidationError
 
 from simulator_detailed.architecture import Arch
+from simulator_detailed.benchmark_references import (
+    NMC_32K_BATCH_REFERENCE,
+    RB54_LATENCY_REFERENCE,
+)
 from simulator_detailed.configs.schemas.arch_config import (
     CoreConfig,
     DMAEngineConfig,
@@ -1070,6 +1074,65 @@ class Phase2NoCTests(unittest.TestCase):
                 )
         with self.assertRaises(ValueError):
             NMCShapeMode("send_with_sync")
+        with self.assertRaises(ValueError):
+            NMCShapeMode("rb54")
+
+    def test_rb54_is_validation_evidence_not_runtime_shape_timing(self):
+        reference = RB54_LATENCY_REFERENCE
+
+        self.assertEqual(reference.kernel, "noc_rb54.cpp")
+        self.assertEqual(reference.flit_bytes, FLIT_BYTES)
+        self.assertEqual(
+            reference.default_burst_flits,
+            BurstLenMode.BURST_LEN_7.explicit_quantum_flits(),
+        )
+        self.assertEqual(
+            reference.hidden_serialization_through_bytes,
+            reference.flit_bytes * reference.default_burst_flits,
+        )
+        for payload_bytes, _, expected_flits in reference.payload_samples:
+            with self.subTest(payload_bytes=payload_bytes):
+                self.assertEqual(
+                    compute_flit_count(payload_bytes),
+                    expected_flits,
+                )
+        for hops, measured_rtt in reference.hop_samples:
+            with self.subTest(hops=hops):
+                self.assertEqual(
+                    reference.linear_rtt_aci_cycles(hops),
+                    measured_rtt,
+                )
+        with self.assertRaisesRegex(ValueError, "hop count must be positive"):
+            reference.linear_rtt_aci_cycles(0)
+
+        self.assertNotIn("benchmark", NMCConfig.model_fields)
+        self.assertNotIn("rb54", NMCShapeTimingConfig.model_fields)
+
+    def test_32k_batch_reference_preserves_rb56_rb58_measurements(self):
+        reference = NMC_32K_BATCH_REFERENCE
+
+        self.assertEqual(
+            reference.kernels,
+            ("noc_rb56.cpp", "noc_rb58.cpp"),
+        )
+        self.assertEqual(reference.message_bytes, 32 * 1024)
+        self.assertEqual(reference.messages_per_stream, 32)
+        self.assertEqual(reference.payload_bytes_per_stream, 1024 * 1024)
+        self.assertEqual(reference.simplex_tx_bytes_per_aci_cycle, 87.4)
+        self.assertEqual(reference.simplex_rx_bytes_per_aci_cycle, 86.1)
+        self.assertEqual(
+            reference.dual_same_direction_bytes_per_aci_cycle,
+            171.0,
+        )
+        self.assertEqual(
+            reference.dual_full_duplex_bytes_per_aci_cycle,
+            339.7,
+        )
+        self.assertAlmostEqual(
+            reference.dual_full_duplex_efficiency,
+            0.975,
+            delta=0.005,
+        )
 
     def test_nmc_shape_mode_reaches_send_admission_but_not_flits(self):
         harness = MeshHarness()
@@ -2281,6 +2344,9 @@ class Phase2NoCTests(unittest.TestCase):
         )
 
     def test_single_flit_latency_for_one_to_ten_hops(self):
+        one_way_hop_slope = (
+            RB54_LATENCY_REFERENCE.rtt_hop_slope_aci_cycles / 2
+        )
         for hops in range(1, 11):
             x = min(3, hops)
             y = hops - x
@@ -2290,7 +2356,7 @@ class Phase2NoCTests(unittest.TestCase):
             arrivals = harness.transfer(0, dst, [flit])
             self.assertAlmostEqual(
                 arrivals[0][1],
-                8.5 * hops + 13.0,
+                one_way_hop_slope * hops + 13.0,
                 msg=f"unexpected latency for {hops} hops",
             )
             self.assertFalse(
