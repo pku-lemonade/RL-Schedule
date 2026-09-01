@@ -7,8 +7,10 @@ descriptor capacity and posting time. Static and dynamic shape modes and their
 measured per-endpoint setup targets are defined. Source SEND metadata reaches
 NMC admission without entering Flits, and the non-duplicated residual setup
 stage calibrates idle first-flit injection to those targets. The command-level
-RECV path, Task SEND/RECV integration, and DMA endpoint execution remain later
-work.
+RECV path independently applies destination setup timing, reassembles by
+message ID, and completes after TAIL RX service. DFG communication nodes select
+their channel and endpoint shape mode, and Task SEND/RECV execution uses these
+NMC command APIs. DMA endpoint execution remains later work.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb54 latency and packetization evidence
@@ -40,5 +42,6 @@ SimPy and Pydantic:
 python -m unittest simulator_detailed.tests.test_phase2_noc
 ```
 
-The tests cover both direct flit injection and `NMCChannel` packet service. The
-existing Core and Task SEND/RECV path remains assigned to Fix 11.
+The tests cover direct flit injection, `NMCChannel` packet service, command-level
+receive reassembly, and architecture-owned Core/Task SEND/RECV execution on both
+fabrics and in opposite directions.

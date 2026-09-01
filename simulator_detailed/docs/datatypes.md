@@ -38,8 +38,14 @@ The source route is simulator metadata used for injection tracing; the
 documented hardware routing word carries only the destination route and local
 port. Static and dynamic shape modes produce identical Flits because shape
 construction changes endpoint setup timing, not packetization or fabric
-service. The destination's future RECV command selects its own shape mode; the
-sender's mode is therefore not copied into a Flit.
+service. The destination RECV command selects its own shape mode; the sender's
+mode is therefore not copied into a Flit.
+
+`DFGNode` stores `fabric_id` and `nmc_shape_mode` for every operation. They are
+consumed by SEND and RECV tasks and default to CH0 and dynamic shape for legacy
+DFGs. A SEND-to-RECV edge must use one fabric, while the two endpoint shape
+modes may differ. The paired RECV node ID is the message ID, keeping parallel
+edges globally distinguishable during destination reassembly.
 
 `BurstLenMode` preserves the hardware encodings `BURST_LEN_DEFAULT=-1` and
 `BURST_LEN_0/1/3/7=0/1/3/7`. The four explicit modes map to arbitration quanta
@@ -75,22 +81,32 @@ the configured posting interval. For an idle command, endpoint-ready time plus
 first-flit NMC TX service and PE-link delivery reaches the source router's
 `INJECT` event at the configured 79.5/125-cycle total target.
 `NMCReceiveEntry` stores one serviced flit and its ACI-cycle completion
-timestamp. `NMCChannel.send()` validates that the message source exactly
+timestamp. `NMCReceiveResult` stores the validated packet plus receive command
+submission, descriptor-acceptance, endpoint-ready, and completion timestamps.
+`NMCChannel.send()` validates that the message source exactly
 matches the channel binding and packetizes before enqueueing, so later mutation
 cannot alter an in-flight packet. Its returned process means the packet has
 completed NMC TX service and has been handed to the source Link; it does not
-mean remote delivery. `recv_flit()` returns one flit only after NMC RX service;
-it is not a command-level receive API and therefore does not select a shape
-mode. Packet reassembly, independent RECV metadata, and TAIL-based receive
-completion belong to Fix 11.
+mean remote delivery. `recv_message()` posts one independently shaped receive
+command, filters incoming entries by message ID, validates packet metadata and
+HEAD/BODY/TAIL sequence, and completes no earlier than both endpoint readiness
+and TAIL RX service. `recv_flit()` remains a diagnostic API that returns one
+serviced flit without posting a receive descriptor. A channel cannot mix these
+receive APIs because a raw consumer could steal a command's matching flit.
 
 A TX command must acquire one channel descriptor slot before its immutable flit
 tuple enters `tx_data_queue`. The slot remains occupied until local TX service
 hands the final flit to the source Link, matching the current SEND completion
 boundary. Additional commands wait in FIFO order when the configured capacity
-is full. CH0 and CH1 use distinct pools. `recv_flit()` is not a receive command,
-so it does not consume one descriptor per flit; Fix 11 will connect receive
-command admission to the same per-channel pool.
+is full. Command-level RECV uses the same channel descriptor issuer and slot
+pool, retaining its slot through operation completion. CH0 and CH1 use distinct
+pools. `recv_flit()` is not a receive command, so it does not consume one
+descriptor per flit.
+
+SEND and RECV setup timestamps are local command boundaries and may overlap
+when commands are posted concurrently. A one-way transfer therefore must not
+sum both endpoint targets and call that an RTT. The measured RTT fits require
+an explicit sequential ping-pong or acknowledgement workload.
 
 Each channel also owns one `descriptor_issuer`. Same-channel commands serialize
 through this resource, acquire descriptor capacity in submission order, and

@@ -28,9 +28,10 @@ read-only `nmc_channels` mapping exposes the corresponding runtime
 `NMCChannel`, with independent TX/RX datapath resources and data queues for each
 fabric.
 
-The legacy task contract names CH0 explicitly until Fix 11 adds channel
-selection to DFG communication operations. This compatibility choice does not
-merge or alias the two physical PE bindings.
+DFG SEND and RECV operations select an explicit fabric; legacy nodes default to
+CH0. Task execution resolves that fabric through the Core's architecture-owned
+NMC channel. This compatibility default does not merge or alias the two
+physical PE bindings.
 
 `EndpointRegistry` owns the logical-to-physical attachment map. PE `n` resolves
 on both NoC0 and NoC1 to router `n`, local port 0. DMA entries are built from

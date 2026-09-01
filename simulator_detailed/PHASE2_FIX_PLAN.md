@@ -278,8 +278,9 @@ Tests:
 ## Fix 5: Attach Every PE to Both Fabrics
 
 Status: implemented. Every `Core` owns an immutable-view mapping from CH0 and
-CH1 to distinct `PEChannelBinding` objects. Task-level channel selection and the
-replacement of obsolete SEND/RECV transport calls remain assigned to Fix 11.
+CH1 to distinct `PEChannelBinding` objects. Fix 11 now resolves task-level
+channel selection through these bindings and their architecture-owned
+`NMCChannel` instances.
 
 Code changes:
 
@@ -508,12 +509,11 @@ a benchmark result whose exact shape construction is not documented.
 ### Fix 10A: Enforce Per-Channel Descriptor Capacity
 
 Status: implemented. Every `NMCChannel` owns a FIFO descriptor slot pool sized
-by `max_outstanding_descriptors` (24 by default). A TX command acquires one slot
-before entering the data-service queue and holds it until local TX completion.
-Further commands backpressure at admission when all slots are occupied. CH0 and
-CH1 own independent pools. The current receive API is flit-level; RX command
-admission will use the same channel pool when Fix 11 introduces receive
-descriptors.
+by `max_outstanding_descriptors` (24 by default). SEND and command-level RECV
+each acquire one slot before entering their channel work and hold it until local
+completion. Further commands backpressure at admission when all slots are
+occupied. CH0 and CH1 own independent pools. The diagnostic `recv_flit()` API
+does not represent a hardware command and therefore does not acquire a slot.
 
 Tests:
 
@@ -570,11 +570,11 @@ Tests:
 
 ### Fix 10C-2: Carry Shape Mode on Endpoint Commands
 
-Status: implemented for the current SEND command boundary. `Message` carries
-the source command's mode with a dynamic compatibility default, and
-`NMCTransmitEntry` preserves it through admission without adding it to `Flit`.
-The current `recv_flit()` API is not a receive command; Fix 11 will bind an
-independently selected mode to command-level receive admission.
+Status: implemented for both command boundaries. `Message` carries the source
+command's mode with a dynamic compatibility default, and `NMCTransmitEntry`
+preserves it through admission without adding it to `Flit`. A command-level
+RECV selects its own mode independently; `recv_flit()` remains a diagnostic
+flit API rather than a receive command.
 
 Code changes:
 
@@ -595,12 +595,15 @@ Tests:
 
 ### Fix 10C-3: Complete Endpoint Timing Without Double Counting
 
-Status: implemented for source SEND. Command submission and descriptor
-acceptance are retained on the admitted entry, while the existing source-router
-`INJECT` event defines first fabric injection. The default staged composition
-adds only the residual above 57-cycle posting, NMC TX service, and PE-link
-delivery to reach 79.5/125 cycles. Receive-side application and complete RTT
-acceptance remain blocked on the command-level RECV path in Fix 11.
+Status: implemented at both SEND and RECV command boundaries. Command
+submission and descriptor acceptance are retained on admitted operations,
+while the existing source-router `INJECT` event defines first fabric injection.
+The SEND composition adds only the residual above 57-cycle posting, NMC TX
+service, and PE-link delivery to reach 79.5/125 cycles. RECV independently
+reaches its selected endpoint-ready target and completes no earlier than both
+that target and the matching TAIL's RX-service completion. Source and
+destination setup may overlap in one transfer; they must not be summed to fake
+the sequential ping-pong RTT benchmark. Exact RTT replay remains Fix 12 work.
 
 Code changes:
 
@@ -610,18 +613,21 @@ Code changes:
   79.5/125-cycle endpoint setup target. Add only the residual endpoint delay
   not already represented by descriptor posting, NMC service, and PE-side
   injection stages at the chosen timestamp boundary.
-- Apply the same accounting to receive commands when Fix 11 introduces
-  command-level receive admission. Never add a whole 79.5/125-cycle endpoint
-  delay on top of the existing 57-cycle posting delay.
+- Apply the same accounting to command-level receive admission. Never add a
+  whole 79.5/125-cycle endpoint delay on top of the existing 57-cycle posting
+  delay.
 - Keep router/link fabric timing independent and preserve the measured
   8.5-ACI-cycle one-way hop slope.
 
 Tests:
 
-- Two static endpoints plus fabric timing reproduce `159 + 17*hops` RTT.
-- Two dynamic endpoints plus fabric timing reproduce `250 + 17*hops` RTT.
-- Mixed endpoints reproduce `79.5 + 125 + 17*hops` RTT.
+- Idle static and dynamic SEND commands inject their first flit at 79.5 and 125
+  ACI cycles after submission.
+- RECV endpoint-ready timestamps independently reach their selected static or
+  dynamic target and operation completion waits for matching TAIL RX service.
 - Fabric-only timestamps exclude descriptor and endpoint setup time.
+- Fix 12 replays the sequential static, dynamic, and mixed ping-pong workloads
+  before comparing against the corresponding RTT intercepts.
 
 ### Fix 10C-4: Use rb54 as Benchmark Validation, Not a Mode
 
@@ -630,7 +636,7 @@ configuration. The rb54 latency/packetization evidence is kept separate from
 the rb56/rb58 32 KB batched-throughput evidence. Executable checks bind rb54's
 flit count, default eight-flit burst boundary, and 17-cycle RTT hop slope to the
 current model. Replaying the 204-cycle RTT intercept and 32 KB command-level
-rates remains an end-to-end acceptance task after Fix 11 exposes the complete
+rates remains an end-to-end acceptance task in Fix 12 using the complete
 SEND/RECV workload boundary.
 
 Code changes:
@@ -654,10 +660,21 @@ Tests:
   payload-size evidence without changing static/dynamic endpoint targets.
 - The separate rb56/rb58 reference preserves approximately 87 B/ACI-cycle per
   channel and approximately 340 B/ACI-cycle for dual-channel full duplex.
-- End-to-end benchmark replay after Fix 11 checks that the simulator approaches
+- End-to-end benchmark replay in Fix 12 checks that the simulator approaches
   those rates under the exact 32 KB batched command schedule.
 
 ## Fix 11: Repair SEND/RECV Integration
+
+Status: implemented. DFG communication nodes carry explicit channel and local
+shape-mode metadata, with CH0 and dynamic shape as compatibility defaults.
+`Task.execute()` now enters the architecture-owned `NMCChannel` command APIs.
+The destination posts an independently timed receive descriptor, reassembles
+only flits with the paired RECV node's globally unique message ID, validates
+the complete packet metadata and flit sequence, and completes after TAIL RX
+service and endpoint readiness. Raw-flit diagnostics cannot consume from a
+channel concurrently using command-level receive because they could steal a
+flit from an in-progress reassembly. Phase 2 still rejects DMA endpoints and
+collective transfer types at this execution boundary.
 
 Code changes:
 
@@ -670,6 +687,8 @@ Code changes:
   complete RECV only after TAIL arrival.
 - Reject a channel mismatch between paired SEND and RECV operations.
 - Reject GM/DDR and collective paths until their endpoint models are bound.
+- Keep one-way SEND/RECV completion separate from sequential RTT acceptance;
+  Fix 12 must construct the measured echo/ack workload explicitly.
 
 Tests:
 
@@ -677,6 +696,8 @@ Tests:
 - Concurrent CH0 and CH1 transfers complete without shared fabric state.
 - Same-channel opposite-direction SEND/RECV completes concurrently.
 - Unsupported endpoint and transfer types fail with explicit errors.
+- Receive descriptors serialize through the channel issuer, consume descriptor
+  capacity, and preserve independent source/destination shape modes.
 
 ## Fix 12: Correct Trace Semantics and Enforce Acceptance
 
@@ -689,6 +710,8 @@ Code changes:
   converted rather than mixed into the same numeric field.
 - Report first-flit fabric latency, packet fabric completion latency, and
   end-to-end operation latency under distinct names.
+- Replay RTT as an explicit sequential ping-pong/ack workload. Do not derive it
+  by adding both endpoint targets to one concurrently posted one-way transfer.
 - Update `docs/`, `ADAPTATION_PLAN.md`, and calibration comments to remove the
   single-mesh, lane-aware, shared-NMC-bandwidth, and universal-startup models.
 - Add strict types to every Phase 2 file touched by these fixes.

@@ -1,13 +1,46 @@
-import logging
-from typing import List
+from __future__ import annotations
 
-from .definitions import Message, NoCChannel, NodeType, OperatorType, Slice
+import logging
+from typing import List, Protocol
+
+import simpy
+from simpy.events import ProcessGenerator
+
+from ..endpoint_registry import EndpointRegistry
+from ..pe_channel import NMCChannel
+from .definitions import Event, Message, NoCChannel, NodeType, OperatorType, Slice
 from .dfg import DFGNode
+from .mapper import NetworkMapper
 
 logger = logging.getLogger("Task")
 
-LEGACY_TASK_FABRIC = NoCChannel.CH0
 
+class _Scratchpad(Protocol):
+    def allocate(self, size: int, task_index: int) -> ProcessGenerator: ...
+
+    def release(self, size: int, task_index: int) -> ProcessGenerator: ...
+
+
+class _LSU(Protocol):
+    def occupy(self, data_size: int) -> ProcessGenerator: ...
+
+
+class _TPU(Protocol):
+    def occupy(self, flop: int) -> ProcessGenerator: ...
+
+
+class TaskCore(Protocol):
+    id: int
+    env: simpy.Environment
+    spm: _Scratchpad
+    lsu: _LSU
+    tpu: _TPU
+    mapper: NetworkMapper
+    endpoint_registry: EndpointRegistry
+    events: List[Event]
+    index2id: dict[int, int]
+
+    def nmc_channel_for(self, fabric_id: NoCChannel) -> NMCChannel: ...
 
 task_priority = {
     OperatorType.STORE.name: 0,
@@ -29,6 +62,8 @@ class Task:
         self.output_shape = node.output_size
         self.weight_shape = node.weight_size
         self.core_id = node.core_id
+        self.fabric_id = node.fabric_id
+        self.nmc_shape_mode = node.nmc_shape_mode
 
         # dependencies
         self.dependencies: List[int] = node.parent
@@ -85,7 +120,7 @@ class Task:
         return self.ready
 
 
-    def execute(self, core):
+    def execute(self, core: TaskCore) -> ProcessGenerator:
         # print(self.input_size())
         self.check_ready()
         if not self.ready:
@@ -186,41 +221,87 @@ class Task:
                 logger.debug(f"successfully release space for task {self.index}")
 
             case OperatorType.SEND:
-                binding = core.binding_for(LEGACY_TASK_FABRIC)
-                # start up time
-                yield env.timeout(binding.router.start_up_time)
-                # put the feature into the corresponding router
-                ### there should be only one successor, I think (Wrong, maybe more successors)
+                channel = core.nmc_channel_for(self.fabric_id)
+                send_node = core.mapper.dfg.get_node(self.index)
+                if send_node is None:
+                    raise RuntimeError(f"missing SEND task {self.index} in DFG")
                 for child in self.successors:
                     node = core.mapper.dfg.get_node(child)
-                    # print("-" * 20)
-                    # print(f"DEBUG: Attempting to create Message for child '{child}'")
-                    # print(f"DEBUG: src = {core.id} (type: {type(core.id)})")
-                    # print(f"DEBUG: dst = {node.core_id} (type: {type(node.core_id)})")
-                    # print(f"DEBUG: data = {node.input_slice()} (type: {type(node.input_slice())})")
-                    # print("-" * 20)
+                    if node is None:
+                        raise RuntimeError(
+                            f"SEND task {self.index} has missing successor {child}"
+                        )
+                    self._validate_send_receive_pair(send_node, node)
                     message = Message(
-                        src=binding.address,
+                        src=channel.binding.address,
                         dst=core.endpoint_registry.resolve(
                             NodeType.PE,
                             node.core_id,
-                            fabric_id=binding.address.fabric_id,
+                            fabric_id=self.fabric_id,
                         ),
-                        index=self.index,
+                        index=node.index,
                         data=node.input_slice().tensor_slice,
+                        nmc_shape_mode=self.nmc_shape_mode,
                     )
-
-                    yield binding.tx_link.put(message)
-                    # yield env.process(core.spm.release(size=node.input_slice().size(), task_index=self.index))
+                    yield channel.send(message)
                     
                 yield env.process(core.spm.release(size=self.output_size(), task_index=self.index))
 
             case OperatorType.RECV:
-                binding = core.binding_for(LEGACY_TASK_FABRIC)
-                # allocate space for coming data
+                send_node = self._paired_send_node(core)
+                receive_node = core.mapper.dfg.get_node(self.index)
+                if receive_node is None:
+                    raise RuntimeError(f"missing RECV task {self.index} in DFG")
+                self._validate_send_receive_pair(send_node, receive_node)
+                channel = core.nmc_channel_for(self.fabric_id)
                 yield env.process(core.spm.allocate(self.input_size(), task_index=self.index))
-                # receive data from noc
-                yield binding.rx_link.get()
+                message = Message(
+                    src=core.endpoint_registry.resolve(
+                        NodeType.PE,
+                        send_node.core_id,
+                        fabric_id=self.fabric_id,
+                    ),
+                    dst=channel.binding.address,
+                    index=self.index,
+                    data=self.input_shape,
+                    nmc_shape_mode=send_node.nmc_shape_mode,
+                )
+                yield channel.recv_message(message, self.nmc_shape_mode)
+
+    @staticmethod
+    def _validate_send_receive_pair(
+        send_node: DFGNode,
+        receive_node: DFGNode,
+    ) -> None:
+        if send_node.operation is not OperatorType.SEND:
+            raise ValueError(
+                f"task {send_node.index} is not a SEND command"
+            )
+        if receive_node.operation is not OperatorType.RECV:
+            raise NotImplementedError(
+                f"SEND task {send_node.index} cannot execute successor "
+                f"{receive_node.index} of type {receive_node.operation.name}"
+            )
+        if send_node.fabric_id is not receive_node.fabric_id:
+            raise ValueError(
+                f"SEND {send_node.index} uses {send_node.fabric_id.name} but "
+                f"paired RECV {receive_node.index} uses "
+                f"{receive_node.fabric_id.name}"
+            )
+
+    def _paired_send_node(self, core: TaskCore) -> DFGNode:
+        if len(self.dependencies) != 1:
+            raise ValueError(
+                f"RECV task {self.index} requires exactly one paired SEND, "
+                f"found {len(self.dependencies)}"
+            )
+        send_index = self.dependencies[0]
+        send_node = core.mapper.dfg.get_node(send_index)
+        if send_node is None:
+            raise RuntimeError(
+                f"RECV task {self.index} has missing parent {send_index}"
+            )
+        return send_node
 
 
     def __lt__(self, other: "Task") -> bool:

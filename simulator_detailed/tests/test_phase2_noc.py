@@ -33,7 +33,11 @@ from simulator_detailed.noc import (
     NoCTracer,
     RoundRobinArbiter,
 )
-from simulator_detailed.pe_channel import NMCChannel, PEChannelBinding
+from simulator_detailed.pe_channel import (
+    NMCChannel,
+    NMCReceiveResult,
+    PEChannelBinding,
+)
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
 from simulator_detailed.tracing import collect_noc_link_events, process_events
 from simulator_detailed.utils.definitions import (
@@ -64,9 +68,12 @@ from simulator_detailed.utils.definitions import (
     NoCChannel,
     NoCPlane,
     NodeType,
+    OperatorType,
     TransType,
     compute_flit_count,
 )
+from simulator_detailed.utils.dfg import DFG
+from simulator_detailed.utils.task import Task
 
 
 class MeshHarness:
@@ -202,6 +209,27 @@ class MeshHarness:
 
 
 class Phase2NoCTests(unittest.TestCase):
+    @staticmethod
+    def _build_task_cores(dfg):
+        env = simpy.Environment()
+        noc_config = NoCConfig()
+        arch = object.__new__(Arch)
+        arch.env = env
+        arch.x_size = noc_config.x
+        arch.y_size = noc_config.y
+        arch.endpoint_registry = EndpointRegistry(noc_config)
+        arch.nocs = Arch.build_nocs(env, noc_config)
+        mapper = Mock()
+        mapper.dfg = dfg
+        mapper.all_tasks_completed.return_value = True
+        cores = arch.build_cores(
+            env=env,
+            config=CoreConfig(),
+            noc_config=noc_config,
+            mapper=mapper,
+        )
+        return env, arch, cores
+
     def test_arch_builds_two_independent_data_meshes(self):
         env = simpy.Environment()
         nocs = Arch.build_nocs(env, NoCConfig())
@@ -788,6 +816,247 @@ class Phase2NoCTests(unittest.TestCase):
                 FlitType.TAIL,
             ],
         )
+
+    def test_nmc_command_receive_reassembles_by_message_id(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        destination = harness.attach_nmc(1)
+        first = harness.message(103, 0, 1, 3)
+        second = harness.message(104, 0, 1, 2)
+
+        receive_second = destination.recv_message(
+            second,
+            NMCShapeMode.STATIC,
+        )
+        receive_first = destination.recv_message(
+            first,
+            NMCShapeMode.DYNAMIC,
+        )
+        send_first = source.send(first)
+        send_second = source.send(second)
+        harness.env.run(
+            until=harness.env.all_of(
+                (receive_first, receive_second, send_first, send_second)
+            )
+        )
+
+        first_result = receive_first.value
+        second_result = receive_second.value
+        self.assertIsInstance(first_result, NMCReceiveResult)
+        self.assertIsInstance(second_result, NMCReceiveResult)
+        self.assertEqual(
+            [flit.msg_id for flit in first_result.flits],
+            [103, 103, 103],
+        )
+        self.assertEqual(
+            [flit.flit_type for flit in first_result.flits],
+            [FlitType.HEAD, FlitType.BODY, FlitType.TAIL],
+        )
+        self.assertEqual(
+            [flit.msg_id for flit in second_result.flits],
+            [104, 104],
+        )
+        self.assertTrue(first_result.flits[-1].is_tail)
+        self.assertTrue(second_result.flits[-1].is_tail)
+        self.assertEqual(first_result.submission_time, 0.0)
+        self.assertEqual(second_result.submission_time, 0.0)
+        self.assertEqual(second_result.descriptor_acceptance_time, 57.0)
+        self.assertEqual(first_result.descriptor_acceptance_time, 114.0)
+        self.assertEqual(second_result.endpoint_ready_time, 79.5)
+        self.assertEqual(first_result.endpoint_ready_time, 182.0)
+        self.assertGreaterEqual(
+            first_result.completion_time,
+            first_result.endpoint_ready_time,
+        )
+        self.assertGreaterEqual(
+            second_result.completion_time,
+            second_result.endpoint_ready_time,
+        )
+        self.assertEqual(destination.outstanding_descriptor_count, 0)
+        with self.assertRaisesRegex(ValueError, "already has a receive command"):
+            destination.recv_message(first, NMCShapeMode.STATIC)
+        with self.assertRaisesRegex(RuntimeError, "cannot mix raw-flit"):
+            destination.recv_flit()
+
+    def test_dfg_communication_channel_defaults_and_pair_validation(self):
+        dfg = DFG()
+        default_send = dfg.add_node(1, OperatorType.SEND, 0)
+        explicit_receive = dfg.add_node(
+            2,
+            OperatorType.RECV,
+            1,
+            fabric_id=NoCChannel.CH1,
+            nmc_shape_mode=NMCShapeMode.STATIC,
+        )
+
+        self.assertIs(default_send.fabric_id, NoCChannel.CH0)
+        self.assertIs(default_send.nmc_shape_mode, NMCShapeMode.DYNAMIC)
+        self.assertIs(explicit_receive.fabric_id, NoCChannel.CH1)
+        self.assertIs(explicit_receive.nmc_shape_mode, NMCShapeMode.STATIC)
+        with self.assertRaisesRegex(
+            ValueError,
+            "SEND 1 uses CH0 but paired RECV 2 uses CH1",
+        ):
+            dfg.add_edge(1, 2)
+
+    def test_task_send_receive_uses_explicit_channel_and_endpoint_modes(self):
+        payload_bytes = 1025
+        payload = [DimSlice(start=0, end=payload_bytes)]
+        dfg = DFG()
+        send_node = dfg.add_node(
+            1,
+            OperatorType.SEND,
+            0,
+            output_size=payload,
+            fabric_id=NoCChannel.CH1,
+            nmc_shape_mode=NMCShapeMode.STATIC,
+        )
+        receive_node = dfg.add_node(
+            2,
+            OperatorType.RECV,
+            1,
+            input_size=payload,
+            fabric_id=NoCChannel.CH1,
+            nmc_shape_mode=NMCShapeMode.DYNAMIC,
+        )
+        dfg.add_edge(send_node.index, receive_node.index)
+        receive_node.received_input = payload_bytes
+        env, arch, cores = self._build_task_cores(dfg)
+        cores[0].spm.container.get(payload_bytes)
+
+        receive_process = env.process(Task(receive_node).execute(cores[1]))
+        send_process = env.process(Task(send_node).execute(cores[0]))
+        env.run(until=env.all_of((send_process, receive_process)))
+
+        ch1_events = [
+            event
+            for event in arch.nocs[NoCChannel.CH1].tracer.events
+            if event.msg_id == receive_node.index
+        ]
+        self.assertTrue(ch1_events)
+        self.assertFalse(
+            any(
+                event.msg_id == receive_node.index
+                for event in arch.nocs[NoCChannel.CH0].tracer.events
+            )
+        )
+        first_injection = next(
+            event.time
+            for event in ch1_events
+            if event.action is FlitAction.INJECT
+        )
+        self.assertAlmostEqual(first_injection, 79.5)
+        self.assertGreaterEqual(float(env.now), 126.0)
+
+    def test_task_channels_support_dual_fabric_and_full_duplex_flows(self):
+        payload_bytes = 512
+        payload = [DimSlice(start=0, end=payload_bytes)]
+        dfg = DFG()
+        flow_specs = (
+            (10, 11, 0, 1, NoCChannel.CH0),
+            (12, 13, 0, 1, NoCChannel.CH1),
+            (14, 15, 1, 0, NoCChannel.CH0),
+        )
+        task_pairs = []
+        for send_id, receive_id, src, dst, fabric_id in flow_specs:
+            send_node = dfg.add_node(
+                send_id,
+                OperatorType.SEND,
+                src,
+                output_size=payload,
+                fabric_id=fabric_id,
+            )
+            receive_node = dfg.add_node(
+                receive_id,
+                OperatorType.RECV,
+                dst,
+                input_size=payload,
+                fabric_id=fabric_id,
+            )
+            dfg.add_edge(send_id, receive_id)
+            receive_node.received_input = payload_bytes
+            task_pairs.append((send_node, receive_node))
+
+        env, arch, cores = self._build_task_cores(dfg)
+        for send_node, _ in task_pairs:
+            cores[send_node.core_id].spm.container.get(payload_bytes)
+        processes = []
+        for send_node, receive_node in task_pairs:
+            processes.append(
+                env.process(Task(receive_node).execute(cores[receive_node.core_id]))
+            )
+            processes.append(
+                env.process(Task(send_node).execute(cores[send_node.core_id]))
+            )
+        env.run(until=env.all_of(processes))
+
+        ch0_routes = {
+            (event.msg_id, event.src_router, event.dst_router)
+            for event in arch.nocs[NoCChannel.CH0].tracer.events
+            if event.action is FlitAction.INJECT
+        }
+        ch1_routes = {
+            (event.msg_id, event.src_router, event.dst_router)
+            for event in arch.nocs[NoCChannel.CH1].tracer.events
+            if event.action is FlitAction.INJECT
+        }
+        self.assertIn((11, 0, 1), ch0_routes)
+        self.assertIn((15, 1, 0), ch0_routes)
+        self.assertIn((13, 0, 1), ch1_routes)
+        self.assertTrue(all(process.triggered for process in processes))
+
+    def test_nmc_command_path_rejects_unbound_endpoints_and_collectives(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        pe_registry = EndpointRegistry(harness.config)
+        collective = Message(
+            src=pe_registry.resolve(
+                NodeType.PE,
+                0,
+                fabric_id=NoCChannel.CH0,
+            ),
+            dst=pe_registry.resolve(
+                NodeType.PE,
+                1,
+                fabric_id=NoCChannel.CH0,
+            ),
+            index=105,
+            data=[DimSlice(start=0, end=1)],
+            trans_type=TransType.BROADCAST,
+        )
+        with self.assertRaisesRegex(NotImplementedError, "SINGLECAST only"):
+            source.send(collective)
+
+        dma_registry = EndpointRegistry(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_WDMA,
+                        instance_id=0,
+                        router_id=28,
+                        channels=1,
+                        local_ports=[PORT_GM_WDMA],
+                    )
+                ]
+            )
+        )
+        pe_to_gm = Message(
+            src=pe_registry.resolve(
+                NodeType.PE,
+                0,
+                fabric_id=NoCChannel.CH0,
+            ),
+            dst=dma_registry.resolve(
+                NodeType.GM_WDMA,
+                0,
+                fabric_id=NoCChannel.CH0,
+                attachment_mode=DMAAttachmentMode.SINGLE_SIDE,
+            ),
+            index=106,
+            data=[DimSlice(start=0, end=1)],
+        )
+        with self.assertRaisesRegex(NotImplementedError, "PE-to-PE transfers only"):
+            source.send(pe_to_gm)
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 import simpy
 from simpy.events import Event as SimpyEvent
@@ -12,10 +12,12 @@ from .utils.definitions import (
     FLIT_BYTES,
     EndpointAddress,
     Flit,
+    FlitType,
     Message,
     NMCShapeMode,
     NoCChannel,
     NodeType,
+    TransType,
 )
 
 
@@ -74,6 +76,19 @@ class NMCReceiveEntry:
     completion_time: float
 
 
+@dataclass(frozen=True)
+class NMCReceiveResult:
+    """One validated command-level receive completed after its TAIL flit."""
+
+    message: Message
+    flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
+    submission_time: float
+    descriptor_acceptance_time: float
+    endpoint_ready_time: float
+    completion_time: float
+
+
 class NMCChannel:
     """Runtime resources for one independent, full-duplex PE NMC channel."""
 
@@ -112,7 +127,9 @@ class NMCChannel:
         # Hardware data-FIFO depths are unresolved and remain distinct from the
         # measured descriptor capacity enforced above.
         self.tx_data_queue = simpy.Store(env)
-        self.rx_data_queue = simpy.Store(env)
+        self.rx_data_queue = simpy.FilterStore(env)
+        self._receive_api_mode: Literal["flit", "message"] | None = None
+        self._claimed_receive_ids: set[int] = set()
         self.env.process(self._tx_service_loop())
         self.env.process(self._rx_service_loop())
 
@@ -156,8 +173,19 @@ class NMCChannel:
         )
         return max(0.0, residual_cycles)
 
+    def receive_endpoint_setup_residual_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return receive setup not represented by descriptor posting."""
+        target_cycles = self.shape_timing.endpoint_setup_target_aci_cycles(
+            shape_mode
+        )
+        return max(0.0, target_cycles - self.config.descriptor_issue_cycles)
+
     def send(self, message: Message) -> Process:
         """Queue one source-owned message and complete after NMC TX service."""
+        self._validate_pe_message(message)
         if message.src != self.binding.address:
             raise ValueError(
                 f"{self.fabric_id.name} NMC channel at PE "
@@ -171,7 +199,56 @@ class NMCChannel:
 
     def recv_flit(self) -> Process:
         """Wait for one flit after calibrated NMC RX service."""
+        self._select_receive_api("flit")
         return self.env.process(self._recv_flit())
+
+    def recv_message(
+        self,
+        message: Message,
+        shape_mode: NMCShapeMode,
+    ) -> Process:
+        """Post one receive command and complete after its validated TAIL."""
+        self._validate_pe_message(message)
+        if message.dst != self.binding.address:
+            raise ValueError(
+                f"{self.fabric_id.name} NMC channel at PE "
+                f"{self.binding.address.node_id} cannot receive for "
+                f"{message.dst.node_type.name}[{message.dst.node_id}]"
+            )
+        self._select_receive_api("message")
+        if message.index in self._claimed_receive_ids:
+            raise ValueError(
+                f"message {message.index} already has a receive command on "
+                f"{self.fabric_id.name} PE{self.binding.address.node_id}"
+            )
+        self._claimed_receive_ids.add(message.index)
+        return self.env.process(self._recv_message(message, shape_mode))
+
+    def _validate_pe_message(self, message: Message) -> None:
+        if (
+            message.src.node_type is not NodeType.PE
+            or message.dst.node_type is not NodeType.PE
+        ):
+            raise NotImplementedError(
+                "Phase 2 NMC command execution supports PE-to-PE transfers only"
+            )
+        if message.trans_type is not TransType.SINGLECAST:
+            raise NotImplementedError(
+                "Phase 2 NMC command execution supports SINGLECAST only"
+            )
+
+    def _select_receive_api(
+        self,
+        mode: Literal["flit", "message"],
+    ) -> None:
+        if self._receive_api_mode is None:
+            self._receive_api_mode = mode
+            return
+        if self._receive_api_mode != mode:
+            raise RuntimeError(
+                f"{self.fabric_id.name} PE{self.binding.address.node_id} cannot "
+                "mix raw-flit and command-level receive APIs"
+            )
 
     def _submit_tx(
         self,
@@ -218,6 +295,103 @@ class NMCChannel:
     def _recv_flit(self) -> ProcessGenerator:
         entry = cast(NMCReceiveEntry, (yield self.rx_data_queue.get()))
         return entry.flit
+
+    def _recv_message(
+        self,
+        message: Message,
+        shape_mode: NMCShapeMode,
+    ) -> ProcessGenerator:
+        submission_time = float(self.env.now)
+        descriptor_request: Request | None = None
+        try:
+            issue_request = self.descriptor_issuer.request()
+            with issue_request:
+                yield issue_request
+                descriptor_request = self.descriptor_slots.request()
+                yield descriptor_request
+                descriptor_issue_start_time = float(self.env.now)
+                yield self.env.timeout(self.config.descriptor_issue_cycles)
+
+            descriptor_acceptance_time = float(self.env.now)
+            endpoint_ready_time = (
+                descriptor_issue_start_time
+                + self.config.descriptor_issue_cycles
+                + self.receive_endpoint_setup_residual_aci_cycles(shape_mode)
+            )
+            flits: list[Flit] = []
+            expected_flit_count = message.flit_count()
+            for flit_index in range(expected_flit_count):
+                entry = cast(
+                    NMCReceiveEntry,
+                    (
+                        yield self.rx_data_queue.get(
+                            lambda queued, message_id=message.index: (
+                                queued.flit.msg_id == message_id
+                            )
+                        )
+                    ),
+                )
+                self._validate_received_flit(
+                    message,
+                    entry.flit,
+                    flit_index,
+                    expected_flit_count,
+                )
+                flits.append(entry.flit)
+
+            setup_wait = endpoint_ready_time - float(self.env.now)
+            if setup_wait > 0:
+                yield self.env.timeout(setup_wait)
+            return NMCReceiveResult(
+                message=message,
+                flits=tuple(flits),
+                shape_mode=shape_mode,
+                submission_time=submission_time,
+                descriptor_acceptance_time=descriptor_acceptance_time,
+                endpoint_ready_time=endpoint_ready_time,
+                completion_time=float(self.env.now),
+            )
+        finally:
+            if descriptor_request is not None:
+                if descriptor_request.triggered:
+                    self.descriptor_slots.release(descriptor_request)
+                else:
+                    descriptor_request.cancel()
+
+    @staticmethod
+    def _validate_received_flit(
+        message: Message,
+        flit: Flit,
+        flit_index: int,
+        flit_count: int,
+    ) -> None:
+        if flit_count == 1:
+            expected_type = FlitType.SINGLE
+        elif flit_index == 0:
+            expected_type = FlitType.HEAD
+        elif flit_index == flit_count - 1:
+            expected_type = FlitType.TAIL
+        else:
+            expected_type = FlitType.BODY
+        expected_payload_bytes = min(
+            FLIT_BYTES,
+            max(0, message.payload_bytes() - flit_index * FLIT_BYTES),
+        )
+        if (
+            flit.flit_type is not expected_type
+            or flit.payload_bytes != expected_payload_bytes
+            or flit.msg_id != message.index
+            or flit.fabric_id is not message.src.fabric_id
+            or flit.src_router != message.src.router_id
+            or flit.src_local_port != message.src.local_port
+            or flit.dst_router != message.dst.router_id
+            or flit.dst_local_port != message.dst.local_port
+            or flit.burst_len_mode is not message.burst_len_mode
+        ):
+            raise RuntimeError(
+                f"message {message.index} received an invalid flit at index "
+                f"{flit_index}"
+            )
 
     def _tx_service_loop(self) -> ProcessGenerator:
         while True:
