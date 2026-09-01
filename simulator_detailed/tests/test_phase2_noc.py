@@ -106,7 +106,12 @@ class MeshHarness:
         self.noc.routers[router_id].bind_link(PORT_PE, c2r, r2c)
         self.endpoints[router_id] = (c2r, r2c)
 
-    def attach_nmc(self, router_id, channel_config=None):
+    def attach_nmc(
+        self,
+        router_id,
+        channel_config=None,
+        shape_timing=None,
+    ):
         if router_id in self.nmc_channels:
             raise ValueError(f"PE{router_id} already has an NMC channel")
         if router_id not in self.endpoints:
@@ -115,6 +120,7 @@ class MeshHarness:
         channel = NMCChannel(
             env=self.env,
             config=channel_config or NMCChannelConfig(),
+            shape_timing=shape_timing or NMCShapeTimingConfig(),
             binding=PEChannelBinding(
                 address=self.registry.resolve(
                     NodeType.PE,
@@ -403,6 +409,7 @@ class Phase2NoCTests(unittest.TestCase):
             NMCChannel(
                 env=simpy.Environment(),
                 config=NMCChannelConfig(),
+                shape_timing=NMCShapeTimingConfig(),
                 binding=ch0.binding,
             )
 
@@ -506,15 +513,18 @@ class Phase2NoCTests(unittest.TestCase):
             ):
                 first_launch_times.setdefault(event.msg_id, event.time)
 
-        first_service_completion = (
-            source.config.descriptor_issue_cycles
-            + source.tx_service_interval_aci_cycles
+        first_link_launch = (
+            source.shape_timing.endpoint_setup_target_aci_cycles(
+                NMCShapeMode.DYNAMIC
+            )
+            - source.binding.tx_link.serialization_aci_cycles
+            - source.binding.tx_link.effective_link_stage_aci_cycles
         )
         self.assertEqual(set(first_launch_times), {120, 121, 122})
         for index, msg_id in enumerate((120, 121, 122), start=1):
             self.assertAlmostEqual(
                 first_launch_times[msg_id],
-                first_service_completion
+                first_link_launch
                 + (index - 1) * source.config.descriptor_issue_cycles,
             )
 
@@ -568,8 +578,11 @@ class Phase2NoCTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             first_launch_times[NoCChannel.CH0],
-            sources[NoCChannel.CH0].config.descriptor_issue_cycles
-            + sources[NoCChannel.CH0].tx_service_interval_aci_cycles,
+            sources[NoCChannel.CH0]
+            .shape_timing.dynamic_endpoint_setup_aci_cycles
+            - sources[NoCChannel.CH0].binding.tx_link.serialization_aci_cycles
+            - sources[NoCChannel.CH0]
+            .binding.tx_link.effective_link_stage_aci_cycles,
         )
 
     def test_nmc_directional_service_uses_the_slowest_pipeline_stage(self):
@@ -1096,7 +1109,111 @@ class Phase2NoCTests(unittest.TestCase):
 
         admitted_entry = queue_put.call_args.args[0]
         self.assertIs(admitted_entry.shape_mode, NMCShapeMode.STATIC)
+        self.assertEqual(admitted_entry.submission_time, 0.0)
+        self.assertEqual(
+            admitted_entry.descriptor_acceptance_time,
+            source.config.descriptor_issue_cycles,
+        )
+        self.assertAlmostEqual(
+            admitted_entry.endpoint_ready_time,
+            source.shape_timing.static_endpoint_setup_aci_cycles
+            - source.first_injection_transport_aci_cycles,
+        )
         self.assertEqual(received, static_message.packetize())
+
+    def test_nmc_shape_timing_calibrates_idle_first_injection(self):
+        expected_targets = {
+            NMCShapeMode.STATIC: 79.5,
+            NMCShapeMode.DYNAMIC: 125.0,
+        }
+
+        for msg_id, (shape_mode, expected_target) in enumerate(
+            expected_targets.items(),
+            start=151,
+        ):
+            with self.subTest(shape_mode=shape_mode):
+                harness = MeshHarness()
+                source = harness.attach_nmc(0)
+                destination = harness.attach_nmc(1)
+                message = harness.message(msg_id, 0, 1, 1).model_copy(
+                    update={"nmc_shape_mode": shape_mode}
+                )
+
+                send_process = source.send(message)
+                receive_process = destination.recv_flit()
+                harness.env.run(
+                    until=harness.env.all_of(
+                        (send_process, receive_process)
+                    )
+                )
+
+                injection_time = next(
+                    event.time
+                    for event in harness.tracer.events
+                    if event.action is FlitAction.INJECT
+                    and event.msg_id == msg_id
+                )
+                represented_cycles = (
+                    source.config.descriptor_issue_cycles
+                    + source.first_injection_transport_aci_cycles
+                )
+                self.assertAlmostEqual(injection_time, expected_target)
+                self.assertAlmostEqual(
+                    source.endpoint_setup_residual_aci_cycles(shape_mode),
+                    expected_target - represented_cycles,
+                )
+
+        slow_harness = MeshHarness()
+        slow_source = slow_harness.attach_nmc(
+            0,
+            NMCChannelConfig(tx_bytes_per_cycle=1.0),
+        )
+        self.assertEqual(
+            slow_source.endpoint_setup_residual_aci_cycles(
+                NMCShapeMode.STATIC
+            ),
+            0.0,
+        )
+
+    def test_nmc_pipelined_shape_setup_preserves_command_order(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(
+            0,
+            NMCChannelConfig(descriptor_issue_cycles=13.0),
+        )
+        destination = harness.attach_nmc(1)
+        dynamic_message = harness.message(153, 0, 1, 1)
+        static_message = harness.message(154, 0, 1, 1).model_copy(
+            update={"nmc_shape_mode": NMCShapeMode.STATIC}
+        )
+        received = []
+
+        def receive_messages():
+            for _ in range(2):
+                received.append((yield destination.recv_flit()))
+
+        send_processes = (
+            source.send(dynamic_message),
+            source.send(static_message),
+        )
+        receive_process = harness.env.process(receive_messages())
+        harness.env.run(
+            until=harness.env.all_of((*send_processes, receive_process))
+        )
+
+        injection_events = [
+            event
+            for event in harness.tracer.events
+            if event.action is FlitAction.INJECT
+            and event.msg_id in (153, 154)
+        ]
+        self.assertEqual(
+            [event.msg_id for event in injection_events],
+            [153, 154],
+        )
+        self.assertEqual([flit.msg_id for flit in received], [153, 154])
+        self.assertAlmostEqual(injection_events[0].time, 125.0)
+        self.assertGreater(injection_events[1].time, injection_events[0].time)
 
     def test_router_burst_default_resolves_to_hardware_burst_len_7(self):
         explicit_quanta = {

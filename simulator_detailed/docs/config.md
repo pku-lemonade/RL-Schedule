@@ -65,10 +65,15 @@ the channel issuer until an earlier command completes and releases a slot.
 stores their measured total per-endpoint setup targets as 79.5 and 125 ACI
 cycles. These targets already include descriptor programming, command decode,
 outer-sync ACQUIRE, and first-flit injection; they are not additive delays to
-place on top of every existing endpoint stage. Fix 10C-3 will apply only the
-residual needed at a precisely defined timing boundary. `send_with_sync` is an
-API used by the measured operations, not a shape mode, and the rb54 204-cycle
-RTT intercept is benchmark data rather than runtime configuration.
+place on top of every existing endpoint stage. For source SEND, the simulator
+subtracts descriptor posting, first-flit NMC TX service, and nominal PE-link
+serialization/stage time, then pipelines only the non-negative residual before
+TX service. With default values, the represented time is
+`57 + 512/120 + 4 + 0.5 = 65.7667` cycles, leaving residuals of approximately
+13.7333 static and 59.2333 dynamic cycles. A deliberately slower modeled stage
+can already exceed a target, in which case the residual is zero. `send_with_sync`
+is an API used by the measured operations, not a shape mode, and the rb54
+204-cycle RTT intercept is benchmark data rather than runtime configuration.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero

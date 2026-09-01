@@ -595,6 +595,13 @@ Tests:
 
 ### Fix 10C-3: Complete Endpoint Timing Without Double Counting
 
+Status: implemented for source SEND. Command submission and descriptor
+acceptance are retained on the admitted entry, while the existing source-router
+`INJECT` event defines first fabric injection. The default staged composition
+adds only the residual above 57-cycle posting, NMC TX service, and PE-link
+delivery to reach 79.5/125 cycles. Receive-side application and complete RTT
+acceptance remain blocked on the command-level RECV path in Fix 11.
+
 Code changes:
 
 - Define operation submission, descriptor acceptance, and first fabric

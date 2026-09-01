@@ -88,6 +88,7 @@ class Arch:
                 channel = NMCChannel(
                     env=env,
                     config=config.nmc.channel_config(fabric_id),
+                    shape_timing=config.nmc.shape_timing,
                     binding=binding,
                 )
 

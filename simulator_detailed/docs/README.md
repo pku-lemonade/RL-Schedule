@@ -5,9 +5,10 @@ on-chip 4-column by 8-row NoC at flit granularity. It includes independent
 runtime resources for both full-duplex PE NMC channels and enforces per-channel
 descriptor capacity and posting time. Static and dynamic shape modes and their
 measured per-endpoint setup targets are defined. Source SEND metadata reaches
-NMC admission without entering Flits, while endpoint timing application and the
-command-level RECV path remain later Phase 2 fixes. Task SEND/RECV and DMA
-endpoint execution also remain later work.
+NMC admission without entering Flits, and the non-duplicated residual setup
+stage calibrates idle first-flit injection to those targets. The command-level
+RECV path, Task SEND/RECV integration, and DMA endpoint execution remain later
+work.
 
 The Phase 2 model is deterministic:
 

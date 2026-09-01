@@ -68,7 +68,12 @@ descriptor slot pool with `max_outstanding_descriptors` entries. Every `Core`
 owns exactly one runtime channel and one binding for CH0 and CH1.
 
 `NMCTransmitEntry` stores one immutable tuple of packetized flits, the source
-command's shape mode, and its local TX-service completion event.
+command's shape mode, operation-submission time, descriptor-acceptance time,
+endpoint-ready time, and its local TX-service completion event. All timestamps
+use the ACI-cycle simulation timebase. Descriptor acceptance is recorded after
+the configured posting interval. For an idle command, endpoint-ready time plus
+first-flit NMC TX service and PE-link delivery reaches the source router's
+`INJECT` event at the configured 79.5/125-cycle total target.
 `NMCReceiveEntry` stores one serviced flit and its ACI-cycle completion
 timestamp. `NMCChannel.send()` validates that the message source exactly
 matches the channel binding and packetizes before enqueueing, so later mutation
@@ -91,8 +96,11 @@ Each channel also owns one `descriptor_issuer`. Same-channel commands serialize
 through this resource, acquire descriptor capacity in submission order, and
 spend `descriptor_issue_cycles` before entering `tx_data_queue`. The issuer is
 released after posting so descriptor programming can overlap earlier data
-service. The descriptor slot itself remains held through local TX completion.
-Separate CH0 and CH1 issuers allow their posting intervals to overlap.
+service. Entries remain FIFO while their endpoint residual setup can overlap,
+so mixed static/dynamic commands cannot overtake each other and descriptor posts
+remain 57 cycles apart. The descriptor slot itself remains held through local
+TX completion. Separate CH0 and CH1 issuers allow their posting intervals to
+overlap.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA

@@ -6,7 +6,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
-from .configs.schemas.arch_config import NMCChannelConfig
+from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
     FLIT_BYTES,
@@ -60,6 +60,9 @@ class NMCTransmitEntry:
 
     flits: tuple[Flit, ...]
     shape_mode: NMCShapeMode
+    submission_time: float
+    descriptor_acceptance_time: float
+    endpoint_ready_time: float
     completion: SimpyEvent
 
 
@@ -78,6 +81,7 @@ class NMCChannel:
         self,
         env: simpy.Environment,
         config: NMCChannelConfig,
+        shape_timing: NMCShapeTimingConfig,
         binding: PEChannelBinding,
     ) -> None:
         if any(
@@ -95,6 +99,7 @@ class NMCChannel:
 
         self.env = env
         self.config = config
+        self.shape_timing = shape_timing
         self.binding = binding
         self.tx_datapath = Resource(env, capacity=1)
         self.rx_datapath = Resource(env, capacity=1)
@@ -127,6 +132,30 @@ class NMCChannel:
     def outstanding_descriptor_count(self) -> int:
         return len(self.descriptor_slots.users)
 
+    @property
+    def first_injection_transport_aci_cycles(self) -> float:
+        """Nominal TX and PE-link time from endpoint-ready to router injection."""
+        return (
+            self.tx_service_interval_aci_cycles
+            + self.binding.tx_link.serialization_aci_cycles
+            + self.binding.tx_link.effective_link_stage_aci_cycles
+        )
+
+    def endpoint_setup_residual_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return setup time not represented by posting and source transport."""
+        represented_cycles = (
+            self.config.descriptor_issue_cycles
+            + self.first_injection_transport_aci_cycles
+        )
+        residual_cycles = (
+            self.shape_timing.endpoint_setup_target_aci_cycles(shape_mode)
+            - represented_cycles
+        )
+        return max(0.0, residual_cycles)
+
     def send(self, message: Message) -> Process:
         """Queue one source-owned message and complete after NMC TX service."""
         if message.src != self.binding.address:
@@ -149,6 +178,7 @@ class NMCChannel:
         flits: tuple[Flit, ...],
         shape_mode: NMCShapeMode,
     ) -> ProcessGenerator:
+        submission_time = float(self.env.now)
         descriptor_request: Request | None = None
         try:
             issue_request = self.descriptor_issuer.request()
@@ -156,13 +186,24 @@ class NMCChannel:
                 yield issue_request
                 descriptor_request = self.descriptor_slots.request()
                 yield descriptor_request
+                descriptor_issue_start_time = float(self.env.now)
                 yield self.env.timeout(self.config.descriptor_issue_cycles)
+
+            descriptor_acceptance_time = float(self.env.now)
+            endpoint_ready_time = (
+                descriptor_issue_start_time
+                + self.config.descriptor_issue_cycles
+                + self.endpoint_setup_residual_aci_cycles(shape_mode)
+            )
 
             completion = self.env.event()
             yield self.tx_data_queue.put(
                 NMCTransmitEntry(
                     flits=flits,
                     shape_mode=shape_mode,
+                    submission_time=submission_time,
+                    descriptor_acceptance_time=descriptor_acceptance_time,
+                    endpoint_ready_time=endpoint_ready_time,
                     completion=completion,
                 )
             )
@@ -181,6 +222,9 @@ class NMCChannel:
     def _tx_service_loop(self) -> ProcessGenerator:
         while True:
             entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
+            setup_wait = entry.endpoint_ready_time - float(self.env.now)
+            if setup_wait > 0:
+                yield self.env.timeout(setup_wait)
             request = self.tx_datapath.request()
             with request:
                 yield request
