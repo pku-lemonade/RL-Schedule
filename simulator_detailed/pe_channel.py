@@ -62,10 +62,30 @@ class NMCTransmitEntry:
 
     flits: tuple[Flit, ...]
     shape_mode: NMCShapeMode
-    submission_time: float
-    descriptor_acceptance_time: float
-    endpoint_ready_time: float
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
     completion: SimpyEvent
+
+
+@dataclass(frozen=True)
+class NMCTransmitResult:
+    """Endpoint-local SEND timing through final local Link handoff."""
+
+    flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
+    final_local_handoff_time_aci_cycles: float
+    operation_completion_time_aci_cycles: float
+
+    @property
+    def operation_latency_aci_cycles(self) -> float:
+        return (
+            self.operation_completion_time_aci_cycles
+            - self.submission_time_aci_cycles
+        )
 
 
 @dataclass(frozen=True)
@@ -73,7 +93,7 @@ class NMCReceiveEntry:
     """One flit after completion of the directional download service."""
 
     flit: Flit
-    completion_time: float
+    rx_service_completion_time_aci_cycles: float
 
 
 @dataclass(frozen=True)
@@ -83,10 +103,18 @@ class NMCReceiveResult:
     message: Message
     flits: tuple[Flit, ...]
     shape_mode: NMCShapeMode
-    submission_time: float
-    descriptor_acceptance_time: float
-    endpoint_ready_time: float
-    completion_time: float
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
+    tail_rx_service_completion_time_aci_cycles: float
+    operation_completion_time_aci_cycles: float
+
+    @property
+    def operation_latency_aci_cycles(self) -> float:
+        return (
+            self.operation_completion_time_aci_cycles
+            - self.submission_time_aci_cycles
+        )
 
 
 class NMCChannel:
@@ -255,7 +283,7 @@ class NMCChannel:
         flits: tuple[Flit, ...],
         shape_mode: NMCShapeMode,
     ) -> ProcessGenerator:
-        submission_time = float(self.env.now)
+        submission_time_aci_cycles = float(self.env.now)
         descriptor_request: Request | None = None
         try:
             issue_request = self.descriptor_issuer.request()
@@ -266,8 +294,8 @@ class NMCChannel:
                 descriptor_issue_start_time = float(self.env.now)
                 yield self.env.timeout(self.config.descriptor_issue_cycles)
 
-            descriptor_acceptance_time = float(self.env.now)
-            endpoint_ready_time = (
+            descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            endpoint_ready_time_aci_cycles = (
                 descriptor_issue_start_time
                 + self.config.descriptor_issue_cycles
                 + self.endpoint_setup_residual_aci_cycles(shape_mode)
@@ -278,13 +306,17 @@ class NMCChannel:
                 NMCTransmitEntry(
                     flits=flits,
                     shape_mode=shape_mode,
-                    submission_time=submission_time,
-                    descriptor_acceptance_time=descriptor_acceptance_time,
-                    endpoint_ready_time=endpoint_ready_time,
+                    submission_time_aci_cycles=submission_time_aci_cycles,
+                    descriptor_acceptance_time_aci_cycles=(
+                        descriptor_acceptance_time_aci_cycles
+                    ),
+                    endpoint_ready_time_aci_cycles=(
+                        endpoint_ready_time_aci_cycles
+                    ),
                     completion=completion,
                 )
             )
-            yield completion
+            return cast(NMCTransmitResult, (yield completion))
         finally:
             if descriptor_request is not None:
                 if descriptor_request.triggered:
@@ -301,7 +333,7 @@ class NMCChannel:
         message: Message,
         shape_mode: NMCShapeMode,
     ) -> ProcessGenerator:
-        submission_time = float(self.env.now)
+        submission_time_aci_cycles = float(self.env.now)
         descriptor_request: Request | None = None
         try:
             issue_request = self.descriptor_issuer.request()
@@ -312,13 +344,14 @@ class NMCChannel:
                 descriptor_issue_start_time = float(self.env.now)
                 yield self.env.timeout(self.config.descriptor_issue_cycles)
 
-            descriptor_acceptance_time = float(self.env.now)
-            endpoint_ready_time = (
+            descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            endpoint_ready_time_aci_cycles = (
                 descriptor_issue_start_time
                 + self.config.descriptor_issue_cycles
                 + self.receive_endpoint_setup_residual_aci_cycles(shape_mode)
             )
             flits: list[Flit] = []
+            tail_rx_service_completion_time_aci_cycles: float | None = None
             expected_flit_count = message.flit_count()
             for flit_index in range(expected_flit_count):
                 entry = cast(
@@ -338,18 +371,30 @@ class NMCChannel:
                     expected_flit_count,
                 )
                 flits.append(entry.flit)
+                tail_rx_service_completion_time_aci_cycles = (
+                    entry.rx_service_completion_time_aci_cycles
+                )
 
-            setup_wait = endpoint_ready_time - float(self.env.now)
+            if tail_rx_service_completion_time_aci_cycles is None:
+                raise RuntimeError(
+                    f"message {message.index} has no receive-service boundary"
+                )
+            setup_wait = endpoint_ready_time_aci_cycles - float(self.env.now)
             if setup_wait > 0:
                 yield self.env.timeout(setup_wait)
             return NMCReceiveResult(
                 message=message,
                 flits=tuple(flits),
                 shape_mode=shape_mode,
-                submission_time=submission_time,
-                descriptor_acceptance_time=descriptor_acceptance_time,
-                endpoint_ready_time=endpoint_ready_time,
-                completion_time=float(self.env.now),
+                submission_time_aci_cycles=submission_time_aci_cycles,
+                descriptor_acceptance_time_aci_cycles=(
+                    descriptor_acceptance_time_aci_cycles
+                ),
+                endpoint_ready_time_aci_cycles=endpoint_ready_time_aci_cycles,
+                tail_rx_service_completion_time_aci_cycles=(
+                    tail_rx_service_completion_time_aci_cycles
+                ),
+                operation_completion_time_aci_cycles=float(self.env.now),
             )
         finally:
             if descriptor_request is not None:
@@ -396,7 +441,9 @@ class NMCChannel:
     def _tx_service_loop(self) -> ProcessGenerator:
         while True:
             entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
-            setup_wait = entry.endpoint_ready_time - float(self.env.now)
+            setup_wait = (
+                entry.endpoint_ready_time_aci_cycles - float(self.env.now)
+            )
             if setup_wait > 0:
                 yield self.env.timeout(setup_wait)
             request = self.tx_datapath.request()
@@ -405,7 +452,26 @@ class NMCChannel:
                 for flit in entry.flits:
                     yield self.env.timeout(self.tx_service_interval_aci_cycles)
                     yield self.binding.tx_link.send_flit(flit)
-            entry.completion.succeed()
+            final_local_handoff_time_aci_cycles = float(self.env.now)
+            entry.completion.succeed(
+                NMCTransmitResult(
+                    flits=entry.flits,
+                    shape_mode=entry.shape_mode,
+                    submission_time_aci_cycles=(
+                        entry.submission_time_aci_cycles
+                    ),
+                    descriptor_acceptance_time_aci_cycles=(
+                        entry.descriptor_acceptance_time_aci_cycles
+                    ),
+                    endpoint_ready_time_aci_cycles=(
+                        entry.endpoint_ready_time_aci_cycles
+                    ),
+                    final_local_handoff_time_aci_cycles=(
+                        final_local_handoff_time_aci_cycles
+                    ),
+                    operation_completion_time_aci_cycles=float(self.env.now),
+                )
+            )
 
     def _rx_service_loop(self) -> ProcessGenerator:
         while True:
@@ -417,7 +483,9 @@ class NMCChannel:
                 yield self.rx_data_queue.put(
                     NMCReceiveEntry(
                         flit=flit,
-                        completion_time=float(self.env.now),
+                        rx_service_completion_time_aci_cycles=(
+                            float(self.env.now)
+                        ),
                     )
                 )
                 yield self.binding.rx_link.ack_credit()

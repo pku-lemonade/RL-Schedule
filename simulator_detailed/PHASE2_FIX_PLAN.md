@@ -728,6 +728,14 @@ Tests:
 
 ### Fix 12B: Name Endpoint Operation Timing
 
+Status: implemented. SEND and command-level RECV now return typed endpoint
+results whose absolute timestamps explicitly use the ACI-cycle timebase. SEND
+records final local-Link handoff separately from operation completion while
+preserving their current equal-time completion contract. RECV records the
+matching TAIL/SINGLE RX-service boundary and completes at the later of that
+boundary and endpoint readiness. Router injection/ejection remains exclusively
+in `MessageFabricTiming`.
+
 Code changes:
 
 - Return a typed SEND operation result instead of an unlabelled process value.

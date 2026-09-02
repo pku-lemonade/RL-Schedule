@@ -80,14 +80,26 @@ use the ACI-cycle simulation timebase. Descriptor acceptance is recorded after
 the configured posting interval. For an idle command, endpoint-ready time plus
 first-flit NMC TX service and PE-link delivery reaches the source router's
 `INJECT` event at the configured 79.5/125-cycle total target.
-`NMCReceiveEntry` stores one serviced flit and its ACI-cycle completion
-timestamp. `NMCReceiveResult` stores the validated packet plus receive command
-submission, descriptor-acceptance, endpoint-ready, and completion timestamps.
+`NMCTransmitResult` names submission, descriptor acceptance, endpoint readiness,
+final local-Link handoff, and SEND operation completion as separate ACI-cycle
+timestamps. The final two timestamps are equal under the current SEND contract,
+but remain separate observations so a later completion contract cannot silently
+redefine the local handoff boundary. Its operation latency is completion minus
+submission.
+
+`NMCReceiveEntry` stores one serviced flit and its ACI-cycle RX-service
+completion timestamp. `NMCReceiveResult` stores the validated packet plus
+receive command submission, descriptor acceptance, endpoint readiness, matching
+TAIL/SINGLE RX-service completion, and operation completion timestamps. RECV
+operation latency is also completion minus submission. Neither endpoint result
+contains router `INJECT` or `EJECT` times; those belong exclusively to
+`MessageFabricTiming`.
 `NMCChannel.send()` validates that the message source exactly
 matches the channel binding and packetizes before enqueueing, so later mutation
 cannot alter an in-flight packet. Its returned process means the packet has
-completed NMC TX service and has been handed to the source Link; it does not
-mean remote delivery. `recv_message()` posts one independently shaped receive
+completed NMC TX service and has been handed to the source Link; its process
+value is the corresponding `NMCTransmitResult`, not a remote-delivery result.
+`recv_message()` posts one independently shaped receive
 command, filters incoming entries by message ID, validates packet metadata and
 HEAD/BODY/TAIL sequence, and completes no earlier than both endpoint readiness
 and TAIL RX service. `recv_flit()` remains a diagnostic API that returns one

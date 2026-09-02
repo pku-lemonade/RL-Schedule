@@ -37,6 +37,7 @@ from simulator_detailed.noc import (
 from simulator_detailed.pe_channel import (
     NMCChannel,
     NMCReceiveResult,
+    NMCTransmitResult,
     PEChannelBinding,
 )
 from simulator_detailed.run import DEFAULT_ARCH_PATH, arch_analyzer
@@ -859,25 +860,127 @@ class Phase2NoCTests(unittest.TestCase):
         )
         self.assertTrue(first_result.flits[-1].is_tail)
         self.assertTrue(second_result.flits[-1].is_tail)
-        self.assertEqual(first_result.submission_time, 0.0)
-        self.assertEqual(second_result.submission_time, 0.0)
-        self.assertEqual(second_result.descriptor_acceptance_time, 57.0)
-        self.assertEqual(first_result.descriptor_acceptance_time, 114.0)
-        self.assertEqual(second_result.endpoint_ready_time, 79.5)
-        self.assertEqual(first_result.endpoint_ready_time, 182.0)
+        self.assertEqual(first_result.submission_time_aci_cycles, 0.0)
+        self.assertEqual(second_result.submission_time_aci_cycles, 0.0)
+        self.assertEqual(
+            second_result.descriptor_acceptance_time_aci_cycles,
+            57.0,
+        )
+        self.assertEqual(
+            first_result.descriptor_acceptance_time_aci_cycles,
+            114.0,
+        )
+        self.assertEqual(second_result.endpoint_ready_time_aci_cycles, 79.5)
+        self.assertEqual(first_result.endpoint_ready_time_aci_cycles, 182.0)
         self.assertGreaterEqual(
-            first_result.completion_time,
-            first_result.endpoint_ready_time,
+            first_result.operation_completion_time_aci_cycles,
+            first_result.endpoint_ready_time_aci_cycles,
         )
         self.assertGreaterEqual(
-            second_result.completion_time,
-            second_result.endpoint_ready_time,
+            second_result.operation_completion_time_aci_cycles,
+            second_result.endpoint_ready_time_aci_cycles,
         )
         self.assertEqual(destination.outstanding_descriptor_count, 0)
         with self.assertRaisesRegex(ValueError, "already has a receive command"):
             destination.recv_message(first, NMCShapeMode.STATIC)
         with self.assertRaisesRegex(RuntimeError, "cannot mix raw-flit"):
             destination.recv_flit()
+
+    def test_nmc_operation_results_name_endpoint_timing_boundaries(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        destination = harness.attach_nmc(1)
+        message = harness.message(105, 0, 1, 1)
+
+        receive_process = destination.recv_message(
+            message,
+            NMCShapeMode.DYNAMIC,
+        )
+        send_process = source.send(message)
+        harness.env.run(
+            until=harness.env.all_of((send_process, receive_process))
+        )
+
+        send_result = send_process.value
+        receive_result = receive_process.value
+        fabric_timing = harness.tracer.message_fabric_timings()[
+            (NoCChannel.CH0, message.index)
+        ]
+
+        self.assertIsInstance(send_result, NMCTransmitResult)
+        self.assertIsInstance(receive_result, NMCReceiveResult)
+        self.assertLessEqual(
+            send_result.submission_time_aci_cycles,
+            send_result.descriptor_acceptance_time_aci_cycles,
+        )
+        self.assertLessEqual(
+            send_result.descriptor_acceptance_time_aci_cycles,
+            send_result.endpoint_ready_time_aci_cycles,
+        )
+        self.assertLessEqual(
+            send_result.endpoint_ready_time_aci_cycles,
+            send_result.final_local_handoff_time_aci_cycles,
+        )
+        self.assertEqual(
+            send_result.final_local_handoff_time_aci_cycles,
+            send_result.operation_completion_time_aci_cycles,
+        )
+        self.assertAlmostEqual(
+            send_result.operation_completion_time_aci_cycles,
+            send_result.endpoint_ready_time_aci_cycles
+            + source.tx_service_interval_aci_cycles,
+        )
+        self.assertEqual(
+            send_result.operation_latency_aci_cycles,
+            send_result.operation_completion_time_aci_cycles
+            - send_result.submission_time_aci_cycles,
+        )
+
+        self.assertLessEqual(
+            receive_result.submission_time_aci_cycles,
+            receive_result.descriptor_acceptance_time_aci_cycles,
+        )
+        self.assertLessEqual(
+            receive_result.descriptor_acceptance_time_aci_cycles,
+            receive_result.endpoint_ready_time_aci_cycles,
+        )
+        self.assertLessEqual(
+            receive_result.endpoint_ready_time_aci_cycles,
+            receive_result.operation_completion_time_aci_cycles,
+        )
+        self.assertLessEqual(
+            receive_result.tail_rx_service_completion_time_aci_cycles,
+            receive_result.operation_completion_time_aci_cycles,
+        )
+        self.assertEqual(
+            receive_result.operation_completion_time_aci_cycles,
+            max(
+                receive_result.endpoint_ready_time_aci_cycles,
+                receive_result.tail_rx_service_completion_time_aci_cycles,
+            ),
+        )
+        self.assertEqual(
+            receive_result.operation_latency_aci_cycles,
+            receive_result.operation_completion_time_aci_cycles
+            - receive_result.submission_time_aci_cycles,
+        )
+
+        self.assertLess(
+            send_result.operation_completion_time_aci_cycles,
+            fabric_timing.first_injection_time_aci_cycles,
+        )
+        self.assertGreater(
+            receive_result.tail_rx_service_completion_time_aci_cycles,
+            fabric_timing.final_ejection_time_aci_cycles,
+        )
+        self.assertNotEqual(
+            send_result.operation_latency_aci_cycles,
+            fabric_timing.first_flit_fabric_latency_aci_cycles,
+        )
+        self.assertNotEqual(
+            send_result.operation_latency_aci_cycles,
+            fabric_timing.packet_fabric_completion_latency_aci_cycles,
+        )
 
     def test_dfg_communication_channel_defaults_and_pair_validation(self):
         dfg = DFG()
@@ -1442,13 +1545,13 @@ class Phase2NoCTests(unittest.TestCase):
 
         admitted_entry = queue_put.call_args.args[0]
         self.assertIs(admitted_entry.shape_mode, NMCShapeMode.STATIC)
-        self.assertEqual(admitted_entry.submission_time, 0.0)
+        self.assertEqual(admitted_entry.submission_time_aci_cycles, 0.0)
         self.assertEqual(
-            admitted_entry.descriptor_acceptance_time,
+            admitted_entry.descriptor_acceptance_time_aci_cycles,
             source.config.descriptor_issue_cycles,
         )
         self.assertAlmostEqual(
-            admitted_entry.endpoint_ready_time,
+            admitted_entry.endpoint_ready_time_aci_cycles,
             source.shape_timing.static_endpoint_setup_aci_cycles
             - source.first_injection_transport_aci_cycles,
         )
