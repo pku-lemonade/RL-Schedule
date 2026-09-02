@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional
 
 from .definitions import (
     DimSlice,
@@ -15,9 +14,9 @@ class DFGNode:
         index: int,
         operation: OperatorType,
         core_id: int,
-        input_size: Optional[List[DimSlice]] = None,
-        output_size: Optional[List[DimSlice]] = None,
-        weight_size: Optional[List[DimSlice]] = None,
+        input_size: list[DimSlice] | None = None,
+        output_size: list[DimSlice] | None = None,
+        weight_size: list[DimSlice] | None = None,
         *,
         fabric_id: NoCChannel = NoCChannel.CH0,
         nmc_shape_mode: NMCShapeMode = NMCShapeMode.DYNAMIC,
@@ -41,8 +40,8 @@ class DFGNode:
         self.output_size = list(output_size or ())
         self.weight_size = list(weight_size or ())
 
-        self.parent: List[int] = []
-        self.child: List[int] = []
+        self.parent: list[int] = []
+        self.child: list[int] = []
 
         # state variables
         self.received_input = 0
@@ -79,16 +78,16 @@ class DFGNode:
 
 class DFG:
     def __init__(self):
-        self.nodes: Dict[int, DFGNode] = {}
+        self.nodes: dict[int, DFGNode] = {}
 
     def add_node(
         self,
         index: int,
         operation: OperatorType,
         core_id: int,
-        input_size: Optional[List[DimSlice]] = None,
-        output_size: Optional[List[DimSlice]] = None,
-        weight_size: Optional[List[DimSlice]] = None,
+        input_size: list[DimSlice] | None = None,
+        output_size: list[DimSlice] | None = None,
+        weight_size: list[DimSlice] | None = None,
         *,
         fabric_id: NoCChannel = NoCChannel.CH0,
         nmc_shape_mode: NMCShapeMode = NMCShapeMode.DYNAMIC,
@@ -141,7 +140,7 @@ class DFG:
         source.add_child(to_index)
         destination.add_parent(from_index)
 
-    def get_node(self, index: int) -> Optional[DFGNode]:
+    def get_node(self, index: int) -> DFGNode | None:
         """Retrieve a node by index"""
         return self.nodes.get(index)
     
