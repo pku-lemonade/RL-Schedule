@@ -43,6 +43,8 @@ class FlitAction(IntEnum):
 
 @dataclass(frozen=True)
 class FlitEvent:
+    """One tracer event whose `time` is always an ACI-cycle timestamp."""
+
     time: float
     action: FlitAction
     fabric_id: NoCChannel
@@ -56,6 +58,32 @@ class FlitEvent:
     out_port: int = -1
     link_name: str = ""
     grant_flits: int = 0
+    is_tail: bool = False
+
+
+@dataclass(frozen=True)
+class MessageFabricTiming:
+    """Router-boundary DATA-plane timing for one completed message packet."""
+
+    fabric_id: NoCChannel
+    msg_id: int
+    first_injection_time_aci_cycles: float
+    first_ejection_time_aci_cycles: float
+    final_ejection_time_aci_cycles: float
+
+    @property
+    def first_flit_fabric_latency_aci_cycles(self) -> float:
+        return (
+            self.first_ejection_time_aci_cycles
+            - self.first_injection_time_aci_cycles
+        )
+
+    @property
+    def packet_fabric_completion_latency_aci_cycles(self) -> float:
+        return (
+            self.final_ejection_time_aci_cycles
+            - self.first_injection_time_aci_cycles
+        )
 
 
 @dataclass(frozen=True)
@@ -118,37 +146,92 @@ class NoCTracer:
                 out_port=out_port,
                 link_name=link_name,
                 grant_flits=grant_flits,
+                is_tail=False if flit is None else flit.is_tail,
             )
         )
 
-    def per_msg_latency(self) -> Dict[TraceMessageKey, float]:
+    def message_fabric_timings(
+        self,
+    ) -> Dict[TraceMessageKey, MessageFabricTiming]:
+        """Return completed packet timings at source/destination router edges."""
         injected: Dict[TraceMessageKey, float] = {}
-        ejected: Dict[TraceMessageKey, float] = {}
+        first_ejected: Dict[TraceMessageKey, float] = {}
+        final_ejected: Dict[TraceMessageKey, float] = {}
         for event in self.events:
+            if event.plane is not NoCPlane.DATA:
+                continue
             message_key = (event.fabric_id, event.msg_id)
-            if event.action == FlitAction.INJECT:
+            if event.action is FlitAction.INJECT:
                 injected.setdefault(message_key, event.time)
-            elif event.action == FlitAction.EJECT:
-                ejected[message_key] = event.time
+            elif event.action is FlitAction.EJECT:
+                first_ejected.setdefault(message_key, event.time)
+                if event.is_tail:
+                    final_ejected[message_key] = event.time
         return {
-            message_key: ejected[message_key] - start
+            message_key: MessageFabricTiming(
+                fabric_id=message_key[0],
+                msg_id=message_key[1],
+                first_injection_time_aci_cycles=start,
+                first_ejection_time_aci_cycles=first_ejected[message_key],
+                final_ejection_time_aci_cycles=final_ejected[message_key],
+            )
             for message_key, start in injected.items()
-            if message_key in ejected
+            if message_key in first_ejected and message_key in final_ejected
         }
+
+    def first_flit_fabric_latencies(self) -> Dict[TraceMessageKey, float]:
+        """Return first INJECT-to-first EJECT latency in ACI cycles."""
+        return {
+            message_key: timing.first_flit_fabric_latency_aci_cycles
+            for message_key, timing in self.message_fabric_timings().items()
+        }
+
+    def packet_fabric_completion_latencies(
+        self,
+    ) -> Dict[TraceMessageKey, float]:
+        """Return first INJECT-to-final EJECT latency in ACI cycles."""
+        return {
+            message_key: timing.packet_fabric_completion_latency_aci_cycles
+            for message_key, timing in self.message_fabric_timings().items()
+        }
+
+    def per_msg_latency(self) -> Dict[TraceMessageKey, float]:
+        """Compatibility alias for packet fabric completion latency."""
+        return self.packet_fabric_completion_latencies()
 
     def summary(self, end_time: float) -> str:
         counts = {
             action.name: sum(event.action == action for event in self.events)
             for action in FlitAction
         }
-        latencies = self.per_msg_latency()
-        avg_latency = (
-            sum(latencies.values()) / len(latencies) if latencies else 0.0
+        timings = self.message_fabric_timings()
+        avg_first_flit_latency = (
+            sum(
+                timing.first_flit_fabric_latency_aci_cycles
+                for timing in timings.values()
+            )
+            / len(timings)
+            if timings
+            else 0.0
+        )
+        avg_packet_completion_latency = (
+            sum(
+                timing.packet_fabric_completion_latency_aci_cycles
+                for timing in timings.values()
+            )
+            / len(timings)
+            if timings
+            else 0.0
         )
         return (
-            f"fabric={self.fabric_id.name} cycles={end_time:.3f} "
+            f"fabric={self.fabric_id.name} "
+            f"timebase=aci_cycles cycles={end_time:.3f} "
             f"events={len(self.events)} "
-            f"messages={len(latencies)} avg_latency={avg_latency:.3f} "
+            f"messages={len(timings)} "
+            "avg_first_flit_fabric_latency_aci_cycles="
+            f"{avg_first_flit_latency:.3f} "
+            "avg_packet_fabric_completion_latency_aci_cycles="
+            f"{avg_packet_completion_latency:.3f} "
             + " ".join(f"{name}={count}" for name, count in counts.items())
         )
 

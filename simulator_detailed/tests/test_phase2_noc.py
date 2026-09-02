@@ -29,6 +29,7 @@ from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import (
     FlitAction,
     Link,
+    MessageFabricTiming,
     NoC,
     NoCTracer,
     RoundRobinArbiter,
@@ -2563,7 +2564,7 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertNotIn(PORT_PE, router.output_arbiters)
 
     def test_trace_records_distinguish_identical_fabric_local_ids(self):
-        latencies = {}
+        fabric_timings = {}
         qualified_link_names = {}
         logical_link_names = {}
 
@@ -2586,8 +2587,15 @@ class Phase2NoCTests(unittest.TestCase):
                     for event in harness.tracer.events
                 )
             )
-            self.assertIn(f"fabric={fabric_id.name}", harness.tracer.summary(harness.env.now))
-            latencies.update(harness.tracer.per_msg_latency())
+            summary = harness.tracer.summary(harness.env.now)
+            self.assertIn(f"fabric={fabric_id.name}", summary)
+            self.assertIn("timebase=aci_cycles", summary)
+            self.assertIn("avg_first_flit_fabric_latency_aci_cycles=", summary)
+            self.assertIn(
+                "avg_packet_fabric_completion_latency_aci_cycles=",
+                summary,
+            )
+            fabric_timings.update(harness.tracer.message_fabric_timings())
             qualified_link_names[fabric_id] = {
                 event.link_name
                 for event in harness.tracer.events
@@ -2599,8 +2607,15 @@ class Phase2NoCTests(unittest.TestCase):
             }
 
         self.assertEqual(
-            set(latencies),
+            set(fabric_timings),
             {(NoCChannel.CH0, 71), (NoCChannel.CH1, 71)},
+        )
+        self.assertTrue(
+            all(
+                timing.fabric_id is fabric_id
+                and timing.msg_id == 71
+                for (fabric_id, _), timing in fabric_timings.items()
+            )
         )
         self.assertEqual(
             logical_link_names[NoCChannel.CH0],
@@ -2610,6 +2625,63 @@ class Phase2NoCTests(unittest.TestCase):
             qualified_link_names[NoCChannel.CH0].isdisjoint(
                 qualified_link_names[NoCChannel.CH1]
             )
+        )
+
+    def test_tracer_separates_first_flit_and_packet_fabric_latency(self):
+        harness = MeshHarness()
+        message = harness.message(72, 0, 2, 3)
+        harness.transfer(0, 2, message.packetize())
+
+        message_key = (NoCChannel.CH0, 72)
+        timing = harness.tracer.message_fabric_timings()[message_key]
+        injection_times = [
+            event.time
+            for event in harness.tracer.events
+            if event.msg_id == 72 and event.action is FlitAction.INJECT
+        ]
+        ejection_times = [
+            event.time
+            for event in harness.tracer.events
+            if event.msg_id == 72 and event.action is FlitAction.EJECT
+        ]
+
+        self.assertIsInstance(timing, MessageFabricTiming)
+        self.assertEqual(
+            timing.first_injection_time_aci_cycles,
+            injection_times[0],
+        )
+        self.assertEqual(
+            timing.first_ejection_time_aci_cycles,
+            ejection_times[0],
+        )
+        self.assertEqual(
+            timing.final_ejection_time_aci_cycles,
+            ejection_times[-1],
+        )
+        self.assertLess(
+            timing.first_flit_fabric_latency_aci_cycles,
+            timing.packet_fabric_completion_latency_aci_cycles,
+        )
+        self.assertEqual(
+            harness.tracer.first_flit_fabric_latencies()[message_key],
+            timing.first_flit_fabric_latency_aci_cycles,
+        )
+        self.assertEqual(
+            harness.tracer.packet_fabric_completion_latencies()[message_key],
+            timing.packet_fabric_completion_latency_aci_cycles,
+        )
+        self.assertEqual(
+            harness.tracer.per_msg_latency()[message_key],
+            timing.packet_fabric_completion_latency_aci_cycles,
+        )
+
+        partial_tracer = NoCTracer(NoCChannel.CH0)
+        partial_flit = harness.flit(FlitType.HEAD, 73, 0, 2)
+        partial_tracer.log(0.0, FlitAction.INJECT, flit=partial_flit)
+        partial_tracer.log(1.0, FlitAction.EJECT, flit=partial_flit)
+        self.assertNotIn(
+            (NoCChannel.CH0, 73),
+            partial_tracer.message_fabric_timings(),
         )
 
     def test_single_flit_latency_for_one_to_ten_hops(self):

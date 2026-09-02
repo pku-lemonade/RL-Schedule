@@ -132,7 +132,16 @@ they cannot silently follow the unicast path.
 
 `FlitEvent` stores `fabric_id` with explicit `out_port` and fabric-qualified
 `link_name` fields. `ROUTER_SA_RELEASE` events also record `grant_flits`; the
-trace intentionally does not duplicate flit type or tail state.
-`NoCTracer.per_msg_latency()` keys results by `(fabric_id, msg_id)`, so equal
-router, link, and message IDs on NoC0 and NoC1 remain distinct. Callers inspect
-`NoCTracer.events` directly with normal list comprehensions.
+trace does not duplicate the full flit type. It retains the derived `is_tail`
+marker so a partial live trace cannot be reported as a completed packet. Its
+`time` field is always an ACI-cycle timestamp.
+
+`MessageFabricTiming` stores the first router `INJECT`, first destination-router
+`EJECT`, and final destination-router `EJECT` timestamps for one completed DATA
+packet. First-flit fabric latency is first injection to first ejection. Packet
+fabric completion latency is first injection to final ejection. These metrics
+exclude descriptor posting, endpoint setup, PE-link delivery before injection,
+and NMC RX service after ejection. Timing records are keyed by
+`(fabric_id, msg_id)`, so equal router, link, and message IDs on NoC0 and NoC1
+remain distinct. `per_msg_latency()` is retained only as a compatibility alias
+for packet fabric completion latency.

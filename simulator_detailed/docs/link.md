@@ -41,3 +41,8 @@ not both hold.
 stage. It does not scale the physically separate sync credit path. Recovery uses
 the reciprocal factor. The tracer records DATA-plane sends/receives/stalls and
 SYNC-plane credit returns with the owning CH0/CH1 fabric identity.
+
+Fabric latency is measured at router boundaries rather than Link queue
+boundaries. `NoCTracer` reports first `INJECT` to first `EJECT` as first-flit
+fabric latency and first `INJECT` to final `EJECT` as packet fabric completion
+latency. Both values are ACI cycles and exclude endpoint command timing.

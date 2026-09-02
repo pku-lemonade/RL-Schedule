@@ -701,24 +701,76 @@ Tests:
 
 ## Fix 12: Correct Trace Semantics and Enforce Acceptance
 
+### Fix 12A: Name Fabric Timing Metrics
+
+Status: implemented. `NoCTracer` now produces a typed timing record for each
+completed `(fabric_id, msg_id)` packet. All fields are ACI-cycle timestamps at
+router boundaries. First-flit fabric latency is first `INJECT` to first `EJECT`;
+packet fabric completion latency is first `INJECT` to final `EJECT`. The old
+`per_msg_latency()` method remains a compatibility alias for the latter metric.
+
 Code changes:
 
-- Define separate timestamps for operation submission, descriptor acceptance,
-  fabric injection, fabric ejection, and operation completion.
-- Record each timestamp's ACI-cycle timebase and distinguish CH0/CH1 DATA events
-  from SYNC credit events; native NoC-cycle diagnostics must be explicitly
-  converted rather than mixed into the same numeric field.
-- Report first-flit fabric latency, packet fabric completion latency, and
-  end-to-end operation latency under distinct names.
+- Add a typed fabric-timing result with first injection, first ejection, and
+  final ejection timestamps.
+- Preserve the ejected TAIL/SINGLE marker needed to distinguish complete
+  packets from partial live traces without duplicating the full flit type.
+- Report first-flit fabric latency and packet fabric completion latency under
+  distinct names.
+- Aggregate only DATA-plane `INJECT`/`EJECT` events and state the ACI-cycle
+  timebase explicitly in trace summaries.
+
+Tests:
+
+- Multi-flit packets have distinct first-flit and packet-completion latency.
+- Equal message IDs on CH0 and CH1 retain independent timing records.
+- The compatibility metric equals packet fabric completion latency.
+
+### Fix 12B: Name Endpoint Operation Timing
+
+Code changes:
+
+- Return a typed SEND operation result instead of an unlabelled process value.
+- Keep operation submission, descriptor acceptance, endpoint readiness, local
+  transport handoff, and operation completion as separate ACI timestamps.
+- Add the matching TAIL RX-service timestamp to the RECV result.
+- Do not copy router `INJECT`/`EJECT` timestamps into endpoint results or delay
+  SEND completion to wait for tracer events.
+
+Tests:
+
+- SEND and RECV timestamp ordering matches their actual SimPy event boundaries.
+- Endpoint operation latency remains distinct from both fabric metrics.
+- Adding observation fields does not change transport completion time.
+
+### Fix 12C: Replay Measured Workloads
+
+Code changes:
+
+- Build end-to-end operation latency from explicit endpoint operation results
+  and the benchmark's command schedule, not from a fabric-only metric.
 - Replay RTT as an explicit sequential ping-pong/ack workload. Do not derive it
   by adding both endpoint targets to one concurrently posted one-way transfer.
+- Add explicit single-channel, dual-channel, and full-duplex benchmark harnesses
+  using the measured payload sizes and command schedules.
+
+Tests:
+
+- Hop slope: 8.5 ACI cycles per one-way router hop for first-flit fabric latency.
+- Static, dynamic, and mixed RTT checks use sequential ping-pong operations.
+- Per-fabric, dual-fabric, and full-duplex throughput checks use separate named
+  benchmark schedules.
+
+### Fix 12D: Finish Documentation and Strict Checks
+
+Code changes:
+
 - Update `docs/`, `ADAPTATION_PLAN.md`, and calibration comments to remove the
   single-mesh, lane-aware, shared-NMC-bandwidth, and universal-startup models.
 - Add strict types to every Phase 2 file touched by these fixes.
 
 Tests and checks:
 
-- Hop slope: 8.5 ACI cycles per one-way router hop for first-flit fabric latency.
 - Per-fabric bulk throughput: approximately 117-120 B/ACI-cycle/direction.
 - Dual-fabric same-direction throughput: approximately 234-240 B/ACI-cycle.
 - Full aggregate PE capability: approximately 468 B/ACI-cycle in dual-channel
