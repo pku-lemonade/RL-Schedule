@@ -1,7 +1,7 @@
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Dict, List, Optional, cast
+from typing import cast
 
 import simpy
 from simpy.events import Event as SimpyEvent
@@ -24,6 +24,7 @@ from .utils.definitions import (
 )
 
 TraceMessageKey = tuple[NoCChannel, int]
+PacketRouteKey = tuple[int, int]
 
 
 class FlitAction(IntEnum):
@@ -99,7 +100,7 @@ class NoCLinkIdentity:
 class NoCTracer:
     def __init__(self, fabric_id: NoCChannel):
         self.fabric_id = fabric_id
-        self.events: List[FlitEvent] = []
+        self.events: list[FlitEvent] = []
         self._enabled = True
 
     def disable(self):
@@ -118,7 +119,7 @@ class NoCTracer:
         *,
         router_id: int = -1,
         port: int = -1,
-        flit: Optional[Flit] = None,
+        flit: Flit | None = None,
         out_port: int = -1,
         link_name: str = "",
         plane: NoCPlane = NoCPlane.DATA,
@@ -152,11 +153,11 @@ class NoCTracer:
 
     def message_fabric_timings(
         self,
-    ) -> Dict[TraceMessageKey, MessageFabricTiming]:
+    ) -> dict[TraceMessageKey, MessageFabricTiming]:
         """Return completed packet timings at source/destination router edges."""
-        injected: Dict[TraceMessageKey, float] = {}
-        first_ejected: Dict[TraceMessageKey, float] = {}
-        final_ejected: Dict[TraceMessageKey, float] = {}
+        injected: dict[TraceMessageKey, float] = {}
+        first_ejected: dict[TraceMessageKey, float] = {}
+        final_ejected: dict[TraceMessageKey, float] = {}
         for event in self.events:
             if event.plane is not NoCPlane.DATA:
                 continue
@@ -179,7 +180,7 @@ class NoCTracer:
             if message_key in first_ejected and message_key in final_ejected
         }
 
-    def first_flit_fabric_latencies(self) -> Dict[TraceMessageKey, float]:
+    def first_flit_fabric_latencies(self) -> dict[TraceMessageKey, float]:
         """Return first INJECT-to-first EJECT latency in ACI cycles."""
         return {
             message_key: timing.first_flit_fabric_latency_aci_cycles
@@ -188,14 +189,14 @@ class NoCTracer:
 
     def packet_fabric_completion_latencies(
         self,
-    ) -> Dict[TraceMessageKey, float]:
+    ) -> dict[TraceMessageKey, float]:
         """Return first INJECT-to-final EJECT latency in ACI cycles."""
         return {
             message_key: timing.packet_fabric_completion_latency_aci_cycles
             for message_key, timing in self.message_fabric_timings().items()
         }
 
-    def per_msg_latency(self) -> Dict[TraceMessageKey, float]:
+    def per_msg_latency(self) -> dict[TraceMessageKey, float]:
         """Compatibility alias for packet fabric completion latency."""
         return self.packet_fabric_completion_latencies()
 
@@ -305,6 +306,7 @@ class PacketRouteState:
 class SwitchGrantState:
     """Temporary output ownership for one packet burst."""
 
+    msg_id: int
     out_port: int
     transmitted_flits: int = 0
 
@@ -547,23 +549,23 @@ class Router:
         self.tracer = tracer
 
         rx, ry = self.to_xy(router_id)
-        self.is_edge: Dict[Direction, bool] = {
+        self.is_edge: dict[Direction, bool] = {
             Direction.NORTH: ry == y_dim - 1,
             Direction.SOUTH: ry == 0,
             Direction.EAST: rx == x_dim - 1,
             Direction.WEST: rx == 0,
         }
         direction_ports = (DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_WEST)
-        self.port_in: Dict[int, Optional[Link]] = {
+        self.port_in: dict[int, Link | None] = {
             port: None for port in direction_ports
         }
-        self.port_out: Dict[int, Optional[Link]] = {
+        self.port_out: dict[int, Link | None] = {
             port: None for port in direction_ports
         }
-        self.output_arbiters: Dict[int, RoundRobinArbiter] = {}
-        self.reservation: Dict[int, PacketRouteState] = {}
-        self._switch_grants: Dict[int, SwitchGrantState] = {}
-        self._forwarder_started: Dict[int, bool] = {}
+        self.output_arbiters: dict[int, RoundRobinArbiter] = {}
+        self.reservation: dict[PacketRouteKey, PacketRouteState] = {}
+        self._switch_grants: dict[int, SwitchGrantState] = {}
+        self._forwarder_started: dict[int, bool] = {}
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
         for link in (link_in, link_out):
@@ -636,6 +638,16 @@ class Router:
                     out_port,
                     flit,
                 )
+            else:
+                grant_state = self._switch_grants[in_port]
+                if (
+                    grant_state.msg_id != flit.msg_id
+                    or grant_state.out_port != out_port
+                ):
+                    raise RuntimeError(
+                        f"{self.name} cannot transmit message {flit.msg_id} "
+                        f"while message {grant_state.msg_id} holds its input grant"
+                    )
 
             in_link.ack_credit()
             self.tracer.log(
@@ -668,16 +680,13 @@ class Router:
             self._post_send(in_port, out_port, flit)
 
     def _rc_compute(self, in_port: int, flit: Flit) -> PacketRouteState:
+        route_key = (in_port, flit.msg_id)
         if not flit.is_head:
-            route_state = self.reservation.get(in_port)
+            route_state = self.reservation.get(route_key)
             if route_state is None:
                 raise RuntimeError(
-                    f"{self.name} received {flit.flit_type.name} without HEAD"
-                )
-            if route_state.msg_id != flit.msg_id:
-                raise RuntimeError(
-                    f"{self.name} received message {flit.msg_id} before "
-                    f"message {route_state.msg_id} reached TAIL"
+                    f"{self.name} received message {flit.msg_id} "
+                    f"{flit.flit_type.name} without HEAD"
                 )
             if route_state.burst_len_mode is not flit.burst_len_mode:
                 raise RuntimeError(
@@ -685,11 +694,9 @@ class Router:
                 )
             return route_state
 
-        if in_port in self.reservation:
-            active_msg_id = self.reservation[in_port].msg_id
+        if route_key in self.reservation:
             raise RuntimeError(
-                f"{self.name} received message {flit.msg_id} HEAD before "
-                f"message {active_msg_id} reached TAIL"
+                f"{self.name} received duplicate HEAD for message {flit.msg_id}"
             )
 
         if not 0 <= flit.dst_router < self.x_dim * self.y_dim:
@@ -712,7 +719,7 @@ class Router:
                 flit.burst_len_mode
             ),
         )
-        self.reservation[in_port] = route_state
+        self.reservation[route_key] = route_state
         return route_state
 
     def _acquire_switch_grant(
@@ -738,7 +745,10 @@ class Router:
                 out_port=out_port,
             )
         yield request
-        self._switch_grants[in_port] = SwitchGrantState(out_port=out_port)
+        self._switch_grants[in_port] = SwitchGrantState(
+            msg_id=flit.msg_id,
+            out_port=out_port,
+        )
         self.tracer.log(
             self.env.now,
             FlitAction.ROUTER_SA_GRANT,
@@ -753,13 +763,18 @@ class Router:
             )
 
     def _post_send(self, in_port: int, out_port: int, flit: Flit):
-        route_state = self.reservation.get(in_port)
+        route_key = (in_port, flit.msg_id)
+        route_state = self.reservation.get(route_key)
         if route_state is None:
             raise RuntimeError(
                 f"{self.name} transmitted message {flit.msg_id} without a route"
             )
         grant_state = self._switch_grants.get(in_port)
-        if grant_state is None or grant_state.out_port != out_port:
+        if (
+            grant_state is None
+            or grant_state.msg_id != flit.msg_id
+            or grant_state.out_port != out_port
+        ):
             raise RuntimeError(
                 f"{self.name} transmitted message {flit.msg_id} without a grant"
             )
@@ -790,7 +805,7 @@ class Router:
             grant_flits=grant_flits,
         )
         if flit.is_tail:
-            del self.reservation[in_port]
+            del self.reservation[route_key]
 
     def to_id(self, x: int, y: int) -> int:
         return y * self.x_dim + x
@@ -828,8 +843,8 @@ class NoC:
         self.x = config.x
         self.y = config.y
         self.tracer = tracer
-        self.r2r_links: List[Link] = []
-        self.routers: List[Router] = []
+        self.r2r_links: list[Link] = []
+        self.routers: list[Router] = []
 
     def build_connection_mesh(self):
         if self.routers:
@@ -903,14 +918,14 @@ class NoC:
 
 
 __all__ = [
+    "PORT_PE",
     "FlitAction",
     "FlitEvent",
+    "Link",
+    "NoC",
     "NoCLinkIdentity",
     "NoCTracer",
     "RoundRobinArbiter",
-    "TraceMessageKey",
-    "Link",
     "Router",
-    "NoC",
-    "PORT_PE",
+    "TraceMessageKey",
 ]

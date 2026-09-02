@@ -1,4 +1,4 @@
-from typing import List
+
 from pydantic import BaseModel
 
 from ...utils.definitions import Direction, NoCChannel
@@ -32,7 +32,7 @@ class TpuFail(BaseModel):
     times: int
 
 class FailSlow(BaseModel):
-    router: List[RouterFail]
-    link: List[LinkFail]
-    lsu: List[LsuFail]
-    tpu: List[TpuFail]
+    router: list[RouterFail]
+    link: list[LinkFail]
+    lsu: list[LsuFail]
+    tpu: list[TpuFail]

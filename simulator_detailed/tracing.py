@@ -1,8 +1,7 @@
 from collections.abc import Mapping, Sequence
-from typing import List
 
 from .noc import NoC, NoCLinkIdentity
-from .utils.definitions import Event, NoCChannel, Trace, TimeSlice, TraceItem
+from .utils.definitions import Event, NoCChannel, TimeSlice, Trace, TraceItem
 
 Interval = tuple[float, float]
 
@@ -13,12 +12,12 @@ def calc_intersection(L: float, R: float, l: float, r: float) -> float:
     return nr - nl + 1
 
 
-def interval_merge(intervals: Sequence[Event]) -> List[Interval]:
+def interval_merge(intervals: Sequence[Event]) -> list[Interval]:
     if len(intervals) == 0:
         return []
     
     interval_begin = 0
-    merged_intervals: List[Interval] = []
+    merged_intervals: list[Interval] = []
 
     for id in range(1, len(intervals)):
         if intervals[id-1].end_time+1 < intervals[id].start_time:
@@ -34,7 +33,7 @@ def event2trace(
     id: int,
     start_time: float,
     end_time: float,
-    events: List[Event],
+    events: list[Event],
     fabric_id: NoCChannel | None = None,
 ) -> TraceItem:
     merged_intervals = interval_merge(events)
@@ -59,11 +58,11 @@ def event2trace(
 
 
 def get_slice_events(
-    core_events: List[Event],
+    core_events: list[Event],
     start_time: float,
     end_time: float,
-) -> List[Event]:
-    slice_events: List[Event] = []
+) -> list[Event]:
+    slice_events: list[Event] = []
 
     for event in core_events:
         intersection = calc_intersection(start_time, end_time - 1, 
@@ -76,7 +75,7 @@ def get_slice_events(
 
 def collect_noc_link_events(
     nocs: Mapping[NoCChannel, NoC],
-) -> tuple[List[List[Event]], List[NoCLinkIdentity]]:
+) -> tuple[list[list[Event]], list[NoCLinkIdentity]]:
     """Collect directional link events in stable fabric/link order."""
     expected_fabrics = set(NoCChannel)
     if set(nocs) != expected_fabrics:
@@ -87,8 +86,8 @@ def collect_noc_link_events(
             f"missing={missing}, unexpected={unexpected}"
         )
 
-    links_events: List[List[Event]] = []
-    link_identities: List[NoCLinkIdentity] = []
+    links_events: list[list[Event]] = []
+    link_identities: list[NoCLinkIdentity] = []
     for fabric_id in NoCChannel:
         noc = nocs[fabric_id]
         if noc.fabric_id is not fabric_id:
@@ -111,8 +110,8 @@ def collect_noc_link_events(
 def process_events(
     simulation_time: float,
     time_slice_num: int,
-    cores_events: List[List[Event]],
-    links_events: List[List[Event]],
+    cores_events: list[list[Event]],
+    links_events: list[list[Event]],
     link_identities: Sequence[NoCLinkIdentity] | None = None,
 ) -> Trace:
     if link_identities is not None and len(link_identities) != len(links_events):

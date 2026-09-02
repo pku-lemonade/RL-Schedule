@@ -1,17 +1,22 @@
 import simpy
-from typing import Dict, List
 
-from .utils.mapper import *
-from .utils.dfg import DFGNode
-from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
-from .noc import Link, NoC, NoCTracer
+from .configs.schemas.arch_config import ArchConfig, CoreConfig, NoCConfig
+from .configs.schemas.failure_configs import (
+    FailSlow,
+    LinkFail,
+    LsuFail,
+    RouterFail,
+    TpuFail,
+)
 from .core import Core
-from .pe_channel import NMCChannel, PEChannelBinding
 from .endpoint_registry import EndpointRegistry
-from .configs.schemas.arch_config import *
-from .configs.schemas.failure_configs import *
+from .noc import Link, NoC, NoCTracer
+from .pe_channel import NMCChannel, PEChannelBinding
+from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
+from .utils.dfg import DFGNode
+from .utils.mapper import NetworkMapper
 
-NoCFabrics = Dict[NoCChannel, NoC]
+NoCFabrics = dict[NoCChannel, NoC]
 
 
 class Arch:
@@ -45,8 +50,8 @@ class Arch:
         config: CoreConfig,
         noc_config: NoCConfig,
         mapper: NetworkMapper,
-    ) -> List[Core]:
-        cores: List[Core] = []
+    ) -> list[Core]:
+        cores: list[Core] = []
         for id in range(self.x_size * self.y_size):
             core = Core(
                 env=env,
@@ -117,14 +122,14 @@ class Arch:
         }
     
 
-    def initialize(self, operators: List[DFGNode]):
+    def initialize(self, operators: list[DFGNode]):
         # initialize primary tasks
         for core in self.cores:
             core.initialize(operators=operators)
         
         # initialize each core's spm
         for id in range(self.x_size * self.y_size):
-            core_list: List[Core | None] = []
+            core_list: list[Core | None] = []
             for core in self.cores:
                 if core.id == id:
                     core_list.append(None)

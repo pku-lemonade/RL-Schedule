@@ -61,10 +61,12 @@ Descriptor posting is a per-command stage, not a per-flit penalty. Commands on
 one channel are issued at `descriptor_issue_cycles` intervals, while CH0 and CH1
 have independent issuers. A full descriptor pool stalls the oldest command at
 the channel issuer until an earlier command completes and releases a slot.
-The effective `inter_command_turnaround_aci_cycles` is also per TX command, but
-it is measured from the previous command's final local-Link handoff. It delays
-only a back-to-back command that arrives before this boundary; the first command
-and a command submitted after sufficient idle time receive no extra delay. The
+The effective `inter_command_turnaround_aci_cycles` is also per TX command. The
+next command boundary is the previous command's service start plus its ideal
+local flit-service duration and this fixed turnaround. Excess NoC backpressure
+therefore consumes the fixed bubble before delaying a successor, matching the
+descriptor queue's ability to absorb transient stalls. The first command and a
+command submitted after sufficient idle time receive no extra delay. The
 101-cycle default is calibrated from the N=32, 32 KB rb56/rb58 schedules and
 does not alter service between flits of one message.
 

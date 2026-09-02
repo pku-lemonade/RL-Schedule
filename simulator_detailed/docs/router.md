@@ -1,8 +1,10 @@
 # Router Model
 
 Each router owns one forwarder process per bound input port. HEAD and SINGLE
-flits establish immutable packet route state. BODY and TAIL flits reuse that
-route, but request the output again whenever the previous burst grant ended.
+flits establish immutable route state keyed by input port and message ID. BODY
+and TAIL flits reuse that message route, but request the output again whenever
+the previous burst grant ended. Multiple live message routes may share one input
+when an upstream router interleaves their bursts.
 
 The pipeline is:
 
@@ -16,11 +18,13 @@ Every output port has its own `RoundRobinArbiter`. The pointer advances after
 each released grant, so continuously backlogged inputs take turns without
 sharing state across outputs, routers, or NoC fabrics.
 
-Packet route state remains reserved from HEAD through TAIL. Temporary switch
-ownership lasts until the earlier of TAIL or the resolved 1/2/4/8-flit burst
-quantum. Only flits accepted by the output Link count against the grant. A
-packet with remaining flits keeps its route and requests another grant; this
-prevents BODY/TAIL bypass while allowing competing packets to alternate.
+Each message route remains reserved from HEAD through TAIL. Temporary switch
+ownership is still per input port and lasts until the earlier of TAIL or the
+resolved 1/2/4/8-flit burst quantum. A grant records its message ID and output,
+so a different interleaved message cannot reuse it accidentally. Only flits
+accepted by the output Link count against the grant. A packet with remaining
+flits keeps its route and requests another grant; this prevents BODY/TAIL bypass
+while allowing competing packets to alternate.
 
 Re-arbitration adds no fixed bubble. A HEAD or a grant that waited behind a
 competitor pays the configured SA delay. With no waiting competitor, a
@@ -32,4 +36,4 @@ head-of-line backpressure.
 lengths and early TAIL release to be inspected.
 
 Ports are integer IDs. Directional ports are 100-103; local endpoint ports are
-below 100. `is_edge` is represented as `Dict[Direction, bool]`.
+below 100. `is_edge` is represented as `dict[Direction, bool]`.

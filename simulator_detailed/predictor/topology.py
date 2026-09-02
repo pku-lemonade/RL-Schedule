@@ -1,8 +1,8 @@
-from typing import Dict, List, Literal, Tuple
+from typing import Literal
 
 from ..utils.definitions import NoCChannel
 
-PathNode = Tuple[Literal["link", "core"], int]
+PathNode = tuple[Literal["link", "core"], int]
 
 
 class Mesh:
@@ -12,11 +12,11 @@ class Mesh:
         self.x = x
         self.y = y
         self.core_count = x * y
-        self.to_link_index: Dict[Tuple[NoCChannel, int, int], int] = {}
-        self.link_to_core_pair: Dict[int, Tuple[int, int]] = {}
-        self.link_to_fabric: Dict[int, NoCChannel] = {}
-        self.core_link: List[List[int]] = [[], []]
-        self.link_core: List[List[int]] = [[], []]
+        self.to_link_index: dict[tuple[NoCChannel, int, int], int] = {}
+        self.link_to_core_pair: dict[int, tuple[int, int]] = {}
+        self.link_to_fabric: dict[int, NoCChannel] = {}
+        self.core_link: list[list[int]] = [[], []]
+        self.link_core: list[list[int]] = [[], []]
         self.link_count = 0
         self._build_links()
 
@@ -66,8 +66,8 @@ class Mesh:
         src: int,
         dst: int,
         fabric_id: NoCChannel,
-    ) -> List[PathNode]:
-        nodes: List[PathNode] = []
+    ) -> list[PathNode]:
+        nodes: list[PathNode] = []
         if src == dst:
             return nodes
 
@@ -103,7 +103,7 @@ def parse_fabric_id(value: object) -> NoCChannel:
     if isinstance(value, NoCChannel):
         return value
     if isinstance(value, bool):
-        raise ValueError(f"invalid NoC fabric identity: {value!r}")
+        raise TypeError(f"invalid NoC fabric identity type: {value!r}")
     if isinstance(value, str):
         try:
             return NoCChannel[value]

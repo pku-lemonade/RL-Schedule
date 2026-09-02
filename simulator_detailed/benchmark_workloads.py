@@ -13,6 +13,7 @@ from .utils.definitions import Message, NMCShapeMode, NoCChannel
 class NMCBenchmarkScenario(str, Enum):
     SEQUENTIAL_PING_PONG = "sequential_ping_pong"
     SINGLE_CHANNEL_BATCH = "single_channel_batch"
+    SHARED_LINK_CONTENTION_BATCH = "shared_link_contention_batch"
     DUAL_CHANNEL_SAME_DIRECTION_BATCH = "dual_channel_same_direction_batch"
     DUAL_CHANNEL_FULL_DUPLEX_BATCH = "dual_channel_full_duplex_batch"
 
@@ -83,6 +84,34 @@ class BatchedNMCStreamResult:
                 f"benchmark stream {self.stream.name} result count mismatch"
             )
 
+    @property
+    def operation_start_time_aci_cycles(self) -> float:
+        return min(
+            result.submission_time_aci_cycles
+            for result in (*self.sends, *self.receives)
+        )
+
+    @property
+    def operation_completion_time_aci_cycles(self) -> float:
+        return max(
+            result.operation_completion_time_aci_cycles
+            for result in (*self.sends, *self.receives)
+        )
+
+    @property
+    def operation_latency_aci_cycles(self) -> float:
+        return (
+            self.operation_completion_time_aci_cycles
+            - self.operation_start_time_aci_cycles
+        )
+
+    @property
+    def throughput_bytes_per_aci_cycle(self) -> float:
+        latency = self.operation_latency_aci_cycles
+        if latency <= 0:
+            raise ValueError("benchmark stream latency must be positive")
+        return self.stream.payload_bytes / latency
+
 
 @dataclass(frozen=True, slots=True)
 class BatchedNMCReplayResult:
@@ -115,7 +144,7 @@ class BatchedNMCReplayResult:
         matching = [result for result in self.streams if result.stream.name == name]
         if len(matching) != 1:
             raise KeyError(f"benchmark replay has no unique stream named {name!r}")
-        return matching[0].stream.payload_bytes / self.operation_latency_aci_cycles
+        return matching[0].throughput_bytes_per_aci_cycle
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,6 +224,21 @@ def replay_single_channel_batch(stream: BatchedNMCStream) -> Process:
         _run_batched_streams(
             NMCBenchmarkScenario.SINGLE_CHANNEL_BATCH,
             (stream,),
+        )
+    )
+
+
+def replay_shared_link_contention_batch(
+    first_stream: BatchedNMCStream,
+    second_stream: BatchedNMCStream,
+) -> Process:
+    """Replay two same-fabric streams whose deterministic XY routes overlap."""
+    streams = (first_stream, second_stream)
+    _validate_shared_link_contention(streams)
+    return first_stream.source.env.process(
+        _run_batched_streams(
+            NMCBenchmarkScenario.SHARED_LINK_CONTENTION_BATCH,
+            streams,
         )
     )
 
@@ -392,6 +436,62 @@ def _validate_dual_same_direction(
     }
     if len(endpoint_pairs) != 1:
         raise ValueError("dual-channel streams must use the same direction")
+
+
+def _validate_shared_link_contention(
+    streams: tuple[BatchedNMCStream, BatchedNMCStream],
+) -> None:
+    _validate_common_streams(streams)
+    first, second = streams
+    if first.source.fabric_id is not second.source.fabric_id:
+        raise ValueError("shared-link replay requires one data fabric")
+
+    first_router = first.source.binding.router
+    second_router = second.source.binding.router
+    if (
+        first_router.x_dim != second_router.x_dim
+        or first_router.y_dim != second_router.y_dim
+    ):
+        raise ValueError("shared-link replay requires one mesh shape")
+
+    first_edges = set(
+        _xy_route_edges(
+            first.source.binding.address.router_id,
+            first.destination.binding.address.router_id,
+            first_router.x_dim,
+        )
+    )
+    second_edges = set(
+        _xy_route_edges(
+            second.source.binding.address.router_id,
+            second.destination.binding.address.router_id,
+            first_router.x_dim,
+        )
+    )
+    if first_edges.isdisjoint(second_edges):
+        raise ValueError("benchmark streams do not share a directional link")
+
+
+def _xy_route_edges(
+    source_router: int,
+    destination_router: int,
+    x_dim: int,
+) -> tuple[tuple[int, int], ...]:
+    current = source_router
+    destination_x = destination_router % x_dim
+    destination_y = destination_router // x_dim
+    edges: list[tuple[int, int]] = []
+    while current % x_dim != destination_x:
+        step = 1 if current % x_dim < destination_x else -1
+        next_router = current + step
+        edges.append((current, next_router))
+        current = next_router
+    while current // x_dim != destination_y:
+        step = x_dim if current // x_dim < destination_y else -x_dim
+        next_router = current + step
+        edges.append((current, next_router))
+        current = next_router
+    return tuple(edges)
 
 
 def _validate_dual_full_duplex(

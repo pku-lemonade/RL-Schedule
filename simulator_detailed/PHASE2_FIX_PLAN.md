@@ -499,12 +499,12 @@ Tests:
 
 ## Fix 10: Add Descriptor Limits and Shape-Dependent Endpoint Timing
 
-Status: in progress. Fix 10A enforces the measured per-channel outstanding
-descriptor capacity. Fix 10B applies the configurable 57-cycle posting cost
-through independent channel-local issuers. The remaining work must model the
-two documented shape modes, static and dynamic. `send_with_sync` is the API used
-by those commands, not a third latency mode. The rb54 `204 + 17*hops` fit remains
-a benchmark result whose exact shape construction is not documented.
+Status: implemented. Fix 10A enforces the measured per-channel outstanding
+descriptor capacity, Fix 10B applies the configurable 57-cycle posting cost
+through independent channel-local issuers, and Fix 10C models the two documented
+shape modes, static and dynamic. `send_with_sync` is the API used by those
+commands, not a third latency mode. The rb54 `204 + 17*hops` fit remains a
+benchmark result whose exact shape construction is not documented.
 
 ### Fix 10A: Enforce Per-Channel Descriptor Capacity
 
@@ -775,7 +775,8 @@ Code changes:
 - Add explicit single-channel, dual-channel, and full-duplex benchmark harnesses
   using the measured payload sizes and command schedules.
 - Model the measured gap between consecutive TX commands as one configurable
-  channel turnaround after the previous command's final local handoff. Skip the
+  channel turnaround after ideal local TX service. Let excess NoC backpressure
+  overlap that fixed bubble so transient stalls are not charged twice. Skip the
   wait for the first command and whenever natural idle time has already covered
   it; do not special-case 32 KB payloads or add a per-flit penalty.
 
@@ -789,6 +790,14 @@ Tests:
   simplex TX, simplex RX, dual-channel same-direction, and full-duplex results.
 
 ### Fix 12D: Finish Documentation and Strict Checks
+
+Status: implemented. The obsolete pre-implementation adaptation document is
+replaced by a current architecture-aligned roadmap. The active Phase 2 runtime
+is strict-type clean; the optional ML predictor/model stack remains a separately
+deferred phase. The rb53 workload now covers unsaturated and saturated shared
+links. Its first end-to-end replay also found and fixed two coupled issues:
+interleaved bursts require route state per `(input_port, message_id)`, and fixed
+command turnaround must overlap excess fabric backpressure.
 
 Code changes:
 

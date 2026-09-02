@@ -1,27 +1,28 @@
-import json
-import time
-import logging
 import argparse
+import json
+import logging
+import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Protocol, Tuple, cast
+from typing import Protocol, cast
+
 from pydantic import ValidationError
 
 if __name__ == '__main__' and __package__ is None:
-    import sys as _sys
     import os as _os
+    import sys as _sys
     _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
     __package__ = 'simulator_detailed'
 
 from .architecture import Arch, NoCFabrics
-from .noc import NoCLinkIdentity
-from .tracing import collect_noc_link_events, process_events
-from .utils.mapper import NetworkMapper, parse_mapping
-from .utils.definitions import Event, Trace
 from .configs.schemas.arch_config import ArchConfig
 from .configs.schemas.failure_configs import FailSlow
+from .noc import NoCLinkIdentity
+from .tracing import collect_noc_link_events, process_events
+from .utils.definitions import Event, Trace
+from .utils.mapper import NetworkMapper, parse_mapping
 
-JsonEvent = Dict[str, object]
+JsonEvent = dict[str, object]
 DetectionScores = Sequence[Sequence[float]]
 
 
@@ -31,9 +32,9 @@ class Detector(Protocol):
         env_time: float,
         slice_num: int,
         arch_config: ArchConfig,
-        core_events_json: List[JsonEvent],
-        link_events_json: List[JsonEvent],
-    ) -> Tuple[DetectionScores, DetectionScores]: ...
+        core_events_json: list[JsonEvent],
+        link_events_json: list[JsonEvent],
+    ) -> tuple[DetectionScores, DetectionScores]: ...
 
 
 detect: Detector | None
@@ -85,18 +86,18 @@ def setup_logging(filename: str, level: int):
 
 def _collect_simulation_events(
     arch: Arch,
-) -> Tuple[
+) -> tuple[
     float,
-    List[List[Event]],
-    List[List[Event]],
-    List[NoCLinkIdentity],
-    List[JsonEvent],
-    List[JsonEvent],
+    list[list[Event]],
+    list[list[Event]],
+    list[NoCLinkIdentity],
+    list[JsonEvent],
+    list[JsonEvent],
 ]:
-    core_events: List[List[Event]] = [core.events for core in arch.cores]
+    core_events: list[list[Event]] = [core.events for core in arch.cores]
     link_events, link_identities = collect_noc_link_events(arch.nocs)
-    core_events_json: List[JsonEvent] = []
-    link_events_json: List[JsonEvent] = []
+    core_events_json: list[JsonEvent] = []
+    link_events_json: list[JsonEvent] = []
     maxtime = 0.0
 
     for event_stream in core_events:
@@ -119,7 +120,7 @@ def _collect_simulation_events(
     )
 
 
-def simulate_old() -> Tuple[float, Trace, NoCFabrics]:
+def simulate_old() -> tuple[float, Trace, NoCFabrics]:
     print("Start simulation.")
     # === Step 1: Load configuration files ===
     print("Step 1: Load configuration files...")
@@ -234,7 +235,7 @@ def simulate(
     failure_path: str,
     mapper: NetworkMapper,
     verbose: bool = False,
-) -> Tuple[float, Trace, NoCFabrics]:
+) -> tuple[float, Trace, NoCFabrics]:
     # === Step 0: Parameter definition ===
     log_path = "logs/simulation.log"
     level = "debug"

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Protocol
+from typing import Protocol
 
 import simpy
 from simpy.events import ProcessGenerator
@@ -32,13 +32,27 @@ class _TPU(Protocol):
 class TaskCore(Protocol):
     id: int
     env: simpy.Environment
-    spm: _Scratchpad
-    lsu: _LSU
-    tpu: _TPU
-    mapper: NetworkMapper
-    endpoint_registry: EndpointRegistry
-    events: List[Event]
-    index2id: dict[int, int]
+
+    @property
+    def spm(self) -> _Scratchpad: ...
+
+    @property
+    def lsu(self) -> _LSU: ...
+
+    @property
+    def tpu(self) -> _TPU: ...
+
+    @property
+    def mapper(self) -> NetworkMapper: ...
+
+    @property
+    def endpoint_registry(self) -> EndpointRegistry: ...
+
+    @property
+    def events(self) -> list[Event]: ...
+
+    @property
+    def index2id(self) -> dict[int, int]: ...
 
     def nmc_channel_for(self, fabric_id: NoCChannel) -> NMCChannel: ...
 
@@ -66,8 +80,8 @@ class Task:
         self.nmc_shape_mode = node.nmc_shape_mode
 
         # dependencies
-        self.dependencies: List[int] = node.parent
-        self.successors: List[int] = node.child
+        self.dependencies: list[int] = node.parent
+        self.successors: list[int] = node.child
 
         # state parameters
         self.received_input = node.received_input
@@ -304,7 +318,7 @@ class Task:
         return send_node
 
 
-    def __lt__(self, other: "Task") -> bool:
+    def __lt__(self, other: Task) -> bool:
         # print(task_priority)
         if task_priority[self.operation.name] != task_priority[other.operation.name]:
             return task_priority[self.operation.name] < task_priority[other.operation.name]

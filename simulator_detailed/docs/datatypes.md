@@ -132,11 +132,12 @@ remain 57 cycles apart. The descriptor slot itself remains held through local
 TX completion. Separate CH0 and CH1 issuers allow their posting intervals to
 overlap.
 
-The TX worker separately enforces
-`inter_command_turnaround_aci_cycles` after a command's final local-Link
-handoff. A queued successor waits only for the unelapsed part of that boundary;
-if the worker has already been idle long enough, it starts immediately. This is
-a size-independent command boundary calibrated from the N=32, 32 KB throughput
+The TX worker separately enforces `inter_command_turnaround_aci_cycles` after a
+command's ideal local flit-service duration. A queued successor waits only for
+the unelapsed part of that boundary. Excess NoC backpressure overlaps the fixed
+bubble and delays the successor only if it outlasts that boundary; if the worker
+has already been idle long enough, the successor starts immediately. This is a
+size-independent command boundary calibrated from the N=32, 32 KB throughput
 measurements, not a per-packet-size branch or an added interval between flits.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
@@ -168,13 +169,16 @@ remain distinct. `per_msg_latency()` is retained only as a compatibility alias
 for packet fabric completion latency.
 
 `NMCBenchmarkScenario` names the supported end-to-end acceptance schedules:
-sequential ping-pong, single-channel batch, dual-channel same-direction batch,
-and dual-channel full-duplex batch. `BatchedNMCStream` describes one fixed-size
-directed command stream. `replay_sequential_ping_pong()` posts each reply only
-after the forward RECV completes; its `SequentialPingPongResult` exposes total
-operation RTT and the two directional operation latencies. The three batch
-helpers post all SEND and matching RECV commands at one simulation timestamp
-and perform one final fence. Their `BatchedNMCReplayResult` aggregates payload,
-elapsed time, total throughput, and named `BatchedNMCStreamResult` records from
-typed endpoint completion timestamps. None of these workload results infer
-end-to-end performance from router trace latency.
+sequential ping-pong, single-channel batch, same-fabric shared-link contention,
+dual-channel same-direction batch, and dual-channel full-duplex batch.
+`BatchedNMCStream` describes one fixed-size directed command stream.
+`replay_sequential_ping_pong()` posts each reply only after the forward RECV
+completes; its `SequentialPingPongResult` exposes total operation RTT and the
+two directional operation latencies. The batch helpers post all SEND and
+matching RECV commands at one simulation timestamp and perform one final fence.
+The shared-link helper additionally verifies that both deterministic XY routes
+contain at least one common directional link. `BatchedNMCReplayResult`
+aggregates payload, elapsed time, total throughput, and named stream results
+from typed endpoint completion timestamps. Each stream rate uses its own
+completion window. None of these results infer end-to-end performance from
+router trace latency.

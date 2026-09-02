@@ -469,14 +469,16 @@ class NMCChannel:
             request = self.tx_datapath.request()
             with request:
                 yield request
+                command_service_start_time_aci_cycles = float(self.env.now)
+                next_command_service_time_aci_cycles = (
+                    command_service_start_time_aci_cycles
+                    + len(entry.flits) * self.tx_service_interval_aci_cycles
+                    + self.config.inter_command_turnaround_aci_cycles
+                )
                 for flit in entry.flits:
                     yield self.env.timeout(self.tx_service_interval_aci_cycles)
                     yield self.binding.tx_link.send_flit(flit)
             final_local_handoff_time_aci_cycles = float(self.env.now)
-            next_command_service_time_aci_cycles = (
-                final_local_handoff_time_aci_cycles
-                + self.config.inter_command_turnaround_aci_cycles
-            )
             entry.completion.succeed(
                 NMCTransmitResult(
                     flits=entry.flits,

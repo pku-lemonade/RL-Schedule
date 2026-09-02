@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, IntEnum, auto
-from typing import Final, List, Optional
+from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -208,7 +208,7 @@ def direction_to_port(direction: Direction) -> int:
     return _DIR_MAP[direction]
 
 
-def port_to_direction(port: int) -> Optional[Direction]:
+def port_to_direction(port: int) -> Direction | None:
     """Map a numeric direction port ID back to Direction enum, or None if not a direction port."""
     for d, p in _DIR_MAP.items():
         if p == port:
@@ -295,7 +295,7 @@ class DimSlice(BaseModel):
     
 
 class Slice(BaseModel):
-    tensor_slice: List[DimSlice]
+    tensor_slice: list[DimSlice]
     def size(self) -> int:
         if self.tensor_slice == []:
             return 0
@@ -306,7 +306,7 @@ class Slice(BaseModel):
             res = res * dim_len
         return res
     
-    def max(self, other: "Slice") -> "Slice":
+    def max(self, other: Slice) -> Slice:
         res: list[DimSlice] = []
         for i in range(len(self.tensor_slice)):
             res.append(
@@ -363,7 +363,7 @@ class EndpointAddress(BaseModel):
     local_port: int = Field(ge=0, le=31)
 
     @model_validator(mode="after")
-    def validate_attachment(self) -> "EndpointAddress":
+    def validate_attachment(self) -> EndpointAddress:
         expected_router = expected_endpoint_router(self.node_type, self.node_id)
         if self.router_id != expected_router:
             raise ValueError(
@@ -405,7 +405,7 @@ class Message(BaseModel):
     src: EndpointAddress              # resolved source endpoint attachment
     dst: EndpointAddress              # resolved destination endpoint attachment
     index: int                        # unique message index (DFG task index)
-    data: List[DimSlice]              # tensor slice(s) describing payload
+    data: list[DimSlice]              # tensor slice(s) describing payload
     nmc_shape_mode: NMCShapeMode = NMCShapeMode.DYNAMIC
     trans_type: TransType = TransType.SINGLECAST  # transmission type
     burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
@@ -416,7 +416,7 @@ class Message(BaseModel):
     header_bytes: int = 12            # B, estimated metadata; not deducted from logical payload
 
     @model_validator(mode="after")
-    def validate_endpoint_roles(self) -> "Message":
+    def validate_endpoint_roles(self) -> Message:
         if self.src.node_type in (NodeType.GM_WDMA, NodeType.DDR_WDMA):
             raise ValueError(f"{self.src.node_type.name} cannot inject payload data")
         if self.dst.node_type in (NodeType.GM_RDMA, NodeType.DDR_RDMA):
@@ -484,7 +484,7 @@ class Message(BaseModel):
 
         return flits
 
-    def __lt__(self, other: "Message") -> bool:
+    def __lt__(self, other: Message) -> bool:
         return self.payload_bytes() < other.payload_bytes()
 
 
@@ -500,14 +500,14 @@ class TraceItem(BaseModel):
 
 class TimeSlice(BaseModel):
     """Aggregated trace data for one time window."""
-    cores: List[TraceItem] = []  # per-core utilization
-    links: List[TraceItem] = []  # per-link utilization
-    dmas: List[TraceItem] = []   # per-DMA utilization
+    cores: list[TraceItem] = []  # per-core utilization
+    links: list[TraceItem] = []  # per-link utilization
+    dmas: list[TraceItem] = []   # per-DMA utilization
 
 
 class Trace(BaseModel):
     """Full simulation trace: list of time slices."""
-    time_slices: List[TimeSlice] = []
+    time_slices: list[TimeSlice] = []
 
 
 class Event(BaseModel):

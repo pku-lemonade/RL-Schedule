@@ -1,4 +1,5 @@
 import unittest
+from itertools import pairwise
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from simulator_detailed.architecture import Arch
 from simulator_detailed.benchmark_references import (
     NMC_32K_BATCH_REFERENCE,
+    RB53_CONTENTION_REFERENCE,
     RB54_LATENCY_REFERENCE,
 )
 from simulator_detailed.benchmark_workloads import (
@@ -18,6 +20,7 @@ from simulator_detailed.benchmark_workloads import (
     replay_dual_channel_full_duplex_batch,
     replay_dual_channel_same_direction_batch,
     replay_sequential_ping_pong,
+    replay_shared_link_contention_batch,
     replay_single_channel_batch,
 )
 from simulator_detailed.configs.schemas.arch_config import (
@@ -1803,6 +1806,149 @@ class Phase2NoCTests(unittest.TestCase):
             delta=reference.dual_full_duplex_bytes_per_aci_cycle * 0.05,
         )
 
+    def test_rb53_shared_link_replay_matches_offered_load_transition(self):
+        reference = RB53_CONTENTION_REFERENCE
+
+        self.assertEqual(reference.kernel, "noc_rb53.cpp")
+        self.assertEqual(reference.messages_per_stream, 16)
+
+        def make_stream(
+            harness,
+            source,
+            destination,
+            *,
+            name,
+            message_bytes,
+            first_message_id,
+        ):
+            return BatchedNMCStream(
+                name=name,
+                source=source,
+                destination=destination,
+                messages=tuple(
+                    harness.message(
+                        first_message_id + index,
+                        source.binding.address.node_id,
+                        destination.binding.address.node_id,
+                        message_bytes // FLIT_BYTES,
+                    )
+                    for index in range(reference.messages_per_stream)
+                ),
+                receive_shape_mode=NMCShapeMode.DYNAMIC,
+            )
+
+        for sample in reference.samples:
+            with self.subTest(message_bytes=sample.message_bytes):
+                isolated_rates = []
+                for stream_index, (source_id, destination_id) in enumerate(
+                    ((0, 2), (1, 3))
+                ):
+                    harness = MeshHarness()
+                    source = harness.attach_nmc(source_id)
+                    destination = harness.attach_nmc(destination_id)
+                    stream = make_stream(
+                        harness,
+                        source,
+                        destination,
+                        name="isolated",
+                        message_bytes=sample.message_bytes,
+                        first_message_id=1000 + 100 * stream_index,
+                    )
+                    replay = replay_single_channel_batch(stream)
+                    harness.env.run(until=replay)
+                    isolated_rates.append(
+                        replay.value.aggregate_throughput_bytes_per_aci_cycle
+                    )
+
+                expected_isolated_rates = (
+                    sample.first_isolated_bytes_per_aci_cycle,
+                    sample.second_isolated_bytes_per_aci_cycle,
+                )
+                for observed, expected in zip(
+                    isolated_rates,
+                    expected_isolated_rates,
+                ):
+                    self.assertAlmostEqual(
+                        observed,
+                        expected,
+                        delta=expected * 0.10,
+                    )
+
+                harness = MeshHarness()
+                channels = {
+                    pe_id: harness.attach_nmc(pe_id)
+                    for pe_id in (0, 1, 2, 3)
+                }
+                first_stream = make_stream(
+                    harness,
+                    channels[0],
+                    channels[2],
+                    name="pe0_to_pe2",
+                    message_bytes=sample.message_bytes,
+                    first_message_id=2000,
+                )
+                second_stream = make_stream(
+                    harness,
+                    channels[1],
+                    channels[3],
+                    name="pe1_to_pe3",
+                    message_bytes=sample.message_bytes,
+                    first_message_id=3000,
+                )
+                replay = replay_shared_link_contention_batch(
+                    first_stream,
+                    second_stream,
+                )
+                harness.env.run(until=replay)
+                result = replay.value
+
+                self.assertIs(
+                    result.scenario,
+                    NMCBenchmarkScenario.SHARED_LINK_CONTENTION_BATCH,
+                )
+                self.assertAlmostEqual(
+                    result.aggregate_throughput_bytes_per_aci_cycle,
+                    sample.aggregate_contending_bytes_per_aci_cycle,
+                    delta=(
+                        sample.aggregate_contending_bytes_per_aci_cycle * 0.10
+                    ),
+                )
+                observed_stream_rates = (
+                    result.stream_throughput_bytes_per_aci_cycle(
+                        "pe0_to_pe2"
+                    ),
+                    result.stream_throughput_bytes_per_aci_cycle(
+                        "pe1_to_pe3"
+                    ),
+                )
+                expected_stream_rates = (
+                    sample.first_contending_bytes_per_aci_cycle,
+                    sample.second_contending_bytes_per_aci_cycle,
+                )
+                for observed, expected in zip(
+                    observed_stream_rates,
+                    expected_stream_rates,
+                ):
+                    self.assertAlmostEqual(
+                        observed,
+                        expected,
+                        delta=expected * 0.10,
+                    )
+
+                observed_retention = (
+                    result.aggregate_throughput_bytes_per_aci_cycle
+                    / sum(isolated_rates)
+                )
+                if sample.message_bytes <= 8 * 1024:
+                    self.assertGreaterEqual(observed_retention, 0.95)
+                else:
+                    self.assertLess(observed_retention, 0.95)
+                    self.assertAlmostEqual(
+                        observed_stream_rates[0],
+                        observed_stream_rates[1],
+                        delta=max(observed_stream_rates) * 0.02,
+                    )
+
     def test_nmc_shape_mode_reaches_send_admission_but_not_flits(self):
         harness = MeshHarness()
         source = harness.attach_nmc(0)
@@ -1997,12 +2143,13 @@ class Phase2NoCTests(unittest.TestCase):
             BurstLenMode.BURST_LEN_1,
             BurstLenMode.BURST_LEN_3,
         ):
-            with self.subTest(contradictory_mode=contradictory_mode):
-                with self.assertRaisesRegex(
-                    ValidationError,
-                    "must resolve to BURST_LEN_7",
-                ):
-                    RouterConfig(default_burst_len_mode=contradictory_mode)
+            with self.subTest(
+                contradictory_mode=contradictory_mode
+            ), self.assertRaisesRegex(
+                ValidationError,
+                "must resolve to BURST_LEN_7",
+            ):
+                RouterConfig(default_burst_len_mode=contradictory_mode)
         with self.assertRaises(ValidationError):
             RouterConfig.model_validate({"default_burst_len_mode": 2})
 
@@ -2657,9 +2804,10 @@ class Phase2NoCTests(unittest.TestCase):
             ),
         )
         for dma_config, expected_error in invalid_configs:
-            with self.subTest(expected_error=expected_error):
-                with self.assertRaisesRegex(ValueError, expected_error):
-                    EndpointRegistry(NoCConfig(dma_engines=[dma_config]))
+            with self.subTest(
+                expected_error=expected_error
+            ), self.assertRaisesRegex(ValueError, expected_error):
+                EndpointRegistry(NoCConfig(dma_engines=[dma_config]))
 
         with self.assertRaisesRegex(ValueError, "is configured twice"):
             EndpointRegistry(
@@ -2789,10 +2937,7 @@ class Phase2NoCTests(unittest.TestCase):
 
         expected_gap = config.launch_interval_aci_cycles
         recovered_arrivals = [time for _, time in arrivals[2:]]
-        for previous, current in zip(
-            recovered_arrivals,
-            recovered_arrivals[1:],
-        ):
+        for previous, current in pairwise(recovered_arrivals):
             self.assertAlmostEqual(current - previous, expected_gap)
 
     def test_fail_slow_scales_link_timing_and_reciprocal_recovers(self) -> None:
@@ -2834,10 +2979,7 @@ class Phase2NoCTests(unittest.TestCase):
         slow_start, slow_arrivals = transfer(range(30, 33))
         self.assertEqual([msg_id for msg_id, _ in slow_arrivals], [30, 31, 32])
         self.assertAlmostEqual(slow_arrivals[0][1] - slow_start, 9.0)
-        for (_, previous), (_, current) in zip(
-            slow_arrivals,
-            slow_arrivals[1:],
-        ):
+        for (_, previous), (_, current) in pairwise(slow_arrivals):
             self.assertAlmostEqual(
                 current - previous,
                 2.0 * config.launch_interval_aci_cycles,
@@ -2847,10 +2989,7 @@ class Phase2NoCTests(unittest.TestCase):
         normal_start, normal_arrivals = transfer(range(33, 36))
         self.assertEqual([msg_id for msg_id, _ in normal_arrivals], [33, 34, 35])
         self.assertAlmostEqual(normal_arrivals[0][1] - normal_start, 4.5)
-        for (_, previous), (_, current) in zip(
-            normal_arrivals,
-            normal_arrivals[1:],
-        ):
+        for (_, previous), (_, current) in pairwise(normal_arrivals):
             self.assertAlmostEqual(
                 current - previous,
                 config.launch_interval_aci_cycles,
@@ -3262,7 +3401,7 @@ class Phase2NoCTests(unittest.TestCase):
         )
         default_route = router._rc_compute(PORT_PE, defaulted)
         self.assertEqual(default_route.burst_quantum_flits, 8)
-        del router.reservation[PORT_PE]
+        del router.reservation[(PORT_PE, defaulted.msg_id)]
         self.assertFalse(router.reservation)
 
         body_without_head = harness.flit(FlitType.BODY, 71, 0, 1)
@@ -3280,16 +3419,32 @@ class Phase2NoCTests(unittest.TestCase):
         route_state = router._rc_compute(PORT_PE, head)
         self.assertEqual(route_state.burst_quantum_flits, 4)
 
-        wrong_message = harness.flit(
-            FlitType.BODY,
+        interleaved_head = harness.flit(
+            FlitType.HEAD,
             73,
             0,
             1,
             burst_len_mode=BurstLenMode.BURST_LEN_3,
         )
-        with self.assertRaisesRegex(RuntimeError, "message 73 before message 72"):
+        interleaved_route_state = router._rc_compute(
+            PORT_PE,
+            interleaved_head,
+        )
+        self.assertIs(
+            router.reservation[(PORT_PE, interleaved_head.msg_id)],
+            interleaved_route_state,
+        )
+
+        wrong_message = harness.flit(
+            FlitType.BODY,
+            74,
+            0,
+            1,
+            burst_len_mode=BurstLenMode.BURST_LEN_3,
+        )
+        with self.assertRaisesRegex(RuntimeError, "BODY without HEAD"):
             router._rc_compute(PORT_PE, wrong_message)
-        self.assertIs(router.reservation[PORT_PE], route_state)
+        self.assertIs(router.reservation[(PORT_PE, head.msg_id)], route_state)
 
         changed_mode = harness.flit(
             FlitType.BODY,
@@ -3300,18 +3455,18 @@ class Phase2NoCTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "changed burst mode"):
             router._rc_compute(PORT_PE, changed_mode)
-        self.assertIs(router.reservation[PORT_PE], route_state)
+        self.assertIs(router.reservation[(PORT_PE, head.msg_id)], route_state)
 
         duplicate_head = harness.flit(
             FlitType.HEAD,
-            74,
+            72,
             0,
             1,
             burst_len_mode=BurstLenMode.BURST_LEN_3,
         )
-        with self.assertRaisesRegex(RuntimeError, "HEAD before message 72"):
+        with self.assertRaisesRegex(RuntimeError, "duplicate HEAD"):
             router._rc_compute(PORT_PE, duplicate_head)
-        self.assertIs(router.reservation[PORT_PE], route_state)
+        self.assertIs(router.reservation[(PORT_PE, head.msg_id)], route_state)
 
         valid_body = harness.flit(
             FlitType.BODY,
@@ -3382,10 +3537,7 @@ class Phase2NoCTests(unittest.TestCase):
                         len(flits),
                     )
                 arrival_times = [time for _, time in arrivals]
-                for previous, current in zip(
-                    arrival_times,
-                    arrival_times[1:],
-                ):
+                for previous, current in pairwise(arrival_times):
                     self.assertAlmostEqual(
                         current - previous,
                         harness.config.link.launch_interval_aci_cycles,
@@ -3430,7 +3582,7 @@ class Phase2NoCTests(unittest.TestCase):
 
         grant_state = router._switch_grants[PORT_PE]
         self.assertEqual(grant_state.transmitted_flits, 0)
-        self.assertEqual(router.reservation[PORT_PE].msg_id, 77)
+        self.assertEqual(router.reservation[(PORT_PE, flit.msg_id)].msg_id, 77)
         self.assertEqual(router.output_arbiters[DIR_EAST].owner, PORT_PE)
         self.assertFalse(
             any(
@@ -3535,7 +3687,7 @@ class Phase2NoCTests(unittest.TestCase):
                 [flit.flit_type for flit in received if flit.msg_id == msg_id],
                 [flit.flit_type for flit in flits],
             )
-        for previous, current in zip(arrival_times, arrival_times[1:]):
+        for previous, current in pairwise(arrival_times):
             self.assertAlmostEqual(
                 current - previous,
                 harness.config.link.launch_interval_aci_cycles,

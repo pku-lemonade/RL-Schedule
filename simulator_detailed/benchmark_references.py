@@ -48,6 +48,41 @@ class BatchedThroughputReference:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class SharedLinkContentionSample:
+    """Measured isolated and contending rates for one rb53 message size."""
+
+    message_bytes: int
+    first_isolated_bytes_per_aci_cycle: float
+    second_isolated_bytes_per_aci_cycle: float
+    first_contending_bytes_per_aci_cycle: float
+    second_contending_bytes_per_aci_cycle: float
+    aggregate_contending_bytes_per_aci_cycle: float
+
+    @property
+    def aggregate_isolated_bytes_per_aci_cycle(self) -> float:
+        return (
+            self.first_isolated_bytes_per_aci_cycle
+            + self.second_isolated_bytes_per_aci_cycle
+        )
+
+    @property
+    def aggregate_retention(self) -> float:
+        return (
+            self.aggregate_contending_bytes_per_aci_cycle
+            / self.aggregate_isolated_bytes_per_aci_cycle
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SharedLinkContentionReference:
+    """Measured rb53 schedule and its offered-load transition."""
+
+    kernel: str
+    messages_per_stream: int
+    samples: tuple[SharedLinkContentionSample, ...]
+
+
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
     kernel="noc_rb54.cpp",
     flit_bytes=512,
@@ -92,4 +127,38 @@ NMC_32K_BATCH_REFERENCE: Final[BatchedThroughputReference] = BatchedThroughputRe
     simplex_rx_bytes_per_aci_cycle=86.1,
     dual_same_direction_bytes_per_aci_cycle=171.0,
     dual_full_duplex_bytes_per_aci_cycle=339.7,
+)
+
+
+RB53_CONTENTION_REFERENCE: Final[SharedLinkContentionReference] = (
+    SharedLinkContentionReference(
+        kernel="noc_rb53.cpp",
+        messages_per_stream=16,
+        samples=(
+            SharedLinkContentionSample(
+                message_bytes=4 * 1024,
+                first_isolated_bytes_per_aci_cycle=27.2,
+                second_isolated_bytes_per_aci_cycle=27.2,
+                first_contending_bytes_per_aci_cycle=27.2,
+                second_contending_bytes_per_aci_cycle=27.2,
+                aggregate_contending_bytes_per_aci_cycle=54.4,
+            ),
+            SharedLinkContentionSample(
+                message_bytes=8 * 1024,
+                first_isolated_bytes_per_aci_cycle=44.5,
+                second_isolated_bytes_per_aci_cycle=44.4,
+                first_contending_bytes_per_aci_cycle=44.7,
+                second_contending_bytes_per_aci_cycle=44.5,
+                aggregate_contending_bytes_per_aci_cycle=89.2,
+            ),
+            SharedLinkContentionSample(
+                message_bytes=16 * 1024,
+                first_isolated_bytes_per_aci_cycle=64.1,
+                second_isolated_bytes_per_aci_cycle=64.2,
+                first_contending_bytes_per_aci_cycle=55.5,
+                second_contending_bytes_per_aci_cycle=55.0,
+                aggregate_contending_bytes_per_aci_cycle=110.5,
+            ),
+        ),
+    )
 )

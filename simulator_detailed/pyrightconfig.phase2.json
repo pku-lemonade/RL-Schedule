@@ -1,0 +1,23 @@
+{
+  "include": [
+    "__init__.py",
+    "architecture.py",
+    "benchmark_references.py",
+    "benchmark_workloads.py",
+    "configs/schemas/arch_config.py",
+    "configs/schemas/failure_configs.py",
+    "core.py",
+    "endpoint_registry.py",
+    "noc.py",
+    "pe_channel.py",
+    "predictor/topology.py",
+    "run.py",
+    "tracing.py",
+    "utils/definitions.py",
+    "utils/dfg.py",
+    "utils/task.py"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "strict",
+  "reportMissingTypeStubs": "none"
+}

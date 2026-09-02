@@ -45,9 +45,9 @@ class TPUConfig(BaseModel):
 
 
 class LSUConfig(BaseModel):
-    """Load-Store Unit config for data movement between SRAM and NMC."""
+    """Legacy compute-task load/store resource, separate from NMC transport."""
     size: int = 1      # number of LSU instances
-    width: float = 106.0  # B/cycle, LSU throughput (NMC SRAM port share)
+    width: float = 106.0  # effective B/ACI-cycle for legacy LOAD/STORE tasks
 
 
 class FlitConfig(BaseModel):
@@ -207,6 +207,7 @@ class NMCChannelConfig(BaseModel):
     tx_bytes_per_cycle: float = Field(default=120.0, gt=0)
     rx_bytes_per_cycle: float = Field(default=120.0, gt=0)
     descriptor_issue_cycles: float = Field(default=57.0, ge=0)
+    # Fixed post-service bubble; excess NoC stalls can overlap it.
     inter_command_turnaround_aci_cycles: float = Field(default=101.0, ge=0)
     max_outstanding_descriptors: int = Field(default=24, gt=0)
 
