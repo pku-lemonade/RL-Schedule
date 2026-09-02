@@ -77,9 +77,11 @@ owns exactly one runtime channel and one binding for CH0 and CH1.
 command's shape mode, operation-submission time, descriptor-acceptance time,
 endpoint-ready time, and its local TX-service completion event. All timestamps
 use the ACI-cycle simulation timebase. Descriptor acceptance is recorded after
-the configured posting interval. For an idle command, endpoint-ready time plus
-first-flit NMC TX service and PE-link delivery reaches the source router's
-`INJECT` event at the configured 79.5/125-cycle total target.
+the configured posting interval. For an idle command, source-router `INJECT`
+occurs before the configured 79.5/125-cycle total endpoint target. The source
+residual reserves the fixed source-router pipeline, destination PE-link, and
+first-flit RX service after injection, so command-level receive completion
+reaches that target plus 8.5 ACI cycles per router hop.
 `NMCTransmitResult` names submission, descriptor acceptance, endpoint readiness,
 final local-Link handoff, and SEND operation completion as separate ACI-cycle
 timestamps. The final two timestamps are equal under the current SEND contract,
@@ -130,6 +132,13 @@ remain 57 cycles apart. The descriptor slot itself remains held through local
 TX completion. Separate CH0 and CH1 issuers allow their posting intervals to
 overlap.
 
+The TX worker separately enforces
+`inter_command_turnaround_aci_cycles` after a command's final local-Link
+handoff. A queued successor waits only for the unelapsed part of that boundary;
+if the worker has already been idle long enough, it starts immediately. This is
+a size-independent command boundary calibrated from the N=32, 32 KB throughput
+measurements, not a per-packet-size branch or an added interval between flits.
+
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
 PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
 work are not payload `Message` objects and belong to the later endpoint model.
@@ -157,3 +166,15 @@ and NMC RX service after ejection. Timing records are keyed by
 `(fabric_id, msg_id)`, so equal router, link, and message IDs on NoC0 and NoC1
 remain distinct. `per_msg_latency()` is retained only as a compatibility alias
 for packet fabric completion latency.
+
+`NMCBenchmarkScenario` names the supported end-to-end acceptance schedules:
+sequential ping-pong, single-channel batch, dual-channel same-direction batch,
+and dual-channel full-duplex batch. `BatchedNMCStream` describes one fixed-size
+directed command stream. `replay_sequential_ping_pong()` posts each reply only
+after the forward RECV completes; its `SequentialPingPongResult` exposes total
+operation RTT and the two directional operation latencies. The three batch
+helpers post all SEND and matching RECV commands at one simulation timestamp
+and perform one final fence. Their `BatchedNMCReplayResult` aggregates payload,
+elapsed time, total throughput, and named `BatchedNMCStreamResult` records from
+typed endpoint completion timestamps. None of these workload results infer
+end-to-end performance from router trace latency.

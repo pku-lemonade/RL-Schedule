@@ -6,17 +6,22 @@ runtime resources for both full-duplex PE NMC channels and enforces per-channel
 descriptor capacity and posting time. Static and dynamic shape modes and their
 measured per-endpoint setup targets are defined. Source SEND metadata reaches
 NMC admission without entering Flits, and the non-duplicated residual setup
-stage calibrates idle first-flit injection to those targets. The command-level
-RECV path independently applies destination setup timing, reassembles by
-message ID, and completes after TAIL RX service. DFG communication nodes select
-their channel and endpoint shape mode, and Task SEND/RECV execution uses these
-NMC command APIs. DMA endpoint execution remains later work.
+stage calibrates command-level one-way completion to those intercepts plus the
+measured per-hop slope. Router injection occurs earlier so the fixed
+post-injection router and destination stages are counted exactly once. The
+command-level RECV path independently applies destination readiness timing,
+reassembles by message ID, and completes after TAIL RX service. DFG
+communication nodes select their channel and endpoint shape mode, and Task
+SEND/RECV execution uses these NMC command APIs. DMA endpoint execution remains
+later work.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb54 latency and packetization evidence
 is separate from the rb56/rb58 32 KB batched-throughput evidence. These values
 are validation targets; they cannot select a runtime shape mode or alter static
-and dynamic endpoint timing.
+and dynamic endpoint timing. `benchmark_workloads.py` provides typed sequential
+ping-pong, single-channel batch, dual-channel same-direction batch, and
+dual-channel full-duplex replay schedules at the endpoint command boundary.
 
 The Phase 2 model is deterministic:
 
@@ -33,6 +38,8 @@ The Phase 2 model is deterministic:
   service rates;
 - independent CH0/CH1 descriptor issuers with configurable posting time and
   outstanding capacity;
+- an idle-aware, size-independent TX inter-command turnaround calibrated from
+  the N=32, 32 KB throughput schedules;
 - mandatory event tracing through `NoCTracer`.
 
 Run the standalone validation suite with a Python environment containing
@@ -44,4 +51,6 @@ python -m unittest simulator_detailed.tests.test_phase2_noc
 
 The tests cover direct flit injection, `NMCChannel` packet service, command-level
 receive reassembly, and architecture-owned Core/Task SEND/RECV execution on both
-fabrics and in opposite directions.
+fabrics and in opposite directions. They also replay static, dynamic, and mixed
+sequential RTT fits plus the named 32 KB simplex, dual-channel, and full-duplex
+throughput schedules.

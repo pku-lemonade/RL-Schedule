@@ -10,6 +10,16 @@ from simulator_detailed.benchmark_references import (
     NMC_32K_BATCH_REFERENCE,
     RB54_LATENCY_REFERENCE,
 )
+from simulator_detailed.benchmark_workloads import (
+    BatchedNMCReplayResult,
+    BatchedNMCStream,
+    NMCBenchmarkScenario,
+    SequentialPingPongResult,
+    replay_dual_channel_full_duplex_batch,
+    replay_dual_channel_same_direction_batch,
+    replay_sequential_ping_pong,
+    replay_single_channel_batch,
+)
 from simulator_detailed.configs.schemas.arch_config import (
     CoreConfig,
     DMAEngineConfig,
@@ -547,20 +557,51 @@ class Phase2NoCTests(unittest.TestCase):
             ):
                 first_launch_times.setdefault(event.msg_id, event.time)
 
-        first_link_launch = (
-            source.shape_timing.endpoint_setup_target_aci_cycles(
-                NMCShapeMode.DYNAMIC
-            )
-            - source.binding.tx_link.serialization_aci_cycles
-            - source.binding.tx_link.effective_link_stage_aci_cycles
-        )
         self.assertEqual(set(first_launch_times), {120, 121, 122})
-        for index, msg_id in enumerate((120, 121, 122), start=1):
-            self.assertAlmostEqual(
-                first_launch_times[msg_id],
-                first_link_launch
-                + (index - 1) * source.config.descriptor_issue_cycles,
+        self.assertEqual(
+            [
+                process.value.descriptor_acceptance_time_aci_cycles
+                for process in send_processes
+            ],
+            [13.0, 26.0, 39.0],
+        )
+        self.assertEqual(
+            sorted(first_launch_times, key=first_launch_times.__getitem__),
+            [120, 121, 122],
+        )
+        for previous, current in zip(
+            (120, 121),
+            (121, 122),
+        ):
+            self.assertGreaterEqual(
+                first_launch_times[current] - first_launch_times[previous],
+                source.config.inter_command_turnaround_aci_cycles,
             )
+
+    def test_nmc_inter_command_turnaround_expires_while_idle(self):
+        harness = MeshHarness()
+        source = harness.attach_nmc(0)
+        destination = harness.attach_nmc(1)
+
+        first_send = source.send(harness.message(123, 0, 1, 1))
+        first_receive = destination.recv_flit()
+        harness.env.run(until=harness.env.all_of((first_send, first_receive)))
+
+        harness.env.run(
+            until=harness.env.timeout(
+                source.config.inter_command_turnaround_aci_cycles + 1.0
+            )
+        )
+        second_send = source.send(harness.message(124, 0, 1, 1))
+        second_receive = destination.recv_flit()
+        harness.env.run(
+            until=harness.env.all_of((second_send, second_receive))
+        )
+
+        self.assertAlmostEqual(
+            second_send.value.operation_latency_aci_cycles,
+            first_send.value.operation_latency_aci_cycles,
+        )
 
     def test_nmc_descriptor_issuers_are_independent_across_channels(self):
         env = simpy.Environment()
@@ -616,7 +657,9 @@ class Phase2NoCTests(unittest.TestCase):
             .shape_timing.dynamic_endpoint_setup_aci_cycles
             - sources[NoCChannel.CH0].binding.tx_link.serialization_aci_cycles
             - sources[NoCChannel.CH0]
-            .binding.tx_link.effective_link_stage_aci_cycles,
+            .binding.tx_link.effective_link_stage_aci_cycles
+            - sources[NoCChannel.CH0]
+            .post_injection_endpoint_completion_aci_cycles,
         )
 
     def test_nmc_directional_service_uses_the_slowest_pipeline_stage(self):
@@ -1049,8 +1092,13 @@ class Phase2NoCTests(unittest.TestCase):
             for event in ch1_events
             if event.action is FlitAction.INJECT
         )
-        self.assertAlmostEqual(first_injection, 79.5)
-        self.assertGreaterEqual(float(env.now), 126.0)
+        source_channel = cores[0].nmc_channel_for(NoCChannel.CH1)
+        self.assertAlmostEqual(
+            first_injection,
+            79.5
+            - source_channel.post_injection_endpoint_completion_aci_cycles,
+        )
+        self.assertGreaterEqual(float(env.now), 125.0)
 
     def test_task_channels_support_dual_fabric_and_full_duplex_flows(self):
         payload_bytes = 512
@@ -1507,6 +1555,254 @@ class Phase2NoCTests(unittest.TestCase):
             delta=0.005,
         )
 
+    def test_sequential_ping_pong_replays_static_dynamic_and_mixed_rtt(self):
+        mode_pairs = (
+            (NMCShapeMode.STATIC, NMCShapeMode.STATIC),
+            (NMCShapeMode.DYNAMIC, NMCShapeMode.DYNAMIC),
+            (NMCShapeMode.STATIC, NMCShapeMode.DYNAMIC),
+            (NMCShapeMode.DYNAMIC, NMCShapeMode.STATIC),
+        )
+        for forward_mode, reverse_mode in mode_pairs:
+            with self.subTest(
+                forward_mode=forward_mode,
+                reverse_mode=reverse_mode,
+            ):
+                harness = MeshHarness()
+                initiator = harness.attach_nmc(0)
+                responder = harness.attach_nmc(1)
+                forward = harness.message(160, 0, 1, 1).model_copy(
+                    update={"nmc_shape_mode": forward_mode}
+                )
+                reverse = harness.message(161, 1, 0, 1).model_copy(
+                    update={"nmc_shape_mode": reverse_mode}
+                )
+
+                replay = replay_sequential_ping_pong(
+                    initiator,
+                    responder,
+                    forward,
+                    reverse,
+                    forward_receive_shape_mode=forward_mode,
+                    reverse_receive_shape_mode=reverse_mode,
+                )
+                harness.env.run(until=replay)
+                result = replay.value
+                expected_rtt = (
+                    initiator.shape_timing.endpoint_setup_target_aci_cycles(
+                        forward_mode
+                    )
+                    + responder.shape_timing.endpoint_setup_target_aci_cycles(
+                        reverse_mode
+                    )
+                    + RB54_LATENCY_REFERENCE.rtt_hop_slope_aci_cycles
+                )
+
+                self.assertIsInstance(result, SequentialPingPongResult)
+                self.assertIs(
+                    result.scenario,
+                    NMCBenchmarkScenario.SEQUENTIAL_PING_PONG,
+                )
+                self.assertAlmostEqual(
+                    result.operation_rtt_aci_cycles,
+                    expected_rtt,
+                )
+                self.assertAlmostEqual(
+                    result.operation_rtt_aci_cycles,
+                    result.forward_operation_latency_aci_cycles
+                    + result.reverse_operation_latency_aci_cycles,
+                )
+
+        for hops, measured_rtt in RB54_LATENCY_REFERENCE.hop_samples:
+            with self.subTest(rb54_hops=hops):
+                x = min(3, hops)
+                y = hops - x
+                destination_id = y * 4 + x
+                harness = MeshHarness()
+                initiator = harness.attach_nmc(0)
+                responder = harness.attach_nmc(destination_id)
+                forward = harness.message(
+                    170 + hops,
+                    0,
+                    destination_id,
+                    1,
+                ).model_copy(
+                    update={"nmc_shape_mode": NMCShapeMode.STATIC}
+                )
+                reverse = harness.message(
+                    180 + hops,
+                    destination_id,
+                    0,
+                    1,
+                ).model_copy(
+                    update={"nmc_shape_mode": NMCShapeMode.DYNAMIC}
+                )
+
+                replay = replay_sequential_ping_pong(
+                    initiator,
+                    responder,
+                    forward,
+                    reverse,
+                    forward_receive_shape_mode=NMCShapeMode.STATIC,
+                    reverse_receive_shape_mode=NMCShapeMode.DYNAMIC,
+                )
+                harness.env.run(until=replay)
+
+                self.assertAlmostEqual(
+                    replay.value.operation_rtt_aci_cycles,
+                    measured_rtt,
+                    delta=1.0,
+                )
+
+    def test_named_32k_batch_replays_match_rb56_rb58_rates(self):
+        reference = NMC_32K_BATCH_REFERENCE
+
+        def make_stream(
+            harness,
+            source,
+            destination,
+            *,
+            name,
+            first_message_id,
+        ):
+            messages = tuple(
+                harness.message(
+                    first_message_id + index,
+                    source.binding.address.node_id,
+                    destination.binding.address.node_id,
+                    reference.message_bytes // FLIT_BYTES,
+                )
+                for index in range(reference.messages_per_stream)
+            )
+            return BatchedNMCStream(
+                name=name,
+                source=source,
+                destination=destination,
+                messages=messages,
+                receive_shape_mode=NMCShapeMode.DYNAMIC,
+            )
+
+        for src, dst, name, expected_rate in (
+            (0, 1, "tx_ch0", reference.simplex_tx_bytes_per_aci_cycle),
+            (1, 0, "rx_ch0", reference.simplex_rx_bytes_per_aci_cycle),
+        ):
+            harness = MeshHarness()
+            channels = {
+                pe_id: harness.attach_nmc(pe_id) for pe_id in (0, 1)
+            }
+            stream = make_stream(
+                harness,
+                channels[src],
+                channels[dst],
+                name=name,
+                first_message_id=200 if src == 0 else 300,
+            )
+            replay = replay_single_channel_batch(stream)
+            harness.env.run(until=replay)
+            result = replay.value
+
+            self.assertIsInstance(result, BatchedNMCReplayResult)
+            self.assertIs(
+                result.scenario,
+                NMCBenchmarkScenario.SINGLE_CHANNEL_BATCH,
+            )
+            self.assertEqual(
+                result.aggregate_payload_bytes,
+                reference.payload_bytes_per_stream,
+            )
+            self.assertAlmostEqual(
+                result.aggregate_throughput_bytes_per_aci_cycle,
+                expected_rate,
+                delta=expected_rate * 0.05,
+            )
+            self.assertEqual(
+                result.stream_throughput_bytes_per_aci_cycle(name),
+                result.aggregate_throughput_bytes_per_aci_cycle,
+            )
+
+        env = simpy.Environment()
+        harnesses = {
+            fabric_id: MeshHarness(fabric_id, env=env)
+            for fabric_id in NoCChannel
+        }
+        channels = {
+            (fabric_id, pe_id): harness.attach_nmc(pe_id)
+            for fabric_id, harness in harnesses.items()
+            for pe_id in (0, 1)
+        }
+        same_direction_streams = tuple(
+            make_stream(
+                harnesses[fabric_id],
+                channels[(fabric_id, 0)],
+                channels[(fabric_id, 1)],
+                name=f"{fabric_id.name.lower()}_forward",
+                first_message_id=400,
+            )
+            for fabric_id in NoCChannel
+        )
+        dual_same_direction = replay_dual_channel_same_direction_batch(
+            same_direction_streams[0],
+            same_direction_streams[1],
+        )
+        env.run(until=dual_same_direction)
+        dual_same_result = dual_same_direction.value
+
+        self.assertIs(
+            dual_same_result.scenario,
+            NMCBenchmarkScenario.DUAL_CHANNEL_SAME_DIRECTION_BATCH,
+        )
+        self.assertAlmostEqual(
+            dual_same_result.aggregate_throughput_bytes_per_aci_cycle,
+            reference.dual_same_direction_bytes_per_aci_cycle,
+            delta=reference.dual_same_direction_bytes_per_aci_cycle * 0.05,
+        )
+
+        env = simpy.Environment()
+        harnesses = {
+            fabric_id: MeshHarness(fabric_id, env=env)
+            for fabric_id in NoCChannel
+        }
+        channels = {
+            (fabric_id, pe_id): harness.attach_nmc(pe_id)
+            for fabric_id, harness in harnesses.items()
+            for pe_id in (0, 1)
+        }
+        full_duplex_streams = []
+        for fabric_id in NoCChannel:
+            harness = harnesses[fabric_id]
+            full_duplex_streams.extend(
+                (
+                    make_stream(
+                        harness,
+                        channels[(fabric_id, 0)],
+                        channels[(fabric_id, 1)],
+                        name=f"{fabric_id.name.lower()}_forward",
+                        first_message_id=500,
+                    ),
+                    make_stream(
+                        harness,
+                        channels[(fabric_id, 1)],
+                        channels[(fabric_id, 0)],
+                        name=f"{fabric_id.name.lower()}_reverse",
+                        first_message_id=600,
+                    ),
+                )
+            )
+        dual_full_duplex = replay_dual_channel_full_duplex_batch(
+            *full_duplex_streams
+        )
+        env.run(until=dual_full_duplex)
+        dual_full_result = dual_full_duplex.value
+
+        self.assertIs(
+            dual_full_result.scenario,
+            NMCBenchmarkScenario.DUAL_CHANNEL_FULL_DUPLEX_BATCH,
+        )
+        self.assertAlmostEqual(
+            dual_full_result.aggregate_throughput_bytes_per_aci_cycle,
+            reference.dual_full_duplex_bytes_per_aci_cycle,
+            delta=reference.dual_full_duplex_bytes_per_aci_cycle * 0.05,
+        )
+
     def test_nmc_shape_mode_reaches_send_admission_but_not_flits(self):
         harness = MeshHarness()
         source = harness.attach_nmc(0)
@@ -1552,12 +1848,15 @@ class Phase2NoCTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             admitted_entry.endpoint_ready_time_aci_cycles,
-            source.shape_timing.static_endpoint_setup_aci_cycles
-            - source.first_injection_transport_aci_cycles,
+            (
+                source.shape_timing.static_endpoint_setup_aci_cycles
+                - source.first_injection_transport_aci_cycles
+                - source.post_injection_endpoint_completion_aci_cycles
+            ),
         )
         self.assertEqual(received, static_message.packetize())
 
-    def test_nmc_shape_timing_calibrates_idle_first_injection(self):
+    def test_nmc_shape_timing_calibrates_idle_endpoint_completion(self):
         expected_targets = {
             NMCShapeMode.STATIC: 79.5,
             NMCShapeMode.DYNAMIC: 125.0,
@@ -1576,7 +1875,10 @@ class Phase2NoCTests(unittest.TestCase):
                 )
 
                 send_process = source.send(message)
-                receive_process = destination.recv_flit()
+                receive_process = destination.recv_message(
+                    message,
+                    shape_mode,
+                )
                 harness.env.run(
                     until=harness.env.all_of(
                         (send_process, receive_process)
@@ -1592,8 +1894,18 @@ class Phase2NoCTests(unittest.TestCase):
                 represented_cycles = (
                     source.config.descriptor_issue_cycles
                     + source.first_injection_transport_aci_cycles
+                    + source.post_injection_endpoint_completion_aci_cycles
                 )
-                self.assertAlmostEqual(injection_time, expected_target)
+                self.assertAlmostEqual(
+                    injection_time,
+                    expected_target
+                    - source.post_injection_endpoint_completion_aci_cycles,
+                )
+                self.assertAlmostEqual(
+                    receive_process.value.operation_completion_time_aci_cycles,
+                    expected_target
+                    + RB54_LATENCY_REFERENCE.rtt_hop_slope_aci_cycles / 2,
+                )
                 self.assertAlmostEqual(
                     source.endpoint_setup_residual_aci_cycles(shape_mode),
                     expected_target - represented_cycles,
@@ -1648,7 +1960,10 @@ class Phase2NoCTests(unittest.TestCase):
             [153, 154],
         )
         self.assertEqual([flit.msg_id for flit in received], [153, 154])
-        self.assertAlmostEqual(injection_events[0].time, 125.0)
+        self.assertAlmostEqual(
+            injection_events[0].time,
+            125.0 - source.post_injection_endpoint_completion_aci_cycles,
+        )
         self.assertGreater(injection_events[1].time, injection_events[0].time)
 
     def test_router_burst_default_resolves_to_hardware_burst_len_7(self):

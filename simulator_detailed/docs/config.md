@@ -15,9 +15,10 @@ The relevant configuration objects are:
   two-flit `effective_in_flight_window_flits`, and a separately calibrated
   `sync_credit_return_aci_cycles`.
 - `NMCChannelConfig`: independent TX/RX rates of 120 B/ACI-cycle, a 57-ACI-cycle
-  descriptor issue cost, and 24 outstanding descriptors. Fix 9B converts each
-  directional rate to a `512 / bytes_per_cycle` flit service interval. Fix 10A
-  uses `max_outstanding_descriptors` as the capacity of each channel's runtime
+  descriptor issue cost, an effective 101-ACI-cycle TX inter-command
+  turnaround, and 24 outstanding descriptors. Fix 9B converts each directional
+  rate to a `512 / bytes_per_cycle` flit service interval. Fix 10A uses
+  `max_outstanding_descriptors` as the capacity of each channel's runtime
   descriptor slot pool. Fix 10B uses `descriptor_issue_cycles` as the serialized
   posting time before an admitted command enters directional data service.
 - `NMCConfig`: explicit `ch0` and `ch1` configurations. There is no shared
@@ -60,20 +61,33 @@ Descriptor posting is a per-command stage, not a per-flit penalty. Commands on
 one channel are issued at `descriptor_issue_cycles` intervals, while CH0 and CH1
 have independent issuers. A full descriptor pool stalls the oldest command at
 the channel issuer until an earlier command completes and releases a slot.
+The effective `inter_command_turnaround_aci_cycles` is also per TX command, but
+it is measured from the previous command's final local-Link handoff. It delays
+only a back-to-back command that arrives before this boundary; the first command
+and a command submitted after sufficient idle time receive no extra delay. The
+101-cycle default is calibrated from the N=32, 32 KB rb56/rb58 schedules and
+does not alter service between flits of one message.
 
 `NMCShapeMode` contains exactly `STATIC` and `DYNAMIC`. `NMCShapeTimingConfig`
 stores their measured total per-endpoint setup targets as 79.5 and 125 ACI
 cycles. These targets already include descriptor programming, command decode,
-outer-sync ACQUIRE, and first-flit injection; they are not additive delays to
-place on top of every existing endpoint stage. For source SEND, the simulator
-subtracts descriptor posting, first-flit NMC TX service, and nominal PE-link
-serialization/stage time, then pipelines only the non-negative residual before
-TX service. With default values, the represented time is
-`57 + 512/120 + 4 + 0.5 = 65.7667` cycles, leaving residuals of approximately
-13.7333 static and 59.2333 dynamic cycles. A deliberately slower modeled stage
-can already exceed a target, in which case the residual is zero. `send_with_sync`
-is an API used by the measured operations, not a shape mode, and the rb54
-204-cycle RTT intercept is benchmark data rather than runtime configuration.
+outer-sync ACQUIRE, first-flit source transport, the fixed source-router
+pipeline, destination PE-link delivery, and first-flit NMC RX service; they are
+not additive delays to place on top of those stages. For source SEND, the
+simulator subtracts descriptor posting, first-flit NMC TX service, source
+PE-link serialization/stage time, RC/SA/ST, destination PE-link
+serialization/stage time, and first-flit NMC RX service, then pipelines only
+the non-negative residual before TX service. With default values, the
+represented fixed time is
+`57 + (512/120 + 4 + 0.5) + (1 + 2 + 1 + 4 + 0.5 + 512/120)` =
+78.5333 cycles, leaving residuals of approximately 0.9667 static and 46.4667
+dynamic cycles. Router `INJECT` therefore occurs at approximately 66.7333 or
+112.2333 cycles, with the remaining 12.7667 non-hop cycles completing the
+79.5/125 endpoint intercept. Each router hop then contributes the measured 8.5
+ACI cycles one way. A deliberately slower modeled stage can already exceed a
+target, in which case the residual is zero. `send_with_sync` is an API used by
+the measured operations, not a shape mode, and the rb54 204-cycle RTT intercept
+is benchmark data rather than runtime configuration.
 
 Credits are traced on `NoCPlane.SYNC` while retaining the CH0/CH1 data fabric
 whose capacity they return. The default effective credit-return delay is zero

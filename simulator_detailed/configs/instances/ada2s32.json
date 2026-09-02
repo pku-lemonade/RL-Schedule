@@ -26,12 +26,14 @@
         "tx_bytes_per_cycle": 120.0,
         "rx_bytes_per_cycle": 120.0,
         "descriptor_issue_cycles": 57.0,
+        "inter_command_turnaround_aci_cycles": 101.0,
         "max_outstanding_descriptors": 24
       },
       "ch1": {
         "tx_bytes_per_cycle": 120.0,
         "rx_bytes_per_cycle": 120.0,
         "descriptor_issue_cycles": 57.0,
+        "inter_command_turnaround_aci_cycles": 101.0,
         "max_outstanding_descriptors": 24
       },
       "shape_timing": {

@@ -207,6 +207,7 @@ class NMCChannelConfig(BaseModel):
     tx_bytes_per_cycle: float = Field(default=120.0, gt=0)
     rx_bytes_per_cycle: float = Field(default=120.0, gt=0)
     descriptor_issue_cycles: float = Field(default=57.0, ge=0)
+    inter_command_turnaround_aci_cycles: float = Field(default=101.0, ge=0)
     max_outstanding_descriptors: int = Field(default=24, gt=0)
 
 

@@ -186,14 +186,28 @@ class NMCChannel:
             + self.binding.tx_link.effective_link_stage_aci_cycles
         )
 
+    @property
+    def post_injection_endpoint_completion_aci_cycles(self) -> float:
+        """Fixed non-hop time from router injection through PE RX service."""
+        pipeline = self.binding.router.config.pipeline
+        return (
+            pipeline.effective_rc_aci_cycles
+            + pipeline.effective_sa_aci_cycles
+            + pipeline.effective_st_aci_cycles
+            + self.binding.rx_link.serialization_aci_cycles
+            + self.binding.rx_link.effective_link_stage_aci_cycles
+            + self.rx_service_interval_aci_cycles
+        )
+
     def endpoint_setup_residual_aci_cycles(
         self,
         shape_mode: NMCShapeMode,
     ) -> float:
-        """Return setup time not represented by posting and source transport."""
+        """Return setup not represented through destination RX completion."""
         represented_cycles = (
             self.config.descriptor_issue_cycles
             + self.first_injection_transport_aci_cycles
+            + self.post_injection_endpoint_completion_aci_cycles
         )
         residual_cycles = (
             self.shape_timing.endpoint_setup_target_aci_cycles(shape_mode)
@@ -439,8 +453,14 @@ class NMCChannel:
             )
 
     def _tx_service_loop(self) -> ProcessGenerator:
+        next_command_service_time_aci_cycles = float(self.env.now)
         while True:
             entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
+            turnaround_wait = (
+                next_command_service_time_aci_cycles - float(self.env.now)
+            )
+            if turnaround_wait > 0:
+                yield self.env.timeout(turnaround_wait)
             setup_wait = (
                 entry.endpoint_ready_time_aci_cycles - float(self.env.now)
             )
@@ -453,6 +473,10 @@ class NMCChannel:
                     yield self.env.timeout(self.tx_service_interval_aci_cycles)
                     yield self.binding.tx_link.send_flit(flit)
             final_local_handoff_time_aci_cycles = float(self.env.now)
+            next_command_service_time_aci_cycles = (
+                final_local_handoff_time_aci_cycles
+                + self.config.inter_command_turnaround_aci_cycles
+            )
             entry.completion.succeed(
                 NMCTransmitResult(
                     flits=entry.flits,

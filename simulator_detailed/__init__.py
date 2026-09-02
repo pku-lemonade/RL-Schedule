@@ -8,6 +8,17 @@ for _p in (_parent_dir, _pkg_dir):
         _sys.path.insert(0, _p)
 
 from .architecture import Arch
+from .benchmark_workloads import (
+    BatchedNMCReplayResult,
+    BatchedNMCStream,
+    BatchedNMCStreamResult,
+    NMCBenchmarkScenario,
+    SequentialPingPongResult,
+    replay_dual_channel_full_duplex_batch,
+    replay_dual_channel_same_direction_batch,
+    replay_sequential_ping_pong,
+    replay_single_channel_batch,
+)
 from .core import Core
 from .noc import Link, NoC, Router
 from .pe_channel import (
@@ -21,8 +32,12 @@ from .pe_channel import (
 
 __all__ = [
     "Arch",
+    "BatchedNMCReplayResult",
+    "BatchedNMCStream",
+    "BatchedNMCStreamResult",
     "Core",
     "Link",
+    "NMCBenchmarkScenario",
     "NMCChannel",
     "NMCReceiveEntry",
     "NMCReceiveResult",
@@ -31,6 +46,11 @@ __all__ = [
     "NoC",
     "PEChannelBinding",
     "Router",
+    "SequentialPingPongResult",
+    "replay_dual_channel_full_duplex_batch",
+    "replay_dual_channel_same_direction_batch",
+    "replay_sequential_ping_pong",
+    "replay_single_channel_batch",
 ]
 
 for _name, _mod in list(_sys.modules.items()):

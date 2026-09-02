@@ -598,12 +598,15 @@ Tests:
 Status: implemented at both SEND and RECV command boundaries. Command
 submission and descriptor acceptance are retained on admitted operations,
 while the existing source-router `INJECT` event defines first fabric injection.
-The SEND composition adds only the residual above 57-cycle posting, NMC TX
-service, and PE-link delivery to reach 79.5/125 cycles. RECV independently
-reaches its selected endpoint-ready target and completes no earlier than both
-that target and the matching TAIL's RX-service completion. Source and
-destination setup may overlap in one transfer; they must not be summed to fake
-the sequential ping-pong RTT benchmark. Exact RTT replay remains Fix 12 work.
+The SEND composition adds only the residual above descriptor posting, source
+transport, and the fixed post-injection endpoint path. This places router
+injection before the measured 79.5/125-cycle endpoint intercept so command-level
+RECV completion reaches that intercept plus 8.5 ACI cycles per router hop. RECV
+independently reaches its selected endpoint-ready target and completes no
+earlier than both that target and the matching TAIL's RX-service completion.
+Source and destination setup may overlap in one transfer; they are not summed
+to fake the sequential ping-pong RTT benchmark. Fix 12C now validates the
+composition with explicit sequential ping-pong workloads.
 
 Code changes:
 
@@ -611,8 +614,9 @@ Code changes:
   injection timestamps in the ACI timebase.
 - Treat the existing 57-cycle descriptor-posting stage as part of the measured
   79.5/125-cycle endpoint setup target. Add only the residual endpoint delay
-  not already represented by descriptor posting, NMC service, and PE-side
-  injection stages at the chosen timestamp boundary.
+  not already represented by descriptor posting, first-flit NMC TX and PE-link
+  delivery, the fixed source-router pipeline, destination PE-link delivery, and
+  first-flit NMC RX service.
 - Apply the same accounting to command-level receive admission. Never add a
   whole 79.5/125-cycle endpoint delay on top of the existing 57-cycle posting
   delay.
@@ -621,13 +625,14 @@ Code changes:
 
 Tests:
 
-- Idle static and dynamic SEND commands inject their first flit at 79.5 and 125
-  ACI cycles after submission.
+- Idle static and dynamic SEND commands inject their first flit at approximately
+  66.733 and 112.233 ACI cycles after submission, leaving the fixed 12.767-cycle
+  non-hop path before command-level receive completion.
 - RECV endpoint-ready timestamps independently reach their selected static or
   dynamic target and operation completion waits for matching TAIL RX service.
 - Fabric-only timestamps exclude descriptor and endpoint setup time.
-- Fix 12 replays the sequential static, dynamic, and mixed ping-pong workloads
-  before comparing against the corresponding RTT intercepts.
+- Fix 12C replays sequential static, dynamic, and mixed ping-pong workloads and
+  compares their operation-level RTTs with the corresponding measured fits.
 
 ### Fix 10C-4: Use rb54 as Benchmark Validation, Not a Mode
 
@@ -636,8 +641,7 @@ configuration. The rb54 latency/packetization evidence is kept separate from
 the rb56/rb58 32 KB batched-throughput evidence. Executable checks bind rb54's
 flit count, default eight-flit burst boundary, and 17-cycle RTT hop slope to the
 current model. Replaying the 204-cycle RTT intercept and 32 KB command-level
-rates remains an end-to-end acceptance task in Fix 12 using the complete
-SEND/RECV workload boundary.
+rates is implemented by Fix 12C at the complete SEND/RECV workload boundary.
 
 Code changes:
 
@@ -660,7 +664,7 @@ Tests:
   payload-size evidence without changing static/dynamic endpoint targets.
 - The separate rb56/rb58 reference preserves approximately 87 B/ACI-cycle per
   channel and approximately 340 B/ACI-cycle for dual-channel full duplex.
-- End-to-end benchmark replay in Fix 12 checks that the simulator approaches
+- End-to-end benchmark replay in Fix 12C checks that the simulator approaches
   those rates under the exact 32 KB batched command schedule.
 
 ## Fix 11: Repair SEND/RECV Integration
@@ -753,6 +757,15 @@ Tests:
 
 ### Fix 12C: Replay Measured Workloads
 
+Status: implemented. `benchmark_workloads.py` defines typed sequential
+ping-pong and N=32 batched-stream schedules whose results are derived from
+endpoint operation timestamps rather than fabric-only traces. Static and
+dynamic RTT fits are reproduced exactly, and both mixed orderings track rb54's
+204-cycle intercept within the benchmark tolerance. A size-independent,
+idle-aware 101-ACI-cycle TX inter-command turnaround reproduces the rb56/rb58
+32 KB simplex, dual-channel same-direction, and dual-channel full-duplex rates
+without changing packetization or the established within-message flit rate.
+
 Code changes:
 
 - Build end-to-end operation latency from explicit endpoint operation results
@@ -761,6 +774,10 @@ Code changes:
   by adding both endpoint targets to one concurrently posted one-way transfer.
 - Add explicit single-channel, dual-channel, and full-duplex benchmark harnesses
   using the measured payload sizes and command schedules.
+- Model the measured gap between consecutive TX commands as one configurable
+  channel turnaround after the previous command's final local handoff. Skip the
+  wait for the first command and whenever natural idle time has already covered
+  it; do not special-case 32 KB payloads or add a per-flit penalty.
 
 Tests:
 
@@ -768,6 +785,8 @@ Tests:
 - Static, dynamic, and mixed RTT checks use sequential ping-pong operations.
 - Per-fabric, dual-fabric, and full-duplex throughput checks use separate named
   benchmark schedules.
+- The N=32, 32 KB replay rates remain within five percent of the rb56/rb58
+  simplex TX, simplex RX, dual-channel same-direction, and full-duplex results.
 
 ### Fix 12D: Finish Documentation and Strict Checks
 
