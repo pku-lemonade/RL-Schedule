@@ -433,6 +433,16 @@ class Message(BaseModel):
         """Total payload size in bytes."""
         return Slice(tensor_slice=self.data).size()
 
+    @staticmethod
+    def _flit_type_at(flit_index: int, flit_count: int) -> FlitType:
+        if flit_count == 1:
+            return FlitType.SINGLE
+        if flit_index == 0:
+            return FlitType.HEAD
+        if flit_index == flit_count - 1:
+            return FlitType.TAIL
+        return FlitType.BODY
+
     def packetize(self) -> list[Flit]:
         """Split this addressed message into fixed-capacity hardware flits."""
         if self.trans_type is not TransType.SINGLECAST:
@@ -453,20 +463,11 @@ class Message(BaseModel):
         flits: list[Flit] = []
 
         for flit_index in range(flit_count):
-            if flit_count == 1:
-                flit_type = FlitType.SINGLE
-            elif flit_index == 0:
-                flit_type = FlitType.HEAD
-            elif flit_index == flit_count - 1:
-                flit_type = FlitType.TAIL
-            else:
-                flit_type = FlitType.BODY
-
             flit_payload_bytes = min(remaining_bytes, FLIT_BYTES)
             remaining_bytes -= flit_payload_bytes
             flits.append(
                 Flit(
-                    flit_type=flit_type,
+                    flit_type=self._flit_type_at(flit_index, flit_count),
                     payload_bytes=flit_payload_bytes,
                     msg_id=self.index,
                     fabric_id=self.src.fabric_id,
@@ -483,6 +484,37 @@ class Message(BaseModel):
             )
 
         return flits
+
+    def validate_flit(
+        self,
+        flit: Flit,
+        flit_index: int,
+        flit_count: int,
+    ) -> None:
+        """Validate one received flit against this message's wire identity."""
+        expected_payload_bytes = min(
+            FLIT_BYTES,
+            max(0, self.payload_bytes() - flit_index * FLIT_BYTES),
+        )
+        if (
+            flit.flit_type is not self._flit_type_at(flit_index, flit_count)
+            or flit.payload_bytes != expected_payload_bytes
+            or flit.msg_id != self.index
+            or flit.fabric_id is not self.src.fabric_id
+            or flit.src_router != self.src.router_id
+            or flit.src_local_port != self.src.local_port
+            or flit.dst_router != self.dst.router_id
+            or flit.dst_local_port != self.dst.local_port
+            or flit.is_broadcast != self.is_broadcast
+            or flit.broadcast_dst_mask != self.broadcast_dst_mask
+            or flit.reduce_op != self.reduce_op
+            or flit.sync_mode != self.sync_mode
+            or flit.burst_len_mode is not self.burst_len_mode
+        ):
+            raise RuntimeError(
+                f"message {self.index} received an invalid flit at index "
+                f"{flit_index}"
+            )
 
     def __lt__(self, other: Message) -> bool:
         return self.payload_bytes() < other.payload_bytes()

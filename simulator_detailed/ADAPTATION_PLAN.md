@@ -3,8 +3,8 @@
 ## Authority and Status
 
 This document is the forward roadmap for `simulator_detailed`. It describes the
-implemented Phase 2 boundary and the remaining hardware-modeling phases. It is
-not a second hardware specification.
+implemented Phase 2 boundary, the active Phase 3 work, and the remaining
+hardware-modeling phases. It is not a second hardware specification.
 
 Use these sources in this order:
 
@@ -14,9 +14,10 @@ Use these sources in this order:
 4. `configs/instances/ada2s32.json` is the canonical executable snapshot.
 5. This file defines future implementation order and acceptance boundaries.
 
-Phase 2 is implemented for calibrated PE-to-PE SINGLECAST transport. GM/DDR
-execution, collectives, route reduction, detailed compute/SRAM contention, and
-the optional ML predictor adaptation remain separate later phases.
+Phase 2 is implemented for calibrated PE-to-PE SINGLECAST transport. Configured
+GM endpoints now have an executable but uncalibrated command path. DDR execution,
+collectives, route reduction, detailed compute/SRAM contention, and the optional
+ML predictor adaptation remain separate later phases.
 
 ## Confirmed Hardware Baseline
 
@@ -57,7 +58,8 @@ confirmed 512 B user payload carried by each flit.
 - `Message` owns resolved source and destination addresses and packetizes with
   `ceil(payload_bytes / 512)`.
 - `Flit` is immutable and retains fabric, route, message, and burst metadata.
-- Unsupported transfer types and unimplemented DMA execution fail explicitly.
+- Unsupported transfer types, AIU-local DMA paths, and DDR execution fail
+  explicitly.
 
 ### Fabric Transport
 
@@ -128,9 +130,9 @@ correction series: architecture, relevant configuration schemas, core/task
 integration, endpoint registry, NoC, NMC, tracing, DFG/data types, benchmark
 references/replays, CLI loading, and the dual-fabric predictor topology adapter.
 The exact file list is checked in as `pyrightconfig.phase2.json`. These files
-must pass Pyright strict; those production files and the Phase 2 test module must
-also pass Ruff, `compileall`, the
-Phase 2 unittest suite, and `git diff --check`.
+must pass Pyright strict; changed production files and the focused Phase 2/3
+test modules must also pass Ruff, `compileall`, their unittest suites, and
+`git diff --check`.
 
 The optional learned predictor/model pipeline and dynamically constructed test
 harness are not part of this production strict project. The Torch/PyG-dependent
@@ -143,23 +145,43 @@ repository-wide strict pass.
 
 Implement in small, independently tested commits:
 
-1. **Fix 13A, implemented locally:** create configured GM RDMA/WDMA endpoint
-   objects, bind their validated local ports to both data fabrics, and give each
-   endpoint one internal datapath shared by CH0 and CH1. This is structural
-   ownership only; it does not claim executable or calibrated GM commands.
-2. Add GM RDMA injection and GM WDMA receive commands on those resources.
-3. Add executable DDR RDMA/WDMA endpoint resources and explicit 1200 MHz to ACI
-   conversion.
-4. Make command service use the shared internal RDMA/WDMA datapath introduced by
-   Fix 13A, so CH0 and CH1 do not incorrectly double GM/DDR aggregate bandwidth.
-5. Add dual-side and single-side command execution without changing address
-   resolution semantics.
-6. Calibrate PE-to-GM and PE-to-DDR latency, direction asymmetry, and aggregate
-   caps against the corresponding architecture measurements.
-6. Add endpoint failures and endpoint-level trace collection.
+1. **Fix 13A, committed as `637aa86`:** create configured GM RDMA/WDMA
+   endpoints, bind validated local ports to both data fabrics, and give each
+   endpoint one internal datapath shared by CH0 and CH1.
+2. **Fix 13B, implemented locally:** execute paired GM RDMA-to-PE injection and
+   PE-to-GM WDMA receive commands. Use the shared endpoint datapath for per-flit
+   service, preserve packet order between same-fabric RDMA commands, validate
+   received flits through the common `Message` contract, and return typed
+   command-boundary results. This is functional command execution, not timing
+   calibration or single-side request/response modeling.
+3. **Fix 13C:** add GM_WDMA's four outstanding descriptor slots per channel and
+   its confirmed approximately 40-cycle unblocked descriptor-post interval.
+   Add saturation tests at and above the queue boundary; do not branch on a
+   benchmark payload size.
+4. **Fix 13D:** add the GM_WDMA command-processing floor and endpoint setup
+   residual needed to reproduce the approximately 273-cycle small-message drain,
+   0-hop/7-hop upload latency, and approximately 110 B/ACI-cycle shared bulk cap.
+   Validate single-source and N-way incast behavior.
+5. **Fix 13E:** add direction-specific GM_RDMA setup and service parameters for
+   its 0-hop/7-hop download latency and approximately 120-125 B/ACI-cycle bulk
+   cap. Keep its unmeasured descriptor behavior explicitly provisional rather
+   than copying a WDMA calibration silently.
+6. **Fix 13F:** represent software dual-side pairing separately from single-side
+   request/response state. Implement mode-specific command matching and header
+   traffic while preserving the existing physical attachment resolution. Keep
+   AIU-local paths explicitly unsupported.
+7. **Fix 14A:** create DDR RDMA/WDMA runtime resources and explicit 1200 MHz to
+   ACI conversion without enabling command execution.
+8. **Fix 14B:** add paired DDR command execution with one internal datapath per
+   endpoint shared by CH0 and CH1.
+9. **Fix 14C:** add DDR single-side request/response behavior and calibrate
+   direction asymmetry, endpoint latency, and aggregate caps.
+10. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
 
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
-DMA execution empty until this phase provides complete runtime resources.
+`dma_engines` empty until the relevant command path is calibrated. The generic
+`DMAEngineConfig` timing defaults used by Fix 13B are provisional functional
+inputs and must not be presented as hardware-accurate GM results.
 
 ## Deferred Phase 4: Collective Transport
 

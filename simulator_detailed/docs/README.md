@@ -1,4 +1,4 @@
-# simulator_detailed Phase 2
+# simulator_detailed NoC Model
 
 `simulator_detailed` is the cycle-level ADA2S-32 simulator. Phase 2 models the
 on-chip 4-column by 8-row NoC at flit granularity. It includes independent
@@ -12,8 +12,14 @@ post-injection router and destination stages are counted exactly once. The
 command-level RECV path independently applies destination readiness timing,
 reassembles by message ID, and completes after TAIL RX service. DFG
 communication nodes select their channel and endpoint shape mode, and Task
-SEND/RECV execution uses these NMC command APIs. DMA endpoint execution remains
-later work.
+SEND/RECV execution uses these NMC command APIs.
+
+Phase 3 has started with configured GM endpoint ownership and functional command
+execution. GM_RDMA can inject a GM-to-PE payload and GM_WDMA can complete a
+posted PE-to-GM receive. Each endpoint has one internal datapath shared by CH0
+and CH1, while same-fabric RDMA commands retain packet order. This path is not
+yet timing-calibrated, does not model single-side request/response traffic, and
+is intentionally absent from the canonical architecture configuration.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
@@ -49,7 +55,9 @@ Run the standalone validation suite with a Python environment containing
 SimPy and Pydantic:
 
 ```bash
-python -m unittest simulator_detailed.tests.test_phase2_noc
+python -m unittest \
+  simulator_detailed.tests.test_phase2_noc \
+  simulator_detailed.tests.test_phase3_dma
 ```
 
 Run the production Phase 2 strict check from the repository root with:

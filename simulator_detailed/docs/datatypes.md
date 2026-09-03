@@ -61,8 +61,8 @@ bindings, and unresolved DMA paths. PE CH0 and CH1 both use local port 0 but are
 distinct addresses because fabric identity is part of the attachment. DMA
 lookups use `DMAAttachmentMode.DUAL_SIDE`, `SINGLE_SIDE`, or `AIU_LOCAL`; the
 registry maps those modes to documented local ports on the requested fabric.
-AIU addresses are representable, but Phase 2 packetization rejects them until
-an AIU DMA endpoint model exists.
+AIU addresses are representable, but packetization rejects them until an AIU DMA
+endpoint model exists.
 
 `PEChannelBinding` is a concrete physical attachment, not a type or mode. It
 groups one PE address with distinct TX and RX Links and the matching
@@ -141,14 +141,15 @@ size-independent command boundary calibrated from the N=32, 32 KB throughput
 measurements, not a per-packet-size branch or an added interval between flits.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
-PE and WDMA endpoints may consume it. Control-plane requests that trigger RDMA
-work are not payload `Message` objects and belong to the later endpoint model.
+PE and WDMA endpoints may consume it. The Phase 3 GM command API executes the
+paired payload direction directly. Control-plane requests and responses for true
+single-side operation are not payload `Message` objects and remain later work.
 
 `NoCChannel` uses the hardware channel values `CH0=0` and `CH1=1`.
 `DMAAttachmentMode` describes attachment topology and has no hardware numeric
 encoding.
 `TransType` uses the routing-word encoding `SINGLECAST=0`, `FIXPATH=1`,
-`MULTICAST=2`, and `BROADCAST=3`. Phase 2 currently executes only SINGLECAST;
+`MULTICAST=2`, and `BROADCAST=3`. The current runtime executes only SINGLECAST;
 packetization raises `NotImplementedError` for the other representable types so
 they cannot silently follow the unicast path.
 

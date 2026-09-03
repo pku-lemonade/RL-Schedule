@@ -1,20 +1,27 @@
 import unittest
+from unittest.mock import Mock
 
 import simpy
 
 from simulator_detailed.architecture import Arch
 from simulator_detailed.configs.schemas.arch_config import (
+    CoreConfig,
     DMAEngineConfig,
     DMAType,
     NoCConfig,
 )
+from simulator_detailed.core import Core
+from simulator_detailed.dma_endpoint import DMAReceiveResult, DMATransmitResult
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
     PORT_GM_RDMA,
     PORT_GM_WDMA_CH0,
     PORT_GM_WDMA_CH1,
+    DimSlice,
     DMAAttachmentMode,
+    Message,
+    NMCShapeMode,
     NoCChannel,
     NodeType,
 )
@@ -32,6 +39,22 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         arch.nocs = Arch.build_nocs(env, noc_config)
         arch.dma_endpoints = arch.build_dma_endpoints(env, noc_config)
         return env, arch
+
+    @classmethod
+    def _build_executable_runtime(
+        cls,
+        noc_config: NoCConfig,
+    ) -> tuple[simpy.Environment, Arch, list[Core]]:
+        env, arch = cls._build_runtime(noc_config)
+        arch.x_size = noc_config.x
+        arch.y_size = noc_config.y
+        cores = arch.build_cores(
+            env=env,
+            config=CoreConfig(),
+            noc_config=noc_config,
+            mapper=Mock(),
+        )
+        return env, arch, cores
 
     def test_arch_binds_gm_endpoints_to_both_data_fabrics(self) -> None:
         gm_rdma_config = DMAEngineConfig(
@@ -129,6 +152,166 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(NotImplementedError, "GM DMA endpoints only"):
             self._build_runtime(ddr_config)
+
+    def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_RDMA],
+                    dispatch_interval=3.0,
+                ),
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                    dispatch_interval=3.0,
+                ),
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_rdma = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+
+        pe_to_gm = Message(
+            src=cores[0].binding_for(NoCChannel.CH0).address,
+            dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+            index=1000,
+            data=[DimSlice(start=0, end=1025)],
+        )
+        gm_to_pe = Message(
+            src=gm_rdma.binding_for(NoCChannel.CH1).address,
+            dst=cores[1].binding_for(NoCChannel.CH1).address,
+            index=1001,
+            data=[DimSlice(start=0, end=513)],
+        )
+
+        gm_receive = gm_wdma.recv_message(pe_to_gm)
+        pe_send = cores[0].nmc_channel_for(NoCChannel.CH0).send(pe_to_gm)
+        pe_receive = cores[1].nmc_channel_for(NoCChannel.CH1).recv_message(
+            gm_to_pe,
+            NMCShapeMode.STATIC,
+        )
+        gm_send = gm_rdma.send(gm_to_pe)
+        env.run(until=env.all_of((gm_receive, pe_send, pe_receive, gm_send)))
+
+        self.assertIsInstance(gm_receive.value, DMAReceiveResult)
+        self.assertIsInstance(gm_send.value, DMATransmitResult)
+        self.assertEqual(
+            [flit.payload_bytes for flit in gm_receive.value.flits],
+            [512, 512, 1],
+        )
+        self.assertEqual(
+            [flit.payload_bytes for flit in gm_send.value.flits],
+            [512, 1],
+        )
+        self.assertEqual(
+            gm_receive.value.descriptor_acceptance_time_aci_cycles,
+            3.0,
+        )
+        self.assertEqual(
+            gm_send.value.descriptor_acceptance_time_aci_cycles,
+            3.0,
+        )
+        self.assertEqual(
+            gm_receive.value.tail_service_completion_time_aci_cycles,
+            gm_receive.value.operation_completion_time_aci_cycles,
+        )
+
+    def test_dual_fabric_wdma_commands_share_one_internal_datapath(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                    port_bw=64.0,
+                    dispatch_interval=0.0,
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        source = cores[28]
+        messages = tuple(
+            Message(
+                src=source.binding_for(fabric_id).address,
+                dst=gm_wdma.binding_for(fabric_id).address,
+                index=1100 + int(fabric_id),
+                data=[DimSlice(start=0, end=512)],
+            )
+            for fabric_id in NoCChannel
+        )
+
+        receive_processes = tuple(
+            gm_wdma.recv_message(message) for message in messages
+        )
+        send_processes = tuple(
+            source.nmc_channel_for(message.src.fabric_id).send(message)
+            for message in messages
+        )
+        env.run(until=env.all_of((*receive_processes, *send_processes)))
+
+        completion_times = sorted(
+            process.value.tail_service_completion_time_aci_cycles
+            for process in receive_processes
+        )
+        self.assertAlmostEqual(
+            completion_times[1] - completion_times[0],
+            gm_wdma.service_interval_aci_cycles,
+        )
+
+    def test_same_fabric_rdma_commands_preserve_packet_order(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_RDMA],
+                    port_bw=64.0,
+                    dispatch_interval=3.0,
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_rdma = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        messages = tuple(
+            Message(
+                src=gm_rdma.binding_for(NoCChannel.CH0).address,
+                dst=cores[pe_id].binding_for(NoCChannel.CH0).address,
+                index=1200 + pe_id,
+                data=[DimSlice(start=0, end=1024)],
+            )
+            for pe_id in (0, 1)
+        )
+
+        receive_processes = tuple(
+            cores[pe_id].nmc_channel_for(NoCChannel.CH0).recv_message(
+                message,
+                NMCShapeMode.STATIC,
+            )
+            for pe_id, message in enumerate(messages)
+        )
+        send_processes = tuple(gm_rdma.send(message) for message in messages)
+        env.run(until=env.all_of((*receive_processes, *send_processes)))
+
+        self.assertEqual(
+            [process.value.descriptor_acceptance_time_aci_cycles for process in send_processes],
+            [3.0, 6.0],
+        )
+        self.assertLess(
+            send_processes[0].value.operation_completion_time_aci_cycles,
+            send_processes[1].value.operation_completion_time_aci_cycles,
+        )
 
 
 if __name__ == "__main__":

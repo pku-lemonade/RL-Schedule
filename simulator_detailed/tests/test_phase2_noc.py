@@ -1210,8 +1210,10 @@ class Phase2NoCTests(unittest.TestCase):
             index=106,
             data=[DimSlice(start=0, end=1)],
         )
-        with self.assertRaisesRegex(NotImplementedError, "PE-to-PE transfers only"):
-            source.send(pe_to_gm)
+        send_process = source.send(pe_to_gm)
+        harness.env.run(until=send_process)
+        with self.assertRaisesRegex(RuntimeError, "output port 15 is unbound"):
+            harness.env.run(until=harness.env.timeout(100))
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()
@@ -2344,7 +2346,12 @@ class Phase2NoCTests(unittest.TestCase):
                     sum(flit.transfer_bytes for flit in flits),
                     len(flits) * FLIT_BYTES,
                 )
-                for flit in flits:
+                for flit_index, flit in enumerate(flits):
+                    message.validate_flit(
+                        flit,
+                        flit_index,
+                        len(flits),
+                    )
                     self.assertEqual(flit.msg_id, message.index)
                     self.assertIs(flit.fabric_id, NoCChannel.CH0)
                     self.assertEqual(flit.src_router, 28)
@@ -2358,6 +2365,14 @@ class Phase2NoCTests(unittest.TestCase):
                     self.assertIs(
                         flit.burst_len_mode,
                         BurstLenMode.BURST_LEN_3,
+                    )
+
+                invalid_flit = flits[-1].model_copy(update={"sync_mode": 1})
+                with self.assertRaisesRegex(RuntimeError, "invalid flit"):
+                    message.validate_flit(
+                        invalid_flit,
+                        len(flits) - 1,
+                        len(flits),
                     )
 
         dma_registry = EndpointRegistry(

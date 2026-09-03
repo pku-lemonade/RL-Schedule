@@ -111,6 +111,14 @@ explicit `NoCChannel` instead of supplying a raw local-port number. Physical
 ownership is unique per `(fabric_id, router_id, local_port)`, so matching router
 and port IDs on NoC0 and NoC1 are separate hardware attachments.
 
+For the current functional GM command path, `DMAEngineConfig.port_bw` controls
+the one internal per-endpoint service resource shared by CH0 and CH1,
+`dispatch_interval` controls local descriptor issue, and `cdc_penalty` is an
+additional ACI-cycle delay before data service. These values are not yet a
+complete GM timing calibration: the four-entry WDMA queue, small-command
+processing floor, and direction-specific setup residuals remain subsequent
+fixes. The canonical `ada2s32.json` therefore keeps `dma_engines` empty.
+
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be
 explicit. The runtime resolves each target through `Arch.nocs`, so a CH0 failure

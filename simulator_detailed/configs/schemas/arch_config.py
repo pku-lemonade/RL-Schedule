@@ -254,11 +254,11 @@ class DMAEngineConfig(BaseModel):
     dma_type: DMAType          # DMA direction: GM_RDMA/GM_WDMA/DDR_RDMA/DDR_WDMA
     instance_id: int           # instance index within dma_type (0-3 for 4 GM/DDR controllers)
     router_id: int             # router ID this DMA is attached to
-    channels: int = 1          # number of independent DMA channels (WDMA=2, RDMA=1)
+    channels: int = 1          # physical NoC attachments; endpoint service may be shared
     local_ports: list[int] = Field(default_factory=list[int])
-    port_bw: float = 106.0     # effective B/ACI-cycle (GM=106, DDR~=91.5)
-    cdc_penalty: int = 0       # effective ACI cycles (DDR=5, GM=0)
-    dispatch_interval: int = 1  # ACI cycles between scalar-core dispatches
+    port_bw: float = Field(default=106.0, gt=0)  # effective B/ACI-cycle
+    cdc_penalty: float = Field(default=0.0, ge=0)  # effective ACI cycles
+    dispatch_interval: float = Field(default=1.0, ge=0)  # scalar dispatch gap
 
     @computed_field
     @property

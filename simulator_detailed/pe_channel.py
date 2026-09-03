@@ -10,9 +10,9 @@ from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
     FLIT_BYTES,
+    DMAAttachmentMode,
     EndpointAddress,
     Flit,
-    FlitType,
     Message,
     NMCShapeMode,
     NoCChannel,
@@ -227,7 +227,7 @@ class NMCChannel:
 
     def send(self, message: Message) -> Process:
         """Queue one source-owned message and complete after NMC TX service."""
-        self._validate_pe_message(message)
+        self._validate_send_message(message)
         if message.src != self.binding.address:
             raise ValueError(
                 f"{self.fabric_id.name} NMC channel at PE "
@@ -250,7 +250,7 @@ class NMCChannel:
         shape_mode: NMCShapeMode,
     ) -> Process:
         """Post one receive command and complete after its validated TAIL."""
-        self._validate_pe_message(message)
+        self._validate_receive_message(message)
         if message.dst != self.binding.address:
             raise ValueError(
                 f"{self.fabric_id.name} NMC channel at PE "
@@ -266,17 +266,38 @@ class NMCChannel:
         self._claimed_receive_ids.add(message.index)
         return self.env.process(self._recv_message(message, shape_mode))
 
-    def _validate_pe_message(self, message: Message) -> None:
-        if (
-            message.src.node_type is not NodeType.PE
-            or message.dst.node_type is not NodeType.PE
-        ):
-            raise NotImplementedError(
-                "Phase 2 NMC command execution supports PE-to-PE transfers only"
-            )
+    @staticmethod
+    def _validate_message_transport(message: Message) -> None:
         if message.trans_type is not TransType.SINGLECAST:
             raise NotImplementedError(
-                "Phase 2 NMC command execution supports SINGLECAST only"
+                "NMC command execution supports SINGLECAST only"
+            )
+        if (
+            message.src.attachment_mode is DMAAttachmentMode.AIU_LOCAL
+            or message.dst.attachment_mode is DMAAttachmentMode.AIU_LOCAL
+        ):
+            raise NotImplementedError(
+                "NMC command execution does not support AIU-local paths"
+            )
+
+    def _validate_send_message(self, message: Message) -> None:
+        self._validate_message_transport(message)
+        if message.src.node_type is not NodeType.PE or message.dst.node_type not in (
+            NodeType.PE,
+            NodeType.GM_WDMA,
+        ):
+            raise NotImplementedError(
+                "NMC send supports PE-to-PE and PE-to-GM transfers only"
+            )
+
+    def _validate_receive_message(self, message: Message) -> None:
+        self._validate_message_transport(message)
+        if message.dst.node_type is not NodeType.PE or message.src.node_type not in (
+            NodeType.PE,
+            NodeType.GM_RDMA,
+        ):
+            raise NotImplementedError(
+                "NMC receive supports PE-to-PE and GM-to-PE transfers only"
             )
 
     def _select_receive_api(
@@ -378,8 +399,7 @@ class NMCChannel:
                         )
                     ),
                 )
-                self._validate_received_flit(
-                    message,
+                message.validate_flit(
                     entry.flit,
                     flit_index,
                     expected_flit_count,
@@ -416,41 +436,6 @@ class NMCChannel:
                     self.descriptor_slots.release(descriptor_request)
                 else:
                     descriptor_request.cancel()
-
-    @staticmethod
-    def _validate_received_flit(
-        message: Message,
-        flit: Flit,
-        flit_index: int,
-        flit_count: int,
-    ) -> None:
-        if flit_count == 1:
-            expected_type = FlitType.SINGLE
-        elif flit_index == 0:
-            expected_type = FlitType.HEAD
-        elif flit_index == flit_count - 1:
-            expected_type = FlitType.TAIL
-        else:
-            expected_type = FlitType.BODY
-        expected_payload_bytes = min(
-            FLIT_BYTES,
-            max(0, message.payload_bytes() - flit_index * FLIT_BYTES),
-        )
-        if (
-            flit.flit_type is not expected_type
-            or flit.payload_bytes != expected_payload_bytes
-            or flit.msg_id != message.index
-            or flit.fabric_id is not message.src.fabric_id
-            or flit.src_router != message.src.router_id
-            or flit.src_local_port != message.src.local_port
-            or flit.dst_router != message.dst.router_id
-            or flit.dst_local_port != message.dst.local_port
-            or flit.burst_len_mode is not message.burst_len_mode
-        ):
-            raise RuntimeError(
-                f"message {message.index} received an invalid flit at index "
-                f"{flit_index}"
-            )
 
     def _tx_service_loop(self) -> ProcessGenerator:
         next_command_service_time_aci_cycles = float(self.env.now)
