@@ -9,7 +9,8 @@ from .configs.schemas.failure_configs import (
     TpuFail,
 )
 from .core import Core
-from .endpoint_registry import EndpointRegistry
+from .dma_endpoint import DMAChannelBinding, DMAEndpoint, DMAEndpoints
+from .endpoint_registry import EndpointRegistry, dma_node_type
 from .noc import Link, NoC, NoCTracer
 from .pe_channel import NMCChannel, PEChannelBinding
 from .utils.definitions import PORT_PE, NoCChannel, NodeType, direction_to_port
@@ -32,6 +33,10 @@ class Arch:
         
         # construction
         self.nocs = self.build_nocs(env=self.env, config=self.config.noc)
+        self.dma_endpoints = self.build_dma_endpoints(
+            env=self.env,
+            noc_config=self.config.noc,
+        )
         self.cores = self.build_cores(
             env=self.env,
             config=self.config.core,
@@ -104,6 +109,67 @@ class Arch:
             cores.append(core)
             
         return cores
+
+    def build_dma_endpoints(
+        self,
+        env: simpy.Environment,
+        noc_config: NoCConfig,
+    ) -> DMAEndpoints:
+        endpoints: DMAEndpoints = {}
+        for dma_config in noc_config.dma_engines:
+            node_type = dma_node_type(dma_config.dma_type)
+            if node_type not in (NodeType.GM_RDMA, NodeType.GM_WDMA):
+                raise NotImplementedError(
+                    "Phase 3A runtime attachment supports GM DMA endpoints only"
+                )
+            endpoint_key = (node_type, dma_config.instance_id)
+            endpoint = DMAEndpoint(env, dma_config, node_type)
+            for address in self.endpoint_registry.configured_addresses(
+                node_type,
+                dma_config.instance_id,
+            ):
+                fabric_id = address.fabric_id
+                noc = self.nocs[fabric_id]
+                router = noc.routers[address.router_id]
+                endpoint_name = f"{node_type.name}{dma_config.instance_id}"
+                tx_link = Link(
+                    env=env,
+                    config=noc_config.c2r_link,
+                    fabric_id=fabric_id,
+                    tracer=noc.tracer,
+                    link_name=(
+                        f"{endpoint_name}->{fabric_id.name}:"
+                        f"R{address.router_id}:P{address.local_port}"
+                    ),
+                    noc_cycles_per_aci_cycle=(
+                        noc_config.noc_cycles_per_aci_cycle
+                    ),
+                )
+                rx_link = Link(
+                    env=env,
+                    config=noc_config.c2r_link,
+                    fabric_id=fabric_id,
+                    tracer=noc.tracer,
+                    link_name=(
+                        f"{fabric_id.name}:R{address.router_id}:"
+                        f"P{address.local_port}->{endpoint_name}"
+                    ),
+                    noc_cycles_per_aci_cycle=(
+                        noc_config.noc_cycles_per_aci_cycle
+                    ),
+                )
+                binding = DMAChannelBinding(
+                    address=address,
+                    tx_link=tx_link,
+                    rx_link=rx_link,
+                    router=router,
+                )
+                endpoint.bind_channel(binding)
+                router.bind_link(address.local_port, tx_link, rx_link)
+
+            endpoint.validate_channel_bindings()
+            endpoints[endpoint_key] = endpoint
+        return endpoints
 
 
     @staticmethod

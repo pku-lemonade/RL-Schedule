@@ -139,19 +139,22 @@ timing logger still require a dedicated typing and dependency pass in the
 predictor phase. This exclusion is explicit; it must not be represented as a
 repository-wide strict pass.
 
-## Deferred Phase 3: GM and DDR Endpoints
+## Phase 3: GM and DDR Endpoints (In Progress)
 
 Implement in small, independently tested commits:
 
-1. Add executable GM RDMA/WDMA endpoint resources from validated registry
-   attachments.
-2. Add executable DDR RDMA/WDMA endpoint resources and explicit 1200 MHz to ACI
+1. **Fix 13A, implemented locally:** create configured GM RDMA/WDMA endpoint
+   objects, bind their validated local ports to both data fabrics, and give each
+   endpoint one internal datapath shared by CH0 and CH1. This is structural
+   ownership only; it does not claim executable or calibrated GM commands.
+2. Add GM RDMA injection and GM WDMA receive commands on those resources.
+3. Add executable DDR RDMA/WDMA endpoint resources and explicit 1200 MHz to ACI
    conversion.
-3. Model one shared internal RDMA and one shared internal WDMA per remote MDMA,
-   so CH0 and CH1 do not incorrectly double GM/DDR aggregate bandwidth.
-4. Add dual-side and single-side command execution without changing address
+4. Make command service use the shared internal RDMA/WDMA datapath introduced by
+   Fix 13A, so CH0 and CH1 do not incorrectly double GM/DDR aggregate bandwidth.
+5. Add dual-side and single-side command execution without changing address
    resolution semantics.
-5. Calibrate PE-to-GM and PE-to-DDR latency, direction asymmetry, and aggregate
+6. Calibrate PE-to-GM and PE-to-DDR latency, direction asymmetry, and aggregate
    caps against the corresponding architecture measurements.
 6. Add endpoint failures and endpoint-level trace collection.
 

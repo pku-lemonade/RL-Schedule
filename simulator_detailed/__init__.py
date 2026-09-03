@@ -20,6 +20,7 @@ from .benchmark_workloads import (
     replay_single_channel_batch,
 )
 from .core import Core
+from .dma_endpoint import DMAChannelBinding, DMAEndpoint
 from .noc import Link, NoC, Router
 from .pe_channel import (
     NMCChannel,
@@ -36,6 +37,8 @@ __all__ = [
     "BatchedNMCStream",
     "BatchedNMCStreamResult",
     "Core",
+    "DMAChannelBinding",
+    "DMAEndpoint",
     "Link",
     "NMCBenchmarkScenario",
     "NMCChannel",

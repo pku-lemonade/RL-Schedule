@@ -25,6 +25,11 @@ _DMA_NODE_TYPES = {
 }
 
 
+def dma_node_type(dma_type: DMAType) -> NodeType:
+    """Return the endpoint node type represented by a DMA configuration."""
+    return _DMA_NODE_TYPES[dma_type]
+
+
 class EndpointRegistry:
     """Architecture-owned map from endpoint identity to NoC attachment."""
 
@@ -89,8 +94,22 @@ class EndpointRegistry:
             f"on {fabric_id.name}"
         )
 
+    def configured_addresses(
+        self,
+        node_type: NodeType,
+        node_id: int,
+    ) -> tuple[EndpointAddress, ...]:
+        """Return all validated physical addresses for a configured endpoint."""
+        key = (node_type, node_id)
+        try:
+            return self._addresses[key]
+        except KeyError as exc:
+            raise KeyError(
+                f"endpoint {node_type.name}[{node_id}] is not configured"
+            ) from exc
+
     def _register_dma(self, config: DMAEngineConfig) -> None:
-        node_type = _DMA_NODE_TYPES[config.dma_type]
+        node_type = dma_node_type(config.dma_type)
         if not 0 <= config.instance_id < 4:
             raise ValueError(f"{node_type.name} instance_id must be between 0 and 3")
         expected_router = expected_endpoint_router(node_type, config.instance_id)

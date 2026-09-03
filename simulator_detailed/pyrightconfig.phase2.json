@@ -7,6 +7,7 @@
     "configs/schemas/arch_config.py",
     "configs/schemas/failure_configs.py",
     "core.py",
+    "dma_endpoint.py",
     "endpoint_registry.py",
     "noc.py",
     "pe_channel.py",
