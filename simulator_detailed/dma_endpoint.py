@@ -6,7 +6,7 @@ from typing import cast
 import simpy
 from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
-from simpy.resources.resource import Resource
+from simpy.resources.resource import Request, Resource
 
 from .configs.schemas.arch_config import DMAEngineConfig, DMAType
 from .noc import Link, Router
@@ -20,6 +20,9 @@ from .utils.definitions import (
     NodeType,
     TransType,
 )
+
+_GM_WDMA_DESCRIPTOR_ISSUE_CYCLES = 40.0
+_GM_WDMA_MAX_OUTSTANDING_DESCRIPTORS_PER_CHANNEL = 4
 
 
 @dataclass(frozen=True)
@@ -134,6 +137,15 @@ class DMAEndpoint:
         self.tx_command_slots = {
             fabric_id: Resource(env, capacity=1) for fabric_id in NoCChannel
         }
+        self.descriptor_slots: dict[NoCChannel, Resource] = {}
+        if self.node_type is NodeType.GM_WDMA:
+            self.descriptor_slots = {
+                fabric_id: Resource(
+                    env,
+                    capacity=self.max_outstanding_descriptors_per_channel,
+                )
+                for fabric_id in NoCChannel
+            }
         self.rx_data_queue = simpy.FilterStore(env)
         self._claimed_receive_ids: set[int] = set()
         self._receive_ready: dict[int, SimpyEvent] = {}
@@ -195,6 +207,33 @@ class DMAEndpoint:
     @property
     def service_interval_aci_cycles(self) -> float:
         return FLIT_BYTES / self.config.port_bw
+
+    @property
+    def descriptor_issue_cycles(self) -> float:
+        configured_cycles = self.config.descriptor_issue_cycles
+        if configured_cycles is not None:
+            return configured_cycles
+        if self.node_type is NodeType.GM_WDMA:
+            return _GM_WDMA_DESCRIPTOR_ISSUE_CYCLES
+        raise RuntimeError(
+            "GM_RDMA descriptor issue timing is uncalibrated; configure "
+            "descriptor_issue_cycles explicitly"
+        )
+
+    @property
+    def max_outstanding_descriptors_per_channel(self) -> int:
+        configured_capacity = (
+            self.config.max_outstanding_descriptors_per_channel
+        )
+        if configured_capacity is not None:
+            return configured_capacity
+        if self.node_type is NodeType.GM_WDMA:
+            return _GM_WDMA_MAX_OUTSTANDING_DESCRIPTORS_PER_CHANNEL
+        raise RuntimeError("GM_RDMA descriptor capacity is not characterized")
+
+    def outstanding_descriptor_count(self, fabric_id: NoCChannel) -> int:
+        """Return active GM_WDMA receive descriptors on one fabric."""
+        return len(self._descriptor_slots_for(fabric_id).users)
 
     def send(self, message: Message) -> Process:
         """Post one GM RDMA command and inject it into one data fabric."""
@@ -290,60 +329,81 @@ class DMAEndpoint:
 
     def _recv_message(self, message: Message) -> ProcessGenerator:
         submission_time_aci_cycles = float(self.env.now)
-        yield from self._dispatch_descriptor()
-        descriptor_acceptance_time_aci_cycles = float(self.env.now)
-        if self.config.cdc_penalty > 0:
-            yield self.env.timeout(self.config.cdc_penalty)
+        descriptor_slots = self._descriptor_slots_for(message.dst.fabric_id)
+        descriptor_request: Request | None = None
+        try:
+            descriptor_request = descriptor_slots.request()
+            yield descriptor_request
+            yield from self._dispatch_descriptor()
+            descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            if self.config.cdc_penalty > 0:
+                yield self.env.timeout(self.config.cdc_penalty)
 
-        receive_ready = self._receive_ready_event(message.index)
-        if not receive_ready.triggered:
-            receive_ready.succeed()
+            receive_ready = self._receive_ready_event(message.index)
+            if not receive_ready.triggered:
+                receive_ready.succeed()
 
-        flits: list[Flit] = []
-        tail_service_completion_time_aci_cycles: float | None = None
-        expected_flit_count = message.flit_count()
-        for flit_index in range(expected_flit_count):
-            entry = cast(
-                DMAReceiveEntry,
-                (
-                    yield self.rx_data_queue.get(
-                        lambda queued, message_id=message.index: (
-                            queued.flit.msg_id == message_id
+            flits: list[Flit] = []
+            tail_service_completion_time_aci_cycles: float | None = None
+            expected_flit_count = message.flit_count()
+            for flit_index in range(expected_flit_count):
+                entry = cast(
+                    DMAReceiveEntry,
+                    (
+                        yield self.rx_data_queue.get(
+                            lambda queued, message_id=message.index: (
+                                queued.flit.msg_id == message_id
+                            )
                         )
-                    )
-                ),
-            )
-            message.validate_flit(
-                entry.flit,
-                flit_index,
-                expected_flit_count,
-            )
-            flits.append(entry.flit)
-            tail_service_completion_time_aci_cycles = (
-                entry.service_completion_time_aci_cycles
-            )
+                    ),
+                )
+                message.validate_flit(
+                    entry.flit,
+                    flit_index,
+                    expected_flit_count,
+                )
+                flits.append(entry.flit)
+                tail_service_completion_time_aci_cycles = (
+                    entry.service_completion_time_aci_cycles
+                )
 
-        if tail_service_completion_time_aci_cycles is None:
-            raise RuntimeError(f"message {message.index} has no GM service boundary")
-        self._receive_ready.pop(message.index, None)
-        return DMAReceiveResult(
-            message=message,
-            flits=tuple(flits),
-            submission_time_aci_cycles=submission_time_aci_cycles,
-            descriptor_acceptance_time_aci_cycles=(
-                descriptor_acceptance_time_aci_cycles
-            ),
-            tail_service_completion_time_aci_cycles=(
-                tail_service_completion_time_aci_cycles
-            ),
-            operation_completion_time_aci_cycles=float(self.env.now),
-        )
+            if tail_service_completion_time_aci_cycles is None:
+                raise RuntimeError(
+                    f"message {message.index} has no GM service boundary"
+                )
+            self._receive_ready.pop(message.index, None)
+            return DMAReceiveResult(
+                message=message,
+                flits=tuple(flits),
+                submission_time_aci_cycles=submission_time_aci_cycles,
+                descriptor_acceptance_time_aci_cycles=(
+                    descriptor_acceptance_time_aci_cycles
+                ),
+                tail_service_completion_time_aci_cycles=(
+                    tail_service_completion_time_aci_cycles
+                ),
+                operation_completion_time_aci_cycles=float(self.env.now),
+            )
+        finally:
+            if descriptor_request is not None:
+                if descriptor_request.triggered:
+                    descriptor_slots.release(descriptor_request)
+                else:
+                    descriptor_request.cancel()
 
     def _dispatch_descriptor(self) -> ProcessGenerator:
         request = self.descriptor_issuer.request()
         with request:
             yield request
-            yield self.env.timeout(self.config.dispatch_interval)
+            yield self.env.timeout(self.descriptor_issue_cycles)
+
+    def _descriptor_slots_for(self, fabric_id: NoCChannel) -> Resource:
+        try:
+            return self.descriptor_slots[fabric_id]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"{self.node_type.name} does not own receive descriptor slots"
+            ) from exc
 
     def _receive_ready_event(self, message_id: int) -> SimpyEvent:
         event = self._receive_ready.get(message_id)

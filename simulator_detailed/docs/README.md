@@ -17,9 +17,12 @@ SEND/RECV execution uses these NMC command APIs.
 Phase 3 has started with configured GM endpoint ownership and functional command
 execution. GM_RDMA can inject a GM-to-PE payload and GM_WDMA can complete a
 posted PE-to-GM receive. Each endpoint has one internal datapath shared by CH0
-and CH1, while same-fabric RDMA commands retain packet order. This path is not
-yet timing-calibrated, does not model single-side request/response traffic, and
-is intentionally absent from the canonical architecture configuration.
+and CH1, while same-fabric RDMA commands retain packet order. GM_WDMA descriptor
+admission uses the measured 40-cycle post time and independent four-entry CH0/CH1
+pools; one endpoint-wide issuer remains a conservative assumption until
+cross-channel issuing is measured. GM data service is not yet timing-calibrated,
+single-side request/response traffic is not modeled, and GM endpoints remain
+intentionally absent from the canonical architecture configuration.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54

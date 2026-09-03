@@ -15,7 +15,8 @@ Use these sources in this order:
 5. This file defines future implementation order and acceptance boundaries.
 
 Phase 2 is implemented for calibrated PE-to-PE SINGLECAST transport. Configured
-GM endpoints now have an executable but uncalibrated command path. DDR execution,
+GM endpoints now have an executable command path, and GM_WDMA descriptor
+admission is calibrated. GM data service remains only functional. DDR execution,
 collectives, route reduction, detailed compute/SRAM contention, and the optional
 ML predictor adaptation remain separate later phases.
 
@@ -148,16 +149,19 @@ Implement in small, independently tested commits:
 1. **Fix 13A, committed as `637aa86`:** create configured GM RDMA/WDMA
    endpoints, bind validated local ports to both data fabrics, and give each
    endpoint one internal datapath shared by CH0 and CH1.
-2. **Fix 13B, implemented locally:** execute paired GM RDMA-to-PE injection and
+2. **Fix 13B, committed as `539f1ee`:** execute paired GM RDMA-to-PE injection and
    PE-to-GM WDMA receive commands. Use the shared endpoint datapath for per-flit
    service, preserve packet order between same-fabric RDMA commands, validate
    received flits through the common `Message` contract, and return typed
    command-boundary results. This is functional command execution, not timing
    calibration or single-side request/response modeling.
-3. **Fix 13C:** add GM_WDMA's four outstanding descriptor slots per channel and
-   its confirmed approximately 40-cycle unblocked descriptor-post interval.
-   Add saturation tests at and above the queue boundary; do not branch on a
-   benchmark payload size.
+3. **Fix 13C, implemented locally:** add GM_WDMA's four outstanding descriptor
+   slots per channel and its confirmed 40-cycle unblocked descriptor-post
+   interval. Retain each slot through matching TAIL service and test independent
+   CH0/CH1 capacity at and above the queue boundary. Until simultaneous-channel
+   issue is measured, conservatively share one descriptor issuer across the
+   endpoint without sharing the two capacity pools. Do not branch on benchmark
+   payload size.
 4. **Fix 13D:** add the GM_WDMA command-processing floor and endpoint setup
    residual needed to reproduce the approximately 273-cycle small-message drain,
    0-hop/7-hop upload latency, and approximately 110 B/ACI-cycle shared bulk cap.
@@ -179,9 +183,11 @@ Implement in small, independently tested commits:
 10. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
 
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
-`dma_engines` empty until the relevant command path is calibrated. The generic
-`DMAEngineConfig` timing defaults used by Fix 13B are provisional functional
-inputs and must not be presented as hardware-accurate GM results.
+`dma_engines` empty until the relevant command path is calibrated. GM_WDMA's
+descriptor issue time and per-channel capacity now have hardware-backed defaults.
+GM_WDMA processing/service timing and all GM_RDMA descriptor/service timing remain
+uncalibrated; RDMA command execution therefore requires an explicit provisional
+descriptor issue value rather than silently inheriting the WDMA measurement.
 
 ## Deferred Phase 4: Collective Transport
 

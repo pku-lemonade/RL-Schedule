@@ -145,6 +145,15 @@ PE and WDMA endpoints may consume it. The Phase 3 GM command API executes the
 paired payload direction directly. Control-plane requests and responses for true
 single-side operation are not payload `Message` objects and remain later work.
 
+A GM_WDMA receive acquires one descriptor slot from the destination fabric's
+four-entry pool before its descriptor is issued. The two fabric pools are
+independent, but the current endpoint model conservatively shares one serialized
+issuer across CH0 and CH1 because cross-channel issue overlap is unmeasured. An
+unblocked issue takes 40 ACI cycles. The slot remains occupied until the matching
+TAIL/SINGLE flit completes endpoint service, so a fifth command on that fabric
+backpressures without consuming the other fabric's capacity. These constants do
+not apply to GM_RDMA, whose descriptor behavior remains uncalibrated.
+
 `NoCChannel` uses the hardware channel values `CH0=0` and `CH1=1`.
 `DMAAttachmentMode` describes attachment topology and has no hardware numeric
 encoding.

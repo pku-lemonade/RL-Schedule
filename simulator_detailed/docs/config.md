@@ -111,13 +111,20 @@ explicit `NoCChannel` instead of supplying a raw local-port number. Physical
 ownership is unique per `(fabric_id, router_id, local_port)`, so matching router
 and port IDs on NoC0 and NoC1 are separate hardware attachments.
 
-For the current functional GM command path, `DMAEngineConfig.port_bw` controls
-the one internal per-endpoint service resource shared by CH0 and CH1,
-`dispatch_interval` controls local descriptor issue, and `cdc_penalty` is an
-additional ACI-cycle delay before data service. These values are not yet a
-complete GM timing calibration: the four-entry WDMA queue, small-command
-processing floor, and direction-specific setup residuals remain subsequent
-fixes. The canonical `ada2s32.json` therefore keeps `dma_engines` empty.
+For the current GM command path, `DMAEngineConfig.port_bw` controls the one
+internal per-endpoint service resource shared by CH0 and CH1, and `cdc_penalty`
+is an additional ACI-cycle delay before data service. The optional
+`descriptor_issue_cycles` and `max_outstanding_descriptors_per_channel` fields
+override command admission. GM_WDMA defaults to the measured 40 ACI cycles and
+four slots per channel. Its CH0 and CH1 slot pools are independent, while one
+conservative endpoint-wide issuer serializes posts because simultaneous-channel
+issue has not been characterized. GM_RDMA has no inferred descriptor timing and
+requires an explicit issue value for functional execution.
+
+These settings are not yet a complete GM timing calibration. The WDMA
+small-command processing floor, direction-specific setup residuals, and RDMA
+service behavior remain subsequent fixes. The canonical `ada2s32.json` therefore
+keeps `dma_engines` empty.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

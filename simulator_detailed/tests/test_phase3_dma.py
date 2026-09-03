@@ -162,7 +162,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=28,
                     channels=1,
                     local_ports=[PORT_GM_RDMA],
-                    dispatch_interval=3.0,
+                    descriptor_issue_cycles=3.0,
                 ),
                 DMAEngineConfig(
                     dma_type=DMAType.GM_WDMA,
@@ -170,7 +170,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=28,
                     channels=2,
                     local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
-                    dispatch_interval=3.0,
+                    descriptor_issue_cycles=3.0,
                 ),
             ]
         )
@@ -233,7 +233,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     channels=2,
                     local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
                     port_bw=64.0,
-                    dispatch_interval=0.0,
+                    descriptor_issue_cycles=0.0,
                 )
             ]
         )
@@ -268,6 +268,91 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             gm_wdma.service_interval_aci_cycles,
         )
 
+    def test_wdma_descriptor_capacity_is_independent_per_fabric(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                    port_bw=1.0,
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        source = cores[28]
+        ch0_messages = tuple(
+            Message(
+                src=source.binding_for(NoCChannel.CH0).address,
+                dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+                index=1300 + message_index,
+                data=[DimSlice(start=0, end=512)],
+            )
+            for message_index in range(5)
+        )
+        ch1_message = Message(
+            src=source.binding_for(NoCChannel.CH1).address,
+            dst=gm_wdma.binding_for(NoCChannel.CH1).address,
+            index=1400,
+            data=[DimSlice(start=0, end=512)],
+        )
+        messages = (*ch0_messages, ch1_message)
+
+        receive_processes = tuple(
+            gm_wdma.recv_message(message) for message in messages
+        )
+        send_processes = tuple(
+            source.nmc_channel_for(message.src.fabric_id).send(message)
+            for message in messages
+        )
+        env.run(until=201.0)
+
+        self.assertEqual(gm_wdma.descriptor_issue_cycles, 40.0)
+        self.assertEqual(
+            gm_wdma.max_outstanding_descriptors_per_channel,
+            4,
+        )
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH0),
+            4,
+        )
+        self.assertEqual(
+            len(gm_wdma.descriptor_slots[NoCChannel.CH0].queue),
+            1,
+        )
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH1),
+            1,
+        )
+        self.assertFalse(gm_wdma.descriptor_slots[NoCChannel.CH1].queue)
+
+        env.run(until=env.all_of((*receive_processes, *send_processes)))
+        ch0_acceptance_times = [
+            process.value.descriptor_acceptance_time_aci_cycles
+            for process in receive_processes[:5]
+        ]
+        self.assertEqual(ch0_acceptance_times[:4], [40.0, 80.0, 120.0, 160.0])
+        self.assertGreaterEqual(
+            ch0_acceptance_times[4],
+            receive_processes[0].value.operation_completion_time_aci_cycles
+            + gm_wdma.descriptor_issue_cycles,
+        )
+        self.assertEqual(
+            receive_processes[5].value.descriptor_acceptance_time_aci_cycles,
+            200.0,
+        )
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH0),
+            0,
+        )
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH1),
+            0,
+        )
+
     def test_same_fabric_rdma_commands_preserve_packet_order(self) -> None:
         noc_config = NoCConfig(
             dma_engines=[
@@ -278,7 +363,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     channels=1,
                     local_ports=[PORT_GM_RDMA],
                     port_bw=64.0,
-                    dispatch_interval=3.0,
+                    descriptor_issue_cycles=3.0,
                 )
             ]
         )

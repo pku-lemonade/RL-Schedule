@@ -258,7 +258,11 @@ class DMAEngineConfig(BaseModel):
     local_ports: list[int] = Field(default_factory=list[int])
     port_bw: float = Field(default=106.0, gt=0)  # effective B/ACI-cycle
     cdc_penalty: float = Field(default=0.0, ge=0)  # effective ACI cycles
-    dispatch_interval: float = Field(default=1.0, ge=0)  # scalar dispatch gap
+    descriptor_issue_cycles: float | None = Field(default=None, ge=0)
+    max_outstanding_descriptors_per_channel: int | None = Field(
+        default=None,
+        gt=0,
+    )
 
     @computed_field
     @property
