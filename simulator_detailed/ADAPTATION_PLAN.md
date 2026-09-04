@@ -17,9 +17,10 @@ Use these sources in this order:
 Phase 2 is implemented for calibrated PE-to-PE SINGLECAST transport. Configured
 GM endpoints now have an executable command path, and GM_WDMA descriptor
 admission, completion cadence, paired-upload latency, and shared service rate are
-calibrated. GM_RDMA service remains only functional. DDR execution, collectives,
-route reduction, detailed compute/SRAM contention, and the optional ML predictor
-adaptation remain separate later phases.
+calibrated. GM_RDMA download latency, shared service rate, and burst-level outcast
+sharing are also calibrated, while its descriptor behavior remains provisional.
+DDR execution, collectives, route reduction, detailed compute/SRAM contention,
+and the optional ML predictor adaptation remain separate later phases.
 
 ## Confirmed Hardware Baseline
 
@@ -152,8 +153,8 @@ Implement in small, independently tested commits:
    endpoint one internal datapath shared by CH0 and CH1.
 2. **Fix 13B, committed as `539f1ee`:** execute paired GM RDMA-to-PE injection and
    PE-to-GM WDMA receive commands. Use the shared endpoint datapath for per-flit
-   service, preserve packet order between same-fabric RDMA commands, validate
-   received flits through the common `Message` contract, and return typed
+   service, preserve each RDMA message's flit order, validate received flits
+   through the common `Message` contract, and return typed
    command-boundary results. This is functional command execution, not timing
    calibration or single-side request/response modeling.
 3. **Fix 13C, committed as `dc3776a`:** add GM_WDMA's four outstanding descriptor
@@ -163,7 +164,7 @@ Implement in small, independently tested commits:
    issue is measured, conservatively share one descriptor issuer across the
    endpoint without sharing the two capacity pools. Do not branch on benchmark
    payload size.
-4. **Fix 13D, implemented locally:** give GM_WDMA one shared 110 B/ACI-cycle data
+4. **Fix 13D, committed as `12884d0`:** give GM_WDMA one shared 110 B/ACI-cycle data
    service across CH0 and CH1, enforce a 273-cycle minimum command-completion
    interval, and apply the measured paired-upload floor of `138 + 17 * hops` ACI
    cycles. A minimal dual-side admission coordinator prevents payload injection
@@ -171,10 +172,14 @@ Implement in small, independently tested commits:
    backpressure above four commands and does not model control packets. Validate
    zero-hop/seven-hop latency, single-source bulk convergence, and eight-source
    incast without payload-size branches.
-5. **Fix 13E:** add direction-specific GM_RDMA setup and service parameters for
-   its 0-hop/7-hop download latency and approximately 120-125 B/ACI-cycle bulk
-   cap. Keep its unmeasured descriptor behavior explicitly provisional rather
-   than copying a WDMA calibration silently.
+5. **Fix 13E, implemented locally:** add the measured GM_RDMA completion floor of
+   `246 + 17 * hops` ACI cycles and a shared 110 B/ACI-cycle service rate. At
+   1125 MHz this service rate is 123.75 GB/s and matches the measured 120-125
+   GB/s aggregate outcast cap; the architecture's cap is not 120-125
+   B/ACI-cycle. Schedule concurrent same-fabric downloads round-robin at the
+   configured burst quantum so they retain per-message order and share the one
+   endpoint engine fairly. Keep unmeasured descriptor behavior explicitly
+   provisional rather than copying a WDMA calibration silently.
 6. **Fix 13F:** extend the timing-only dual-side admission gate into explicit
    mode-specific protocol state. Represent dual-side outer-sync behavior
    separately from single-side request/response matching and header traffic while
@@ -191,10 +196,10 @@ Implement in small, independently tested commits:
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
 `dma_engines` empty until the relevant command path is calibrated. GM_WDMA's
 descriptor issue time and per-channel capacity now have hardware-backed defaults.
-GM_WDMA processing and service timing now also use hardware-backed defaults. All
-GM_RDMA descriptor and service timing remains uncalibrated; RDMA command execution
-therefore requires explicit provisional descriptor and bandwidth values rather
-than silently inheriting WDMA measurements.
+GM_WDMA processing and service timing now also use hardware-backed defaults.
+GM_RDMA service and operation completion timing now have hardware-backed defaults,
+but command execution still requires an explicit provisional descriptor issue
+time rather than silently inheriting WDMA's unmeasured read-side behavior.
 
 ## Deferred Phase 4: Collective Transport
 

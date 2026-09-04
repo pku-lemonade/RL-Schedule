@@ -165,6 +165,15 @@ fabric slope. `tail_service_completion_time_aci_cycles` records raw endpoint dat
 service, while `operation_completion_time_aci_cycles` includes these command
 boundaries.
 
+GM_RDMA has one 110 B/ACI-cycle data-service resource shared by both fabrics.
+Concurrent downloads on one fabric are admitted round-robin in complete
+configured burst quanta, preserving each message's flit order while matching the
+measured fair N-way outcast behavior. The destination `NMCReceiveResult` is the
+end-to-end operation boundary and cannot complete before `246 + 17 * hops` ACI
+cycles from receive submission. The source `DMATransmitResult` still ends at its
+final local-link handoff. RDMA descriptor issue timing remains explicitly
+provisional.
+
 For dual-side PE-to-GM traffic, `PairedDMACommandCoordinator` exposes only a
 timing gate: the PE TX worker may program and queue its descriptor, but it cannot
 inject payload until the matching WDMA receive descriptor is accepted. This

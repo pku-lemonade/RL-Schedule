@@ -124,10 +124,11 @@ GM_WDMA's default shared service rate is 110 B/ACI-cycle. Its command-completion
 sequencer enforces the measured 273-cycle small-command drain interval, and its
 paired operation cannot complete before `138 + 17 * hops` ACI cycles. These are
 fixed WDMA hardware calibrations rather than payload-specific configuration
-profiles. GM_RDMA has no inferred descriptor timing or service rate and requires
-both `descriptor_issue_cycles` and `port_bw` for functional execution. The
-canonical `ada2s32.json` keeps `dma_engines` empty until the remaining GM modes
-are implemented.
+profiles. GM_RDMA also defaults to one shared 110 B/ACI-cycle service rate;
+`port_bw` can still override it. GM_RDMA descriptor timing remains unmeasured, so
+functional execution still requires an explicit `descriptor_issue_cycles` value.
+The canonical `ada2s32.json` keeps `dma_engines` empty until the remaining GM
+modes are implemented.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

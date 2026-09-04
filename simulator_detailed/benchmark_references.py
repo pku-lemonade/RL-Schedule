@@ -106,6 +106,33 @@ class GMWDMABenchmarkReference:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class GMRDMABenchmarkReference:
+    """Measured GM_RDMA download latency and throughput boundaries."""
+
+    kernels: tuple[str, ...]
+    aci_clock_ghz: float
+    zero_hop_operation_latency_aci_cycles: float
+    operation_hop_slope_aci_cycles: float
+    service_bytes_per_aci_cycle: float
+    zero_hop_bulk_gbps: float
+    seven_hop_bulk_gbps: float
+    outcast_gbps_range: tuple[float, float]
+
+    def operation_latency_aci_cycles(self, hops: int) -> float:
+        """Return the calibrated GM-to-PE completion floor for a hop count."""
+        if hops < 0:
+            raise ValueError("GM_RDMA hop count cannot be negative")
+        return (
+            self.zero_hop_operation_latency_aci_cycles
+            + self.operation_hop_slope_aci_cycles * hops
+        )
+
+    def bytes_per_aci_cycle_to_gbps(self, rate: float) -> float:
+        """Convert an ACI-domain byte rate to decimal GB/s."""
+        return rate * self.aci_clock_ghz
+
+
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
     kernel="noc_rb54.cpp",
     flit_bytes=512,
@@ -200,4 +227,16 @@ GM_WDMA_REFERENCE: Final[GMWDMABenchmarkReference] = GMWDMABenchmarkReference(
     operation_hop_slope_aci_cycles=17.0,
     bulk_bytes_per_aci_cycle=110.0,
     incast_bytes_per_aci_cycle_range=(100.0, 120.0),
+)
+
+
+GM_RDMA_REFERENCE: Final[GMRDMABenchmarkReference] = GMRDMABenchmarkReference(
+    kernels=("noc_gm_download.cpp", "noc_gm_bench.cpp"),
+    aci_clock_ghz=1.125,
+    zero_hop_operation_latency_aci_cycles=246.0,
+    operation_hop_slope_aci_cycles=17.0,
+    service_bytes_per_aci_cycle=110.0,
+    zero_hop_bulk_gbps=119.0,
+    seven_hop_bulk_gbps=113.0,
+    outcast_gbps_range=(120.0, 125.0),
 )

@@ -17,21 +17,24 @@ SEND/RECV execution uses these NMC command APIs.
 Phase 3 has started with configured GM endpoint ownership and functional command
 execution. GM_RDMA can inject a GM-to-PE payload and GM_WDMA can complete a
 posted PE-to-GM receive. Each endpoint has one internal datapath shared by CH0
-and CH1, while same-fabric RDMA commands retain packet order. GM_WDMA descriptor
+and CH1. Concurrent same-fabric RDMA commands retain per-message flit order and
+share that engine round-robin at the configured burst quantum. GM_WDMA descriptor
 admission uses the measured 40-cycle post time and independent four-entry CH0/CH1
 pools; one endpoint-wide issuer remains a conservative assumption until
 cross-channel issuing is measured. Its shared datapath is capped at 110
 B/ACI-cycle, small command completions are separated by at least 273 cycles, and
 the paired operation floor is `138 + 17 * hops` cycles. A timing-only dual-side
 admission gate prevents data from outrunning a full receive-descriptor queue.
-GM_RDMA timing is not yet calibrated, and single-side request/response traffic is
-not yet modeled, so GM endpoints remain intentionally absent from the canonical
-configuration.
+GM_RDMA uses a shared 110 B/ACI-cycle service rate and a measured `246 + 17 *
+hops` receive-operation floor. Its descriptor timing remains provisional and
+single-side request/response traffic is not yet modeled, so GM endpoints remain
+intentionally absent from the canonical configuration.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
-latency and packetization evidence, GM upload/rb55 measurements, and rb56/rb58
-32 KB batched-throughput evidence are separate validation targets. They cannot
+latency and packetization evidence, GM upload/rb55 and GM download/outcast
+measurements, and rb56/rb58 32 KB batched-throughput evidence are separate
+validation targets. They cannot
 select a runtime shape mode or alter static and dynamic endpoint timing.
 `benchmark_workloads.py`
 provides typed sequential ping-pong, single-channel batch, shared-link

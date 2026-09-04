@@ -21,6 +21,9 @@ from .utils.definitions import (
     TransType,
 )
 
+_GM_RDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 246.0
+_GM_RDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
+
 
 @dataclass(frozen=True)
 class PEChannelBinding:
@@ -238,6 +241,23 @@ class NMCChannel:
         )
         return max(0.0, target_cycles - self.config.descriptor_issue_cycles)
 
+    def minimum_receive_operation_latency_aci_cycles(
+        self,
+        message: Message,
+    ) -> float:
+        """Return a measured direction-specific completion floor, if known."""
+        if message.src.node_type is not NodeType.GM_RDMA:
+            return 0.0
+        source_x, source_y = self.binding.router.to_xy(message.src.router_id)
+        destination_x, destination_y = self.binding.router.to_xy(
+            message.dst.router_id
+        )
+        hops = abs(destination_x - source_x) + abs(destination_y - source_y)
+        return (
+            _GM_RDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES
+            + hops * _GM_RDMA_OPERATION_HOP_SLOPE_ACI_CYCLES
+        )
+
     def send(self, message: Message) -> Process:
         """Queue one source-owned message and complete after NMC TX service."""
         self._validate_send_message(message)
@@ -441,6 +461,13 @@ class NMCChannel:
             setup_wait = endpoint_ready_time_aci_cycles - float(self.env.now)
             if setup_wait > 0:
                 yield self.env.timeout(setup_wait)
+            operation_completion_floor = (
+                submission_time_aci_cycles
+                + self.minimum_receive_operation_latency_aci_cycles(message)
+            )
+            completion_wait = operation_completion_floor - float(self.env.now)
+            if completion_wait > 0:
+                yield self.env.timeout(completion_wait)
             return NMCReceiveResult(
                 message=message,
                 flits=tuple(flits),

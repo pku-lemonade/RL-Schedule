@@ -10,7 +10,7 @@ from simpy.resources.resource import Request, Resource
 
 from .command_coordination import PairedDMACommandCoordinator
 from .configs.schemas.arch_config import DMAEngineConfig, DMAType
-from .noc import Link, Router
+from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
     FLIT_BYTES,
     DMAAttachmentMode,
@@ -28,6 +28,7 @@ _GM_WDMA_MIN_COMMAND_COMPLETION_INTERVAL_ACI_CYCLES = 273.0
 _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
 _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
+_GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 
 
 @dataclass(frozen=True)
@@ -151,8 +152,8 @@ class DMAEndpoint:
         self.descriptor_issuer = Resource(env, capacity=1)
         self.command_completion_sequencer = Resource(env, capacity=1)
         self._last_command_completion_time_aci_cycles: float | None = None
-        self.tx_command_slots = {
-            fabric_id: Resource(env, capacity=1) for fabric_id in NoCChannel
+        self.tx_burst_arbiters = {
+            fabric_id: RoundRobinArbiter(env) for fabric_id in NoCChannel
         }
         self.descriptor_slots: dict[NoCChannel, Resource] = {}
         if self.node_type is NodeType.GM_WDMA:
@@ -232,9 +233,7 @@ class DMAEndpoint:
             return configured_rate
         if self.node_type is NodeType.GM_WDMA:
             return _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
-        raise RuntimeError(
-            "GM_RDMA service rate is uncalibrated; configure port_bw explicitly"
-        )
+        return _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
 
     @property
     def descriptor_issue_cycles(self) -> float:
@@ -331,15 +330,22 @@ class DMAEndpoint:
         if self.config.cdc_penalty > 0:
             yield self.env.timeout(self.config.cdc_penalty)
 
-        command_request = self.tx_command_slots[message.src.fabric_id].request()
-        with command_request:
-            yield command_request
-            for flit in flits:
-                datapath_request = self.internal_datapath.request()
-                with datapath_request:
-                    yield datapath_request
-                    yield self.env.timeout(self.service_interval_aci_cycles)
-                yield binding.tx_link.send_flit(flit)
+        burst_quantum_flits = binding.router.config.resolve_burst_quantum_flits(
+            message.burst_len_mode
+        )
+        burst_arbiter = self.tx_burst_arbiters[message.src.fabric_id]
+        for burst_start in range(0, len(flits), burst_quantum_flits):
+            yield burst_arbiter.request(message.index)
+            try:
+                burst = flits[burst_start : burst_start + burst_quantum_flits]
+                for flit in burst:
+                    datapath_request = self.internal_datapath.request()
+                    with datapath_request:
+                        yield datapath_request
+                        yield self.env.timeout(self.service_interval_aci_cycles)
+                    yield binding.tx_link.send_flit(flit)
+            finally:
+                burst_arbiter.release(message.index)
 
         final_local_handoff_time_aci_cycles = float(self.env.now)
         return DMATransmitResult(
