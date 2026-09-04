@@ -6,14 +6,16 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
-from .command_coordination import PairedDMACommandCoordinator
+from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
     FLIT_BYTES,
     DMAAttachmentMode,
+    DMACommandMode,
     EndpointAddress,
     Flit,
+    FlitTrafficType,
     Message,
     NMCShapeMode,
     NoCChannel,
@@ -70,7 +72,8 @@ class NMCTransmitEntry:
     submission_time_aci_cycles: float
     descriptor_acceptance_time_aci_cycles: float
     endpoint_ready_time_aci_cycles: float
-    destination_ready: SimpyEvent | None
+    dual_side_ready: SimpyEvent | None
+    single_side_completion: SimpyEvent | None
     completion: SimpyEvent
 
 
@@ -132,7 +135,7 @@ class NMCChannel:
         config: NMCChannelConfig,
         shape_timing: NMCShapeTimingConfig,
         binding: PEChannelBinding,
-        paired_dma_commands: PairedDMACommandCoordinator | None = None,
+        dma_commands: DMACommandCoordinator | None = None,
     ) -> None:
         if any(
             component_env is not env
@@ -147,11 +150,11 @@ class NMCChannel:
                 "must use the same SimPy environment"
             )
         if (
-            paired_dma_commands is not None
-            and paired_dma_commands.env is not env
+            dma_commands is not None
+            and dma_commands.env is not env
         ):
             raise ValueError(
-                "NMC channel and paired command coordinator must use the same "
+                "NMC channel and DMA command coordinator must use the same "
                 "environment"
             )
 
@@ -159,7 +162,7 @@ class NMCChannel:
         self.config = config
         self.shape_timing = shape_timing
         self.binding = binding
-        self.paired_dma_commands = paired_dma_commands
+        self.dma_commands = dma_commands
         self.tx_datapath = Resource(env, capacity=1)
         self.rx_datapath = Resource(env, capacity=1)
         self.descriptor_slots = Resource(
@@ -371,15 +374,20 @@ class NMCChannel:
             )
 
             completion = self.env.event()
-            destination_ready: SimpyEvent | None = None
-            if (
-                self.paired_dma_commands is not None
-                and message.dst.node_type is NodeType.GM_WDMA
-                and message.dst.attachment_mode is DMAAttachmentMode.DUAL_SIDE
-            ):
-                destination_ready = (
-                    self.paired_dma_commands.destination_ready_event(message)
-                )
+            dual_side_ready: SimpyEvent | None = None
+            single_side_completion: SimpyEvent | None = None
+            if message.dst.node_type is NodeType.GM_WDMA:
+                dma_commands = self._require_dma_commands()
+                if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                    dual_side_ready = dma_commands.post_dual_side_source(message)
+                elif message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                    single_side_completion = (
+                        dma_commands.post_single_side_upload(message)
+                    )
+                else:
+                    raise RuntimeError(
+                        f"message {message.index} has no DMA command mode"
+                    )
             yield self.tx_data_queue.put(
                 NMCTransmitEntry(
                     message=message,
@@ -392,7 +400,8 @@ class NMCChannel:
                     endpoint_ready_time_aci_cycles=(
                         endpoint_ready_time_aci_cycles
                     ),
-                    destination_ready=destination_ready,
+                    dual_side_ready=dual_side_ready,
+                    single_side_completion=single_side_completion,
                     completion=completion,
                 )
             )
@@ -430,6 +439,17 @@ class NMCChannel:
                 + self.config.descriptor_issue_cycles
                 + self.receive_endpoint_setup_residual_aci_cycles(shape_mode)
             )
+            if message.src.node_type is NodeType.GM_RDMA:
+                dma_commands = self._require_dma_commands()
+                if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                    dma_commands.post_dual_side_destination(message)
+                elif message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                    request_flit = dma_commands.post_single_side_download(message)
+                    yield self.binding.tx_link.send_flit(request_flit)
+                else:
+                    raise RuntimeError(
+                        f"message {message.index} has no DMA command mode"
+                    )
             flits: list[Flit] = []
             tail_rx_service_completion_time_aci_cycles: float | None = None
             expected_flit_count = message.flit_count()
@@ -468,6 +488,14 @@ class NMCChannel:
             completion_wait = operation_completion_floor - float(self.env.now)
             if completion_wait > 0:
                 yield self.env.timeout(completion_wait)
+            if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                self._require_dma_commands().complete_single_side_download(
+                    message
+                )
+            elif message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                self._require_dma_commands().complete_dual_side_destination(
+                    message
+                )
             return NMCReceiveResult(
                 message=message,
                 flits=tuple(flits),
@@ -493,14 +521,8 @@ class NMCChannel:
         next_command_service_time_aci_cycles = float(self.env.now)
         while True:
             entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
-            if entry.destination_ready is not None:
-                yield entry.destination_ready
-                if self.paired_dma_commands is None:
-                    raise RuntimeError("paired DMA coordinator is unavailable")
-                self.paired_dma_commands.retire(
-                    entry.message,
-                    entry.destination_ready,
-                )
+            if entry.dual_side_ready is not None:
+                yield entry.dual_side_ready
             turnaround_wait = (
                 next_command_service_time_aci_cycles - float(self.env.now)
             )
@@ -524,6 +546,13 @@ class NMCChannel:
                     yield self.env.timeout(self.tx_service_interval_aci_cycles)
                     yield self.binding.tx_link.send_flit(flit)
             final_local_handoff_time_aci_cycles = float(self.env.now)
+            if entry.dual_side_ready is not None:
+                self._require_dma_commands().complete_dual_side_source(
+                    entry.message,
+                    entry.dual_side_ready,
+                )
+            if entry.single_side_completion is not None:
+                yield entry.single_side_completion
             entry.completion.succeed(
                 NMCTransmitResult(
                     flits=entry.flits,
@@ -551,12 +580,28 @@ class NMCChannel:
             with request:
                 yield request
                 yield self.env.timeout(self.rx_service_interval_aci_cycles)
-                yield self.rx_data_queue.put(
-                    NMCReceiveEntry(
-                        flit=flit,
-                        rx_service_completion_time_aci_cycles=(
-                            float(self.env.now)
-                        ),
+                if flit.traffic_type is FlitTrafficType.DMA_RESPONSE:
+                    self._require_dma_commands().accept_single_side_upload_response(
+                        flit,
+                        self.binding.address,
                     )
-                )
+                elif flit.traffic_type is FlitTrafficType.PAYLOAD:
+                    yield self.rx_data_queue.put(
+                        NMCReceiveEntry(
+                            flit=flit,
+                            rx_service_completion_time_aci_cycles=(
+                                float(self.env.now)
+                            ),
+                        )
+                    )
+                else:
+                    raise RuntimeError(
+                        f"{self.fabric_id.name} PE received unexpected "
+                        f"{flit.traffic_type.name} flit"
+                    )
                 yield self.binding.rx_link.ack_credit()
+
+    def _require_dma_commands(self) -> DMACommandCoordinator:
+        if self.dma_commands is None:
+            raise RuntimeError("DMA command coordinator is unavailable")
+        return self.dma_commands

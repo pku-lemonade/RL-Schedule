@@ -75,6 +75,7 @@ from simulator_detailed.utils.definitions import (
     DimSlice,
     Direction,
     DMAAttachmentMode,
+    DMACommandMode,
     EndpointAddress,
     Flit,
     FlitType,
@@ -1160,7 +1161,7 @@ class Phase2NoCTests(unittest.TestCase):
         self.assertIn((13, 0, 1), ch1_routes)
         self.assertTrue(all(process.triggered for process in processes))
 
-    def test_nmc_command_path_rejects_unbound_endpoints_and_collectives(self):
+    def test_nmc_command_path_rejects_missing_dma_runtime_and_collectives(self):
         harness = MeshHarness()
         source = harness.attach_nmc(0)
         pe_registry = EndpointRegistry(harness.config)
@@ -1209,11 +1210,14 @@ class Phase2NoCTests(unittest.TestCase):
             ),
             index=106,
             data=[DimSlice(start=0, end=1)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
         )
         send_process = source.send(pe_to_gm)
-        harness.env.run(until=send_process)
-        with self.assertRaisesRegex(RuntimeError, "output port 15 is unbound"):
-            harness.env.run(until=harness.env.timeout(100))
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "DMA command coordinator is unavailable",
+        ):
+            harness.env.run(until=send_process)
 
     def test_router_failure_is_isolated_to_its_fabric(self):
         env = simpy.Environment()
@@ -2410,6 +2414,7 @@ class Phase2NoCTests(unittest.TestCase):
             ),
             index=7,
             data=[DimSlice(start=0, end=513)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
         configured_flits = configured_message.packetize()
         self.assertIs(
@@ -2744,6 +2749,7 @@ class Phase2NoCTests(unittest.TestCase):
             ),
             index=11,
             data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
         with self.assertRaisesRegex(NotImplementedError, "AIU-local"):
             message.packetize()

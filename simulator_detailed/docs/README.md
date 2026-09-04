@@ -23,11 +23,16 @@ admission uses the measured 40-cycle post time and independent four-entry CH0/CH
 pools; one endpoint-wide issuer remains a conservative assumption until
 cross-channel issuing is measured. Its shared datapath is capped at 110
 B/ACI-cycle, small command completions are separated by at least 273 cycles, and
-the paired operation floor is `138 + 17 * hops` cycles. A timing-only dual-side
-admission gate prevents data from outrunning a full receive-descriptor queue.
-GM_RDMA uses a shared 110 B/ACI-cycle service rate and a measured `246 + 17 *
-hops` receive-operation floor. Its descriptor timing remains provisional and
-single-side request/response traffic is not yet modeled, so GM endpoints remain
+the paired operation floor is `138 + 17 * hops` cycles. Explicit DMA command
+protocol state is independent of physical attachment selection. Dual-side
+payload waits for matching source and destination descriptor posts. A
+single-side GM download sends a PE request before the RDMA payload response; a
+single-side upload carries an address header on its first payload flit and waits
+for a WDMA completion response. These protocol flits traverse and contend on the
+normal DATA fabric. GM_RDMA uses a shared 110 B/ACI-cycle service rate and a
+measured `246 + 17 * hops` receive-operation floor. RDMA descriptor timing,
+standalone dual-side outer-sync timing, single-side WDMA fixed latency, and the
+single-side outstanding limit remain uncalibrated, so GM endpoints remain
 intentionally absent from the canonical configuration.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the

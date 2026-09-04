@@ -111,6 +111,13 @@ explicit `NoCChannel` instead of supplying a raw local-port number. Physical
 ownership is unique per `(fabric_id, router_id, local_port)`, so matching router
 and port IDs on NoC0 and NoC1 are separate hardware attachments.
 
+`DMACommandMode` is a separate per-message choice. `DUAL_SIDE` requires source
+and destination descriptor posts and carries payload without an address header.
+`SINGLE_SIDE` requires a supported single-side DMA port, only the PE initiator
+posts a descriptor, and the approximately 12 B address header is protocol
+metadata on the first transfer flit. It does not reduce the fixed 512 B logical
+payload capacity. DMA messages without an explicit command mode are rejected.
+
 For the current GM command path, optional `DMAEngineConfig.port_bw` overrides the
 one internal per-endpoint service rate shared by CH0 and CH1, and `cdc_penalty`
 is an additional ACI-cycle delay before data service. The optional
@@ -126,9 +133,10 @@ paired operation cannot complete before `138 + 17 * hops` ACI cycles. These are
 fixed WDMA hardware calibrations rather than payload-specific configuration
 profiles. GM_RDMA also defaults to one shared 110 B/ACI-cycle service rate;
 `port_bw` can still override it. GM_RDMA descriptor timing remains unmeasured, so
-functional execution still requires an explicit `descriptor_issue_cycles` value.
-The canonical `ada2s32.json` keeps `dma_engines` empty until the remaining GM
-modes are implemented.
+software-posted dual-side execution still requires an explicit
+`descriptor_issue_cycles` value. A single-side PE request activates GM_RDMA
+without a target-side software descriptor. The canonical `ada2s32.json` keeps
+`dma_engines` empty until the remaining GM calibration gaps are closed.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

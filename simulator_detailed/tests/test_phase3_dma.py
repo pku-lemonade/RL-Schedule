@@ -17,13 +17,17 @@ from simulator_detailed.configs.schemas.arch_config import (
 from simulator_detailed.core import Core
 from simulator_detailed.dma_endpoint import DMAReceiveResult, DMATransmitResult
 from simulator_detailed.endpoint_registry import EndpointRegistry
+from simulator_detailed.noc import FlitAction
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
     PORT_GM_RDMA,
+    PORT_GM_WDMA,
     PORT_GM_WDMA_CH0,
     PORT_GM_WDMA_CH1,
     DimSlice,
     DMAAttachmentMode,
+    DMACommandMode,
+    FlitTrafficType,
     Message,
     NMCShapeMode,
     NoCChannel,
@@ -188,12 +192,14 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             dst=gm_wdma.binding_for(NoCChannel.CH0).address,
             index=1000,
             data=[DimSlice(start=0, end=1025)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
         gm_to_pe = Message(
             src=gm_rdma.binding_for(NoCChannel.CH1).address,
             dst=cores[1].binding_for(NoCChannel.CH1).address,
             index=1001,
             data=[DimSlice(start=0, end=513)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
 
         gm_receive = gm_wdma.recv_message(pe_to_gm)
@@ -232,6 +238,303 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             gm_receive.value.operation_completion_time_aci_cycles,
         )
 
+    def test_dual_side_rdma_waits_for_destination_descriptor(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_RDMA],
+                    descriptor_issue_cycles=0.0,
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_rdma = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        message = Message(
+            src=gm_rdma.binding_for(NoCChannel.CH0).address,
+            dst=cores[0].binding_for(NoCChannel.CH0).address,
+            index=1002,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+
+        send = gm_rdma.send(message)
+        env.run(until=20.0)
+
+        self.assertFalse(send.triggered)
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 1)
+        self.assertFalse(
+            any(
+                event.action is FlitAction.INJECT
+                and event.msg_id == message.index
+                for event in arch.nocs[NoCChannel.CH0].tracer.events
+            )
+        )
+
+        receive = cores[0].nmc_channel_for(NoCChannel.CH0).recv_message(
+            message,
+            NMCShapeMode.DYNAMIC,
+        )
+        env.run(until=send)
+
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 1)
+        self.assertFalse(receive.triggered)
+        env.run(until=receive)
+
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+        self.assertTrue(
+            any(
+                event.action is FlitAction.INJECT
+                and event.msg_id == message.index
+                for event in arch.nocs[NoCChannel.CH0].tracer.events
+            )
+        )
+
+    def test_single_side_download_is_pe_initiated_request_response(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_RDMA],
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_rdma = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        message = Message(
+            src=gm_rdma.binding_for(NoCChannel.CH0).address,
+            dst=cores[0].binding_for(NoCChannel.CH0).address,
+            index=1003,
+            data=[DimSlice(start=0, end=513)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+        )
+
+        with self.assertRaisesRegex(ValueError, "initiated by NMCChannel"):
+            gm_rdma.send(message)
+        receive = cores[0].nmc_channel_for(NoCChannel.CH0).recv_message(
+            message,
+            NMCShapeMode.DYNAMIC,
+        )
+        env.run(until=receive)
+
+        self.assertEqual(
+            receive.value.operation_latency_aci_cycles,
+            GM_RDMA_REFERENCE.operation_latency_aci_cycles(7),
+        )
+        self.assertEqual(
+            [flit.dma_header_bytes for flit in receive.value.flits],
+            [message.header_bytes, 0],
+        )
+        injections = [
+            event
+            for event in arch.nocs[NoCChannel.CH0].tracer.events
+            if event.action is FlitAction.INJECT and event.msg_id == message.index
+        ]
+        self.assertEqual(
+            {event.traffic_type for event in injections},
+            {FlitTrafficType.DMA_REQUEST, FlitTrafficType.PAYLOAD},
+        )
+        request = next(
+            event
+            for event in injections
+            if event.traffic_type is FlitTrafficType.DMA_REQUEST
+        )
+        self.assertEqual((request.src_router, request.dst_router), (0, 28))
+        self.assertEqual(request.dma_header_bytes, message.header_bytes)
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        self.assertIn(
+            (NoCChannel.CH0, message.index),
+            arch.nocs[NoCChannel.CH0].tracer.message_fabric_timings(),
+        )
+
+    def test_single_side_upload_auto_receives_and_returns_response(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_WDMA],
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        message = Message(
+            src=cores[0].binding_for(NoCChannel.CH1).address,
+            dst=gm_wdma.binding_for(NoCChannel.CH1).address,
+            index=1004,
+            data=[DimSlice(start=0, end=513)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+        )
+
+        with self.assertRaisesRegex(ValueError, "initiated by NMCChannel"):
+            gm_wdma.recv_message(message)
+        send = cores[0].nmc_channel_for(NoCChannel.CH1).send(message)
+        env.run(until=send)
+
+        self.assertLess(
+            send.value.final_local_handoff_time_aci_cycles,
+            send.value.operation_completion_time_aci_cycles,
+        )
+        injections = [
+            event
+            for event in arch.nocs[NoCChannel.CH1].tracer.events
+            if event.action is FlitAction.INJECT and event.msg_id == message.index
+        ]
+        self.assertEqual(
+            {event.traffic_type for event in injections},
+            {FlitTrafficType.PAYLOAD, FlitTrafficType.DMA_RESPONSE},
+        )
+        response = next(
+            event
+            for event in injections
+            if event.traffic_type is FlitTrafficType.DMA_RESPONSE
+        )
+        self.assertEqual((response.src_router, response.dst_router), (28, 0))
+        self.assertEqual(response.dma_header_bytes, message.header_bytes)
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH1),
+            0,
+        )
+
+    def test_protocol_state_rejects_duplicate_command_posts(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_WDMA],
+                )
+            ]
+        )
+        _, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        message = Message(
+            src=cores[0].binding_for(NoCChannel.CH0).address,
+            dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+            index=1005,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+        )
+
+        arch.dma_commands.post_single_side_upload(message)
+        with self.assertRaisesRegex(RuntimeError, "already active"):
+            arch.dma_commands.post_single_side_upload(message)
+
+    def test_dma_command_mode_is_explicit_and_not_attachment_mode(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_RDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_RDMA],
+                ),
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                ),
+            ]
+        )
+        _, arch, cores = self._build_executable_runtime(noc_config)
+        gm_rdma = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+
+        with self.assertRaisesRegex(ValueError, "require dma_command_mode"):
+            Message(
+                src=cores[0].binding_for(NoCChannel.CH0).address,
+                dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+                index=1006,
+                data=[DimSlice(start=0, end=512)],
+            )
+        with self.assertRaisesRegex(ValueError, "single-side DMA attachment"):
+            Message(
+                src=cores[0].binding_for(NoCChannel.CH0).address,
+                dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+                index=1007,
+                data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.SINGLE_SIDE,
+            )
+        with self.assertRaisesRegex(ValueError, "nonzero header"):
+            Message(
+                src=gm_rdma.binding_for(NoCChannel.CH0).address,
+                dst=cores[0].binding_for(NoCChannel.CH0).address,
+                index=1008,
+                data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                header_bytes=0,
+            )
+
+        dual_rdma = Message(
+            src=gm_rdma.binding_for(NoCChannel.CH0).address,
+            dst=cores[0].binding_for(NoCChannel.CH0).address,
+            index=1009,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+        self.assertIs(
+            dual_rdma.src.attachment_mode,
+            DMAAttachmentMode.SINGLE_SIDE,
+        )
+        self.assertEqual(dual_rdma.packetize()[0].dma_header_bytes, 0)
+
+    def test_single_side_task_ids_are_isolated_by_fabric(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=1,
+                    local_ports=[PORT_GM_WDMA],
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        messages = tuple(
+            Message(
+                src=cores[28].binding_for(fabric_id).address,
+                dst=gm_wdma.binding_for(fabric_id).address,
+                index=1010,
+                data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.SINGLE_SIDE,
+            )
+            for fabric_id in NoCChannel
+        )
+
+        sends = tuple(
+            cores[28].nmc_channel_for(message.src.fabric_id).send(message)
+            for message in messages
+        )
+        env.run(until=env.all_of(sends))
+
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        for fabric_id in NoCChannel:
+            response_injections = [
+                event
+                for event in arch.nocs[fabric_id].tracer.events
+                if event.action is FlitAction.INJECT
+                and event.msg_id == 1010
+                and event.traffic_type is FlitTrafficType.DMA_RESPONSE
+            ]
+            self.assertEqual(len(response_injections), 1)
+
     def test_dual_fabric_wdma_commands_share_completion_cadence(self) -> None:
         noc_config = NoCConfig(
             dma_engines=[
@@ -255,6 +558,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 dst=gm_wdma.binding_for(fabric_id).address,
                 index=1100 + int(fabric_id),
                 data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.DUAL_SIDE,
             )
             for fabric_id in NoCChannel
         )
@@ -301,6 +605,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     dst=gm_wdma.binding_for(NoCChannel.CH0).address,
                     index=1500 + pe_id,
                     data=[DimSlice(start=0, end=512)],
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
                 )
 
                 receive = gm_wdma.recv_message(message)
@@ -333,6 +638,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             dst=gm_wdma.binding_for(NoCChannel.CH0).address,
             index=1600,
             data=[DimSlice(start=0, end=bulk_bytes)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
 
         bulk_receive = gm_wdma.recv_message(bulk_message)
@@ -381,6 +687,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 dst=gm_wdma.binding_for(NoCChannel.CH0).address,
                 index=1700 + source_id,
                 data=[DimSlice(start=0, end=message_bytes)],
+                dma_command_mode=DMACommandMode.DUAL_SIDE,
             )
             for source_id in source_ids
         )
@@ -435,6 +742,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     dst=cores[pe_id].binding_for(NoCChannel.CH0).address,
                     index=1800 + pe_id,
                     data=[DimSlice(start=0, end=512)],
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
                 )
 
                 receive = cores[pe_id].nmc_channel_for(
@@ -478,6 +786,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     dst=cores[pe_id].binding_for(NoCChannel.CH0).address,
                     index=1900 + pe_id,
                     data=[DimSlice(start=0, end=bulk_bytes)],
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
                 )
 
                 receive = cores[pe_id].nmc_channel_for(
@@ -547,6 +856,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 .address,
                 index=2000 + destination_id,
                 data=[DimSlice(start=0, end=message_bytes)],
+                dma_command_mode=DMACommandMode.DUAL_SIDE,
             )
             for destination_id in destination_ids
         )
@@ -604,6 +914,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 dst=gm_wdma.binding_for(NoCChannel.CH0).address,
                 index=1300 + message_index,
                 data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.DUAL_SIDE,
             )
             for message_index in range(5)
         )
@@ -612,6 +923,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             dst=gm_wdma.binding_for(NoCChannel.CH1).address,
             index=1400,
             data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
         messages = (*ch0_messages, ch1_message)
 
@@ -689,6 +1001,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 dst=cores[pe_id].binding_for(NoCChannel.CH0).address,
                 index=1200 + pe_id,
                 data=[DimSlice(start=0, end=1024)],
+                dma_command_mode=DMACommandMode.DUAL_SIDE,
             )
             for pe_id in (0, 1)
         )

@@ -18,6 +18,7 @@ from .utils.definitions import (
     Direction,
     Event,
     Flit,
+    FlitTrafficType,
     NoCChannel,
     NoCPlane,
     direction_to_port,
@@ -60,6 +61,8 @@ class FlitEvent:
     link_name: str = ""
     grant_flits: int = 0
     is_tail: bool = False
+    traffic_type: FlitTrafficType = FlitTrafficType.PAYLOAD
+    dma_header_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -148,6 +151,14 @@ class NoCTracer:
                 link_name=link_name,
                 grant_flits=grant_flits,
                 is_tail=False if flit is None else flit.is_tail,
+                traffic_type=(
+                    FlitTrafficType.PAYLOAD
+                    if flit is None
+                    else flit.traffic_type
+                ),
+                dma_header_bytes=(
+                    0 if flit is None else flit.dma_header_bytes
+                ),
             )
         )
 
@@ -159,7 +170,10 @@ class NoCTracer:
         first_ejected: dict[TraceMessageKey, float] = {}
         final_ejected: dict[TraceMessageKey, float] = {}
         for event in self.events:
-            if event.plane is not NoCPlane.DATA:
+            if (
+                event.plane is not NoCPlane.DATA
+                or event.traffic_type is not FlitTrafficType.PAYLOAD
+            ):
                 continue
             message_key = (event.fabric_id, event.msg_id)
             if event.action is FlitAction.INJECT:

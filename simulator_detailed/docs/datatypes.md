@@ -64,6 +64,13 @@ registry maps those modes to documented local ports on the requested fabric.
 AIU addresses are representable, but packetization rejects them until an AIU DMA
 endpoint model exists.
 
+`DMACommandMode` is independent of that physical attachment. Every message that
+contains a DMA endpoint must explicitly select `DUAL_SIDE` or `SINGLE_SIDE`;
+PE-to-PE messages do not carry a DMA command mode. A WDMA dual-side command uses
+its CH0/CH1 attachment, while single-side commands use the single-side DMA port.
+GM_RDMA's physical port 14 can still execute a dual-side paired command, so its
+software command mode must not be inferred from `DMAAttachmentMode`.
+
 `PEChannelBinding` is a concrete physical attachment, not a type or mode. It
 groups one PE address with distinct TX and RX Links and the matching
 fabric-local Router. `NMCChannel` is the corresponding runtime transport object.
@@ -84,10 +91,10 @@ first-flit RX service after injection, so command-level receive completion
 reaches that target plus 8.5 ACI cycles per router hop.
 `NMCTransmitResult` names submission, descriptor acceptance, endpoint readiness,
 final local-Link handoff, and SEND operation completion as separate ACI-cycle
-timestamps. The final two timestamps are equal under the current SEND contract,
-but remain separate observations so a later completion contract cannot silently
-redefine the local handoff boundary. Its operation latency is completion minus
-submission.
+timestamps. They are equal for ordinary and dual-side sends. A single-side
+upload completes only after its WDMA response returns, so its operation
+completion can be later than local payload handoff. Its operation latency is
+completion minus submission.
 
 `NMCReceiveEntry` stores one serviced flit and its ACI-cycle RX-service
 completion timestamp. `NMCReceiveResult` stores the validated packet plus
@@ -141,9 +148,11 @@ size-independent command boundary calibrated from the N=32, 32 KB throughput
 measurements, not a per-packet-size branch or an added interval between flits.
 
 Payload direction is also validated: PE and RDMA endpoints may inject data, while
-PE and WDMA endpoints may consume it. The Phase 3 GM command API executes the
-paired payload direction directly. Control-plane requests and responses for true
-single-side operation are not payload `Message` objects and remain later work.
+PE and WDMA endpoints may consume it. `Message.packetize()` marks the first
+single-side payload flit with `header_bytes` of metadata without reducing its
+512 B logical payload. `FlitTrafficType` distinguishes payload from zero-payload
+DMA request and response flits. All three roles retain the fixed physical flit
+transfer cost.
 
 A GM_WDMA receive acquires one descriptor slot from the destination fabric's
 four-entry pool before its descriptor is issued. The two fabric pools are
@@ -163,7 +172,10 @@ hops` cycles from submission; this operation boundary includes the measured
 completion/synchronization effect and does not change the 8.5-cycle one-way DATA
 fabric slope. `tail_service_completion_time_aci_cycles` records raw endpoint data
 service, while `operation_completion_time_aci_cycles` includes these command
-boundaries.
+boundaries. A single-side upload is auto-admitted from its address-bearing HEAD,
+does not consume a WDMA software descriptor slot, and returns a response only
+after target service and the shared 273-cycle completion sequencer. The paired
+`138 + 17 * hops` floor is not applied to this uncalibrated single-side path.
 
 GM_RDMA has one 110 B/ACI-cycle data-service resource shared by both fabrics.
 Concurrent downloads on one fabric are admitted round-robin in complete
@@ -172,28 +184,36 @@ measured fair N-way outcast behavior. The destination `NMCReceiveResult` is the
 end-to-end operation boundary and cannot complete before `246 + 17 * hops` ACI
 cycles from receive submission. The source `DMATransmitResult` still ends at its
 final local-link handoff. RDMA descriptor issue timing remains explicitly
-provisional.
+provisional for software-posted dual-side commands. A single-side PE request
+activates the RDMA response directly and therefore does not invent a target-side
+software descriptor cost.
 
-For dual-side PE-to-GM traffic, `PairedDMACommandCoordinator` exposes only a
-timing gate: the PE TX worker may program and queue its descriptor, but it cannot
-inject payload until the matching WDMA receive descriptor is accepted. This
-prevents data for a fifth command from occupying the destination link while the
-four-entry receive queue is full. It does not emit control packets or implement
-single-side request/response matching; those protocol states remain Fix 13F.
+`DMACommandCoordinator` owns two distinct protocols. Dual-side state records
+source and destination descriptor posts under a full endpoint-qualified command
+key, releases payload only when both sides are present, and remains live until
+both source handoff and destination completion. This event represents the
+confirmed outer-sync ordering, but adds no standalone latency because that
+latency has not been isolated. Single-side state is keyed by `(fabric_id,
+task_id)`: GM download sends a request from PE to RDMA and returns payload, while
+GM upload uses its address-bearing payload HEAD as the request and sends a WDMA
+completion response to PE. Single-side protocol flits traverse the normal DATA
+fabric with ordinary contention and no priority. The unresolved hardware
+`maxOst` limit is not guessed; active task IDs only need to be unique per fabric.
 
 `NoCChannel` uses the hardware channel values `CH0=0` and `CH1=1`.
 `DMAAttachmentMode` describes attachment topology and has no hardware numeric
-encoding.
+encoding. `DMACommandMode` describes software protocol and is not inferred from
+that topology.
 `TransType` uses the routing-word encoding `SINGLECAST=0`, `FIXPATH=1`,
 `MULTICAST=2`, and `BROADCAST=3`. The current runtime executes only SINGLECAST;
 packetization raises `NotImplementedError` for the other representable types so
 they cannot silently follow the unicast path.
 
-`FlitEvent` stores `fabric_id` with explicit `out_port` and fabric-qualified
-`link_name` fields. `ROUTER_SA_RELEASE` events also record `grant_flits`; the
-trace does not duplicate the full flit type. It retains the derived `is_tail`
-marker so a partial live trace cannot be reported as a completed packet. Its
-`time` field is always an ACI-cycle timestamp.
+`FlitEvent` stores `fabric_id`, `traffic_type`, `dma_header_bytes`, explicit
+`out_port`, and fabric-qualified `link_name` fields. `ROUTER_SA_RELEASE` events
+also record `grant_flits`; the trace does not duplicate the full flit type. It
+retains the derived `is_tail` marker so a partial live trace cannot be reported
+as a completed packet. Its `time` field is always an ACI-cycle timestamp.
 
 `MessageFabricTiming` stores the first router `INJECT`, first destination-router
 `EJECT`, and final destination-router `EJECT` timestamps for one completed DATA
@@ -202,7 +222,9 @@ fabric completion latency is first injection to final ejection. These metrics
 exclude descriptor posting, endpoint setup, PE-link delivery before injection,
 and NMC RX service after ejection. Timing records are keyed by
 `(fabric_id, msg_id)`, so equal router, link, and message IDs on NoC0 and NoC1
-remain distinct. `per_msg_latency()` is retained only as a compatibility alias
+remain distinct. DMA request/response control flits are excluded so a reverse
+request cannot be mistaken for payload timing. `per_msg_latency()` is retained
+only as a compatibility alias
 for packet fabric completion latency.
 
 `NMCBenchmarkScenario` names the supported end-to-end acceptance schedules:

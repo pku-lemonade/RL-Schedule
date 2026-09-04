@@ -172,7 +172,7 @@ Implement in small, independently tested commits:
    backpressure above four commands and does not model control packets. Validate
    zero-hop/seven-hop latency, single-source bulk convergence, and eight-source
    incast without payload-size branches.
-5. **Fix 13E, implemented locally:** add the measured GM_RDMA completion floor of
+5. **Fix 13E, committed as `653dacb`:** add the measured GM_RDMA completion floor of
    `246 + 17 * hops` ACI cycles and a shared 110 B/ACI-cycle service rate. At
    1125 MHz this service rate is 123.75 GB/s and matches the measured 120-125
    GB/s aggregate outcast cap; the architecture's cap is not 120-125
@@ -180,11 +180,18 @@ Implement in small, independently tested commits:
    configured burst quantum so they retain per-message order and share the one
    endpoint engine fairly. Keep unmeasured descriptor behavior explicitly
    provisional rather than copying a WDMA calibration silently.
-6. **Fix 13F:** extend the timing-only dual-side admission gate into explicit
-   mode-specific protocol state. Represent dual-side outer-sync behavior
-   separately from single-side request/response matching and header traffic while
-   preserving the existing physical attachment resolution. Keep AIU-local paths
-   explicitly unsupported.
+6. **Fix 13F, implemented locally:** replace the timing-only admission gate with
+   explicit `DMACommandMode` protocol state independent of physical
+   `DMAAttachmentMode`. Dual-side source and destination descriptor posts meet at
+   an outer-sync admission event. Single-side GM downloads send an address-bearing
+   PE request and return RDMA payload; single-side uploads carry the address on the
+   first payload flit and return a WDMA completion response. Match both directions
+   by fabric and task ID, send protocol flits through the normal DATA fabric, and
+   exclude those control flits from payload timing summaries. Preserve 512 B of
+   logical payload per flit, keep the approximately 12 B header as metadata, and
+   keep AIU-local paths unsupported. Do not assign standalone outer-sync latency,
+   single-side WDMA fixed latency, or a single-side outstanding limit until those
+   quantities are measured.
 7. **Fix 14A:** create DDR RDMA/WDMA runtime resources and explicit 1200 MHz to
    ACI conversion without enabling command execution.
 8. **Fix 14B:** add paired DDR command execution with one internal datapath per

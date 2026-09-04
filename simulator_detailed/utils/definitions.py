@@ -78,6 +78,21 @@ class DMAAttachmentMode(Enum):
     AIU_LOCAL = "aiu_local"
 
 
+class DMACommandMode(Enum):
+    """Software command protocol for a transfer involving a DMA endpoint."""
+
+    DUAL_SIDE = "dual_side"
+    SINGLE_SIDE = "single_side"
+
+
+class FlitTrafficType(Enum):
+    """Protocol role of a flit carried by a data NoC fabric."""
+
+    PAYLOAD = "payload"
+    DMA_REQUEST = "dma_request"
+    DMA_RESPONSE = "dma_response"
+
+
 class TransType(IntEnum):
     """Hardware transmission encoding stored in routing-word bits [18:17]."""
 
@@ -336,6 +351,8 @@ class Flit(BaseModel):
     reduce_op: int = -1              # reduce operation type (-1 = none, >=0 = reduce mode)
     sync_mode: int = 0               # sync mode: 0=normal,1=bcast-incl-self,2=reduce-intermediate,3=reduce-last
     burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
+    traffic_type: FlitTrafficType = FlitTrafficType.PAYLOAD
+    dma_header_bytes: int = Field(ge=0, le=FLIT_BYTES, default=0)
 
     @property
     def is_head(self) -> bool:
@@ -407,13 +424,14 @@ class Message(BaseModel):
     index: int                        # unique message index (DFG task index)
     data: list[DimSlice]              # tensor slice(s) describing payload
     nmc_shape_mode: NMCShapeMode = NMCShapeMode.DYNAMIC
+    dma_command_mode: DMACommandMode | None = None
     trans_type: TransType = TransType.SINGLECAST  # transmission type
     burst_len_mode: BurstLenMode = BurstLenMode.BURST_LEN_DEFAULT
     is_broadcast: bool = False        # whether this is a broadcast message
     broadcast_dst_mask: int = 0       # destination bitmask for broadcast/multicast
     reduce_op: int = -1               # reduce operation (-1 = none)
     sync_mode: int = 0                # sync mode field
-    header_bytes: int = 12            # B, estimated metadata; not deducted from logical payload
+    header_bytes: int = Field(ge=0, le=FLIT_BYTES, default=12)
 
     @model_validator(mode="after")
     def validate_endpoint_roles(self) -> Message:
@@ -423,6 +441,50 @@ class Message(BaseModel):
             raise ValueError(f"{self.dst.node_type.name} cannot consume payload data")
         if self.src.fabric_id is not self.dst.fabric_id:
             raise ValueError("message endpoints must use the same NoC fabric")
+        involves_dma = (
+            self.src.node_type is not NodeType.PE
+            or self.dst.node_type is not NodeType.PE
+        )
+        if involves_dma and self.dma_command_mode is None:
+            raise ValueError(
+                "transfers involving DMA endpoints require dma_command_mode"
+            )
+        if not involves_dma and self.dma_command_mode is not None:
+            raise ValueError(
+                "dma_command_mode is valid only for transfers involving DMA endpoints"
+            )
+        dma_endpoints = tuple(
+            endpoint
+            for endpoint in (self.src, self.dst)
+            if endpoint.node_type is not NodeType.PE
+        )
+        if self.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+            if self.header_bytes == 0:
+                raise ValueError("single-side commands require a nonzero header")
+            if (
+                self.src.node_type is not NodeType.PE
+                and self.dst.node_type is not NodeType.PE
+            ):
+                raise ValueError("single-side commands require one PE endpoint")
+            if any(
+                endpoint.attachment_mode
+                not in (
+                    DMAAttachmentMode.SINGLE_SIDE,
+                    DMAAttachmentMode.AIU_LOCAL,
+                )
+                for endpoint in dma_endpoints
+            ):
+                raise ValueError(
+                    "single-side commands require a single-side DMA attachment"
+                )
+        if self.dma_command_mode is DMACommandMode.DUAL_SIDE and any(
+            endpoint.node_type in (NodeType.GM_WDMA, NodeType.DDR_WDMA)
+            and endpoint.attachment_mode is not DMAAttachmentMode.DUAL_SIDE
+            for endpoint in dma_endpoints
+        ):
+            raise ValueError(
+                "dual-side commands require a dual-side WDMA attachment"
+            )
         return self
 
     def flit_count(self) -> int:
@@ -480,6 +542,13 @@ class Message(BaseModel):
                     reduce_op=self.reduce_op,
                     sync_mode=self.sync_mode,
                     burst_len_mode=self.burst_len_mode,
+                    traffic_type=FlitTrafficType.PAYLOAD,
+                    dma_header_bytes=(
+                        self.header_bytes
+                        if flit_index == 0
+                        and self.dma_command_mode is DMACommandMode.SINGLE_SIDE
+                        else 0
+                    ),
                 )
             )
 
@@ -510,6 +579,14 @@ class Message(BaseModel):
             or flit.reduce_op != self.reduce_op
             or flit.sync_mode != self.sync_mode
             or flit.burst_len_mode is not self.burst_len_mode
+            or flit.traffic_type is not FlitTrafficType.PAYLOAD
+            or flit.dma_header_bytes
+            != (
+                self.header_bytes
+                if flit_index == 0
+                and self.dma_command_mode is DMACommandMode.SINGLE_SIDE
+                else 0
+            )
         ):
             raise RuntimeError(
                 f"message {self.index} received an invalid flit at index "

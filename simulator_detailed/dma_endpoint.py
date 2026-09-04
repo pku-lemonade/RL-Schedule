@@ -8,14 +8,16 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
-from .command_coordination import PairedDMACommandCoordinator
+from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import DMAEngineConfig, DMAType
 from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
     FLIT_BYTES,
     DMAAttachmentMode,
+    DMACommandMode,
     EndpointAddress,
     Flit,
+    FlitTrafficType,
     Message,
     NoCChannel,
     NodeType,
@@ -120,7 +122,7 @@ class DMAEndpoint:
         env: simpy.Environment,
         config: DMAEngineConfig,
         node_type: NodeType,
-        paired_dma_commands: PairedDMACommandCoordinator | None = None,
+        dma_commands: DMACommandCoordinator | None = None,
     ) -> None:
         if node_type not in (NodeType.GM_RDMA, NodeType.GM_WDMA):
             raise ValueError("Phase 3 DMA runtime supports GM endpoints only")
@@ -134,17 +136,17 @@ class DMAEndpoint:
                 f"{node_type.name} endpoint requires {expected_dma_type.name} config"
             )
         if (
-            paired_dma_commands is not None
-            and paired_dma_commands.env is not env
+            dma_commands is not None
+            and dma_commands.env is not env
         ):
             raise ValueError(
-                "DMA endpoint and paired command coordinator must use the same "
+                "DMA endpoint and command coordinator must use the same "
                 "environment"
             )
         self.env = env
         self.config = config
         self.node_type = node_type
-        self.paired_dma_commands = paired_dma_commands
+        self.dma_commands = dma_commands
         self.bindings: dict[NoCChannel, DMAChannelBinding] = {}
 
         # The hardware endpoint has one internal engine shared by CH0 and CH1.
@@ -165,8 +167,8 @@ class DMAEndpoint:
                 for fabric_id in NoCChannel
             }
         self.rx_data_queue = simpy.FilterStore(env)
-        self._claimed_receive_ids: set[int] = set()
-        self._receive_ready: dict[int, SimpyEvent] = {}
+        self._claimed_receive_ids: set[tuple[NoCChannel, int]] = set()
+        self._receive_ready: dict[tuple[NoCChannel, int], SimpyEvent] = {}
 
     @property
     def instance_id(self) -> int:
@@ -201,6 +203,8 @@ class DMAEndpoint:
         self.bindings[address.fabric_id] = binding
         if self.node_type is NodeType.GM_WDMA:
             self.env.process(self._rx_service_loop(binding))
+        else:
+            self.env.process(self._request_service_loop(binding))
 
     def binding_for(self, fabric_id: NoCChannel) -> DMAChannelBinding:
         try:
@@ -263,7 +267,7 @@ class DMAEndpoint:
         return len(self._descriptor_slots_for(fabric_id).users)
 
     def send(self, message: Message) -> Process:
-        """Post one GM RDMA command and inject it into one data fabric."""
+        """Post one dual-side GM RDMA command and inject its payload."""
         if self.node_type is not NodeType.GM_RDMA:
             raise NotImplementedError("GM_WDMA cannot inject payload data")
         self._validate_message_transport(message)
@@ -277,12 +281,21 @@ class DMAEndpoint:
             raise NotImplementedError(
                 "Phase 3B GM RDMA execution supports GM-to-PE transfers only"
             )
+        if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+            raise ValueError(
+                "single-side GM downloads are initiated by NMCChannel.recv_message"
+            )
         return self.env.process(
-            self._send(message, tuple(message.packetize()), binding)
+            self._send(
+                message,
+                tuple(message.packetize()),
+                binding,
+                dispatch_descriptor=True,
+            )
         )
 
     def recv_message(self, message: Message) -> Process:
-        """Post one GM WDMA command and complete after shared endpoint service."""
+        """Post one dual-side GM WDMA receive command."""
         if self.node_type is not NodeType.GM_WDMA:
             raise NotImplementedError("GM_RDMA cannot consume payload data")
         self._validate_message_transport(message)
@@ -296,12 +309,17 @@ class DMAEndpoint:
             raise NotImplementedError(
                 "Phase 3B GM WDMA execution supports PE-to-GM transfers only"
             )
-        if message.index in self._claimed_receive_ids:
+        if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+            raise ValueError(
+                "single-side GM uploads are initiated by NMCChannel.send"
+            )
+        receive_key = (message.dst.fabric_id, message.index)
+        if receive_key in self._claimed_receive_ids:
             raise ValueError(
                 f"message {message.index} already has a receive command on "
                 f"{self.node_type.name}[{self.instance_id}]"
             )
-        self._claimed_receive_ids.add(message.index)
+        self._claimed_receive_ids.add(receive_key)
         return self.env.process(self._recv_message(message))
 
     @staticmethod
@@ -323,10 +341,21 @@ class DMAEndpoint:
         message: Message,
         flits: tuple[Flit, ...],
         binding: DMAChannelBinding,
+        *,
+        dispatch_descriptor: bool,
     ) -> ProcessGenerator:
         submission_time_aci_cycles = float(self.env.now)
-        yield from self._dispatch_descriptor()
+        if dispatch_descriptor:
+            yield from self._dispatch_descriptor()
         descriptor_acceptance_time_aci_cycles = float(self.env.now)
+        dual_side_ready: SimpyEvent | None = None
+        if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+            dual_side_ready = self._require_dma_commands().post_dual_side_source(
+                message
+            )
+            yield dual_side_ready
+        elif message.dma_command_mode is not DMACommandMode.SINGLE_SIDE:
+            raise RuntimeError(f"message {message.index} has no DMA command mode")
         if self.config.cdc_penalty > 0:
             yield self.env.timeout(self.config.cdc_penalty)
 
@@ -348,6 +377,11 @@ class DMAEndpoint:
                 burst_arbiter.release(message.index)
 
         final_local_handoff_time_aci_cycles = float(self.env.now)
+        if dual_side_ready is not None:
+            self._require_dma_commands().complete_dual_side_source(
+                message,
+                dual_side_ready,
+            )
         return DMATransmitResult(
             message=message,
             flits=flits,
@@ -370,69 +404,108 @@ class DMAEndpoint:
             yield descriptor_request
             yield from self._dispatch_descriptor()
             descriptor_acceptance_time_aci_cycles = float(self.env.now)
-            if (
-                self.paired_dma_commands is not None
-                and message.dst.attachment_mode is DMAAttachmentMode.DUAL_SIDE
-            ):
-                self.paired_dma_commands.admit_destination(message)
-            if self.config.cdc_penalty > 0:
-                yield self.env.timeout(self.config.cdc_penalty)
-
-            receive_ready = self._receive_ready_event(message.index)
-            if not receive_ready.triggered:
-                receive_ready.succeed()
-
-            flits: list[Flit] = []
-            tail_service_completion_time_aci_cycles: float | None = None
-            expected_flit_count = message.flit_count()
-            for flit_index in range(expected_flit_count):
-                entry = cast(
-                    DMAReceiveEntry,
-                    (
-                        yield self.rx_data_queue.get(
-                            lambda queued, message_id=message.index: (
-                                queued.flit.msg_id == message_id
-                            )
-                        )
-                    ),
+            self._require_dma_commands().post_dual_side_destination(message)
+            result = (
+                yield from self._receive_payload(
+                    message,
+                    submission_time_aci_cycles,
+                    descriptor_acceptance_time_aci_cycles,
                 )
-                message.validate_flit(
-                    entry.flit,
-                    flit_index,
-                    expected_flit_count,
-                )
-                flits.append(entry.flit)
-                tail_service_completion_time_aci_cycles = (
-                    entry.service_completion_time_aci_cycles
-                )
-
-            if tail_service_completion_time_aci_cycles is None:
-                raise RuntimeError(
-                    f"message {message.index} has no GM service boundary"
-                )
-            yield from self._complete_wdma_command(
-                message,
-                submission_time_aci_cycles,
             )
-            self._receive_ready.pop(message.index, None)
-            return DMAReceiveResult(
-                message=message,
-                flits=tuple(flits),
-                submission_time_aci_cycles=submission_time_aci_cycles,
-                descriptor_acceptance_time_aci_cycles=(
-                    descriptor_acceptance_time_aci_cycles
-                ),
-                tail_service_completion_time_aci_cycles=(
-                    tail_service_completion_time_aci_cycles
-                ),
-                operation_completion_time_aci_cycles=float(self.env.now),
-            )
+            self._require_dma_commands().complete_dual_side_destination(message)
+            return result
         finally:
             if descriptor_request is not None:
                 if descriptor_request.triggered:
                     descriptor_slots.release(descriptor_request)
                 else:
                     descriptor_request.cancel()
+
+    def _receive_payload(
+        self,
+        message: Message,
+        submission_time_aci_cycles: float,
+        descriptor_acceptance_time_aci_cycles: float,
+    ) -> ProcessGenerator:
+        if self.config.cdc_penalty > 0:
+            yield self.env.timeout(self.config.cdc_penalty)
+
+        receive_ready = self._receive_ready_event(
+            message.dst.fabric_id,
+            message.index,
+        )
+        if not receive_ready.triggered:
+            receive_ready.succeed()
+
+        flits: list[Flit] = []
+        tail_service_completion_time_aci_cycles: float | None = None
+        expected_flit_count = message.flit_count()
+        for flit_index in range(expected_flit_count):
+            entry = cast(
+                DMAReceiveEntry,
+                (
+                    yield self.rx_data_queue.get(
+                        lambda queued,
+                        message_id=message.index,
+                        fabric_id=message.dst.fabric_id: (
+                            queued.flit.msg_id == message_id
+                            and queued.flit.fabric_id is fabric_id
+                        )
+                    )
+                ),
+            )
+            message.validate_flit(
+                entry.flit,
+                flit_index,
+                expected_flit_count,
+            )
+            flits.append(entry.flit)
+            tail_service_completion_time_aci_cycles = (
+                entry.service_completion_time_aci_cycles
+            )
+
+        if tail_service_completion_time_aci_cycles is None:
+            raise RuntimeError(
+                f"message {message.index} has no GM service boundary"
+            )
+        yield from self._complete_wdma_command(
+            message,
+            submission_time_aci_cycles,
+        )
+        self._receive_ready.pop(
+            (message.dst.fabric_id, message.index),
+            None,
+        )
+        return DMAReceiveResult(
+            message=message,
+            flits=tuple(flits),
+            submission_time_aci_cycles=submission_time_aci_cycles,
+            descriptor_acceptance_time_aci_cycles=(
+                descriptor_acceptance_time_aci_cycles
+            ),
+            tail_service_completion_time_aci_cycles=(
+                tail_service_completion_time_aci_cycles
+            ),
+            operation_completion_time_aci_cycles=float(self.env.now),
+        )
+
+    def _recv_single_side_upload(
+        self,
+        message: Message,
+        binding: DMAChannelBinding,
+    ) -> ProcessGenerator:
+        submission_time_aci_cycles = float(self.env.now)
+        yield from self._receive_payload(
+            message,
+            submission_time_aci_cycles,
+            submission_time_aci_cycles,
+        )
+        response_flit = (
+            self._require_dma_commands().create_single_side_upload_response(
+                message,
+            )
+        )
+        yield binding.tx_link.send_flit(response_flit)
 
     def _dispatch_descriptor(self) -> ProcessGenerator:
         request = self.descriptor_issuer.request()
@@ -456,10 +529,13 @@ class DMAEndpoint:
         request = self.command_completion_sequencer.request()
         with request:
             yield request
-            completion_floor = (
-                submission_time_aci_cycles
-                + self._minimum_operation_latency_aci_cycles(message)
-            )
+            completion_floor = float(self.env.now)
+            if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                completion_floor = max(
+                    completion_floor,
+                    submission_time_aci_cycles
+                    + self._minimum_operation_latency_aci_cycles(message),
+                )
             if self._last_command_completion_time_aci_cycles is not None:
                 completion_floor = max(
                     completion_floor,
@@ -484,12 +560,44 @@ class DMAEndpoint:
             + hops * _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES
         )
 
-    def _receive_ready_event(self, message_id: int) -> SimpyEvent:
-        event = self._receive_ready.get(message_id)
+    def _receive_ready_event(
+        self,
+        fabric_id: NoCChannel,
+        message_id: int,
+    ) -> SimpyEvent:
+        key = (fabric_id, message_id)
+        event = self._receive_ready.get(key)
         if event is None:
             event = self.env.event()
-            self._receive_ready[message_id] = event
+            self._receive_ready[key] = event
         return event
+
+    def _request_service_loop(
+        self,
+        binding: DMAChannelBinding,
+    ) -> ProcessGenerator:
+        while True:
+            request_flit = cast(Flit, (yield binding.rx_link.recv_flit()))
+            if request_flit.traffic_type is not FlitTrafficType.DMA_REQUEST:
+                raise RuntimeError(
+                    f"{self.node_type.name}[{self.instance_id}] received "
+                    f"unexpected {request_flit.traffic_type.name} flit"
+                )
+            message = (
+                self._require_dma_commands().accept_single_side_download_request(
+                    request_flit,
+                    binding.address,
+                )
+            )
+            yield binding.rx_link.ack_credit()
+            self.env.process(
+                self._send(
+                    message,
+                    tuple(message.packetize()),
+                    binding,
+                    dispatch_descriptor=False,
+                )
+            )
 
     def _rx_service_loop(
         self,
@@ -497,7 +605,20 @@ class DMAEndpoint:
     ) -> ProcessGenerator:
         while True:
             flit = cast(Flit, (yield binding.rx_link.recv_flit()))
-            yield self._receive_ready_event(flit.msg_id)
+            if flit.traffic_type is not FlitTrafficType.PAYLOAD:
+                raise RuntimeError(
+                    f"{self.node_type.name}[{self.instance_id}] received "
+                    f"unexpected {flit.traffic_type.name} flit"
+                )
+            if flit.is_head and flit.dma_header_bytes > 0:
+                message = (
+                    self._require_dma_commands().accept_single_side_upload_header(
+                        flit,
+                        binding.address,
+                    )
+                )
+                self.env.process(self._recv_single_side_upload(message, binding))
+            yield self._receive_ready_event(flit.fabric_id, flit.msg_id)
             request = self.internal_datapath.request()
             with request:
                 yield request
@@ -509,6 +630,11 @@ class DMAEndpoint:
                     )
                 )
             yield binding.rx_link.ack_credit()
+
+    def _require_dma_commands(self) -> DMACommandCoordinator:
+        if self.dma_commands is None:
+            raise RuntimeError("DMA command coordinator is unavailable")
+        return self.dma_commands
 
 
 DMAEndpointKey = tuple[NodeType, int]
