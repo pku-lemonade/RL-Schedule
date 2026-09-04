@@ -180,7 +180,7 @@ Implement in small, independently tested commits:
    configured burst quantum so they retain per-message order and share the one
    endpoint engine fairly. Keep unmeasured descriptor behavior explicitly
    provisional rather than copying a WDMA calibration silently.
-6. **Fix 13F, implemented locally:** replace the timing-only admission gate with
+6. **Fix 13F, committed as `e189f1f`:** replace the timing-only admission gate with
    explicit `DMACommandMode` protocol state independent of physical
    `DMAAttachmentMode`. Dual-side source and destination descriptor posts meet at
    an outer-sync admission event. Single-side GM downloads send an address-bearing
@@ -192,8 +192,8 @@ Implement in small, independently tested commits:
    keep AIU-local paths unsupported. Do not assign standalone outer-sync latency,
    single-side WDMA fixed latency, or a single-side outstanding limit until those
    quantities are measured.
-7. **Fix 14A:** create DDR RDMA/WDMA runtime resources and explicit 1200 MHz to
-   ACI conversion without enabling command execution.
+7. **Fix 14A, implemented locally:** create DDR RDMA/WDMA runtime resources and
+   explicit 1200 MHz to ACI conversion without enabling command execution.
 8. **Fix 14B:** add paired DDR command execution with one internal datapath per
    endpoint shared by CH0 and CH1.
 9. **Fix 14C:** add DDR single-side request/response behavior and calibrate

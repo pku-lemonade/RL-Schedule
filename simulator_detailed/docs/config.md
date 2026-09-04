@@ -27,7 +27,8 @@ The relevant configuration objects are:
 - `NoCConfig`: X=4, Y=8, `aci_clock_mhz=1125`, `noc_clock_mhz=2250`, a validated
   2:1 clock ratio, and separate r2r `link` and PE-side `c2r_link` configs.
 - `DMAEngineConfig`: a type-qualified DMA instance, attached router, channel
-  count, and corresponding local ports used by `EndpointRegistry`.
+  count, and corresponding local ports used by `EndpointRegistry`. Its derived
+  `endpoint_clock_mhz` is fixed at 900 MHz for GM and 1200 MHz for DDR.
 
 Header, CRC, sequence, and tail fields are control metadata. They do not reduce
 the confirmed 512 B logical payload capacity used by `Message.flit_count()`.
@@ -137,6 +138,14 @@ software-posted dual-side execution still requires an explicit
 `descriptor_issue_cycles` value. A single-side PE request activates GM_RDMA
 without a target-side software descriptor. The canonical `ada2s32.json` keeps
 `dma_engines` empty until the remaining GM calibration gaps are closed.
+
+Fix 14A creates configured DDR RDMA/WDMA endpoint resources and binds their
+validated CH0/CH1 ports. `DMAClockDomain` converts native endpoint durations to
+the ACI simulation timebase explicitly; at the canonical clocks, 16 DDR cycles
+equal 15 ACI cycles. This conversion does not reinterpret timing values already
+expressed in ACI cycles. DDR bindings deliberately start no command workers, and
+DDR `send`/`recv_message` calls fail explicitly until paired and single-side
+execution plus DDR-specific timing calibration are implemented in Fix 14B/14C.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

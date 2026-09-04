@@ -20,6 +20,8 @@ from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
+    PORT_DDR_WDMA_CH0,
+    PORT_DDR_WDMA_CH1,
     PORT_GM_RDMA,
     PORT_GM_WDMA,
     PORT_GM_WDMA_CH0,
@@ -146,8 +148,106 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         env.run()
         self.assertTrue(second_request.triggered)
 
-    def test_arch_rejects_ddr_runtime_before_phase3_ddr_support(self) -> None:
+    def test_arch_binds_ddr_resources_without_enabling_execution(self) -> None:
+        ddr_rdma_config = DMAEngineConfig(
+            dma_type=DMAType.DDR_RDMA,
+            instance_id=0,
+            router_id=0,
+            channels=1,
+            local_ports=[PORT_DDR_RDMA],
+        )
+        ddr_wdma_config = DMAEngineConfig(
+            dma_type=DMAType.DDR_WDMA,
+            instance_id=0,
+            router_id=0,
+            channels=2,
+            local_ports=[PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+        )
+        env, arch = self._build_runtime(
+            NoCConfig(dma_engines=[ddr_rdma_config, ddr_wdma_config])
+        )
+        ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+        ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+
+        self.assertIs(ddr_rdma.config, ddr_rdma_config)
+        self.assertIs(ddr_wdma.config, ddr_wdma_config)
+        self.assertEqual(set(ddr_rdma.bindings), set(NoCChannel))
+        self.assertEqual(set(ddr_wdma.bindings), set(NoCChannel))
+        self.assertIsNot(ddr_rdma.internal_datapath, ddr_wdma.internal_datapath)
+        self.assertIsNot(
+            ddr_rdma.binding_for(NoCChannel.CH0).router,
+            ddr_rdma.binding_for(NoCChannel.CH1).router,
+        )
+        self.assertEqual(
+            ddr_rdma.binding_for(NoCChannel.CH0).router.id,
+            ddr_rdma.binding_for(NoCChannel.CH1).router.id,
+        )
+        self.assertEqual(
+            ddr_wdma.binding_for(NoCChannel.CH0).address.local_port,
+            PORT_DDR_WDMA_CH0,
+        )
+        self.assertEqual(
+            ddr_wdma.binding_for(NoCChannel.CH1).address.local_port,
+            PORT_DDR_WDMA_CH1,
+        )
+
+        self.assertEqual(ddr_rdma.clock_domain.endpoint_clock_mhz, 1200.0)
+        self.assertEqual(ddr_rdma.clock_domain.aci_clock_mhz, 1125.0)
+        self.assertAlmostEqual(
+            ddr_rdma.clock_domain.endpoint_cycles_per_aci_cycle,
+            1200.0 / 1125.0,
+        )
+        self.assertAlmostEqual(
+            ddr_rdma.clock_domain.endpoint_cycles_to_aci_cycles(16.0),
+            15.0,
+        )
+        self.assertAlmostEqual(
+            ddr_rdma.clock_domain.aci_cycles_to_endpoint_cycles(15.0),
+            16.0,
+        )
+
+        first_request = ddr_wdma.internal_datapath.request()
+        second_request = ddr_wdma.internal_datapath.request()
+        env.run()
+        self.assertTrue(first_request.triggered)
+        self.assertFalse(second_request.triggered)
+        ddr_wdma.internal_datapath.release(first_request)
+        env.run()
+        self.assertTrue(second_request.triggered)
+
+        upload = Message(
+            src=arch.endpoint_registry.resolve(
+                NodeType.PE,
+                0,
+                fabric_id=NoCChannel.CH0,
+            ),
+            dst=ddr_wdma.binding_for(NoCChannel.CH0).address,
+            index=900,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+        download = Message(
+            src=ddr_rdma.binding_for(NoCChannel.CH1).address,
+            dst=arch.endpoint_registry.resolve(
+                NodeType.PE,
+                1,
+                fabric_id=NoCChannel.CH1,
+            ),
+            index=901,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14B and Fix 14C"):
+            ddr_wdma.recv_message(upload)
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14B and Fix 14C"):
+            ddr_rdma.send(download)
+        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
+            _ = ddr_rdma.service_bytes_per_aci_cycle
+
+    def test_dma_endpoint_clock_conversion_uses_configured_aci_clock(self) -> None:
         ddr_config = NoCConfig(
+            aci_clock_mhz=1000.0,
+            noc_clock_mhz=2000.0,
             dma_engines=[
                 DMAEngineConfig(
                     dma_type=DMAType.DDR_RDMA,
@@ -156,10 +256,19 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     channels=1,
                     local_ports=[PORT_DDR_RDMA],
                 )
-            ]
+            ],
         )
-        with self.assertRaisesRegex(NotImplementedError, "GM DMA endpoints only"):
-            self._build_runtime(ddr_config)
+        _, arch = self._build_runtime(ddr_config)
+        clock_domain = arch.dma_endpoints[
+            (NodeType.DDR_RDMA, 0)
+        ].clock_domain
+
+        self.assertEqual(clock_domain.endpoint_clock_mhz, 1200.0)
+        self.assertEqual(clock_domain.aci_clock_mhz, 1000.0)
+        self.assertAlmostEqual(
+            clock_domain.endpoint_cycles_to_aci_cycles(6.0),
+            5.0,
+        )
 
     def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
         noc_config = NoCConfig(

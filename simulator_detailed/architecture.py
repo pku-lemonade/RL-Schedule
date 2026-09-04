@@ -123,16 +123,13 @@ class Arch:
         endpoints: DMAEndpoints = {}
         for dma_config in noc_config.dma_engines:
             node_type = dma_node_type(dma_config.dma_type)
-            if node_type not in (NodeType.GM_RDMA, NodeType.GM_WDMA):
-                raise NotImplementedError(
-                    "Phase 3A runtime attachment supports GM DMA endpoints only"
-                )
             endpoint_key = (node_type, dma_config.instance_id)
             endpoint = DMAEndpoint(
                 env,
                 dma_config,
                 node_type,
                 dma_commands=dma_commands,
+                aci_clock_mhz=noc_config.aci_clock_mhz,
             )
             for address in self.endpoint_registry.configured_addresses(
                 node_type,

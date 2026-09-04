@@ -1,5 +1,6 @@
-"""Runtime ownership for one configured GM DMA endpoint."""
+"""Runtime ownership for one configured GM or DDR DMA endpoint."""
 
+import math
 from dataclasses import dataclass
 from typing import cast
 
@@ -9,7 +10,8 @@ from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
 from .command_coordination import DMACommandCoordinator
-from .configs.schemas.arch_config import DMAEngineConfig, DMAType
+from .configs.schemas.arch_config import DMAEngineConfig
+from .endpoint_registry import dma_node_type
 from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
     FLIT_BYTES,
@@ -31,6 +33,40 @@ _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
 _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
+
+_DDR_NODE_TYPES = frozenset((NodeType.DDR_RDMA, NodeType.DDR_WDMA))
+
+
+@dataclass(frozen=True)
+class DMAClockDomain:
+    """Convert native endpoint cycles to and from the ACI simulation timebase."""
+
+    endpoint_clock_mhz: float
+    aci_clock_mhz: float
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("endpoint_clock_mhz", self.endpoint_clock_mhz),
+            ("aci_clock_mhz", self.aci_clock_mhz),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be finite and positive")
+
+    @property
+    def endpoint_cycles_per_aci_cycle(self) -> float:
+        return self.endpoint_clock_mhz / self.aci_clock_mhz
+
+    def endpoint_cycles_to_aci_cycles(self, endpoint_cycles: float) -> float:
+        """Return elapsed ACI cycles for a native endpoint-cycle duration."""
+        if not math.isfinite(endpoint_cycles) or endpoint_cycles < 0:
+            raise ValueError("endpoint_cycles must be finite and non-negative")
+        return endpoint_cycles / self.endpoint_cycles_per_aci_cycle
+
+    def aci_cycles_to_endpoint_cycles(self, aci_cycles: float) -> float:
+        """Return elapsed native endpoint cycles for an ACI-cycle duration."""
+        if not math.isfinite(aci_cycles) or aci_cycles < 0:
+            raise ValueError("aci_cycles must be finite and non-negative")
+        return aci_cycles * self.endpoint_cycles_per_aci_cycle
 
 
 @dataclass(frozen=True)
@@ -115,7 +151,7 @@ class DMAReceiveResult:
 
 
 class DMAEndpoint:
-    """One GM RDMA or WDMA whose internal datapath is shared by both fabrics."""
+    """One DMA endpoint whose internal datapath is shared by both fabrics."""
 
     def __init__(
         self,
@@ -123,17 +159,13 @@ class DMAEndpoint:
         config: DMAEngineConfig,
         node_type: NodeType,
         dma_commands: DMACommandCoordinator | None = None,
+        *,
+        aci_clock_mhz: float,
     ) -> None:
-        if node_type not in (NodeType.GM_RDMA, NodeType.GM_WDMA):
-            raise ValueError("Phase 3 DMA runtime supports GM endpoints only")
-        expected_dma_type = (
-            DMAType.GM_RDMA
-            if node_type is NodeType.GM_RDMA
-            else DMAType.GM_WDMA
-        )
-        if config.dma_type is not expected_dma_type:
+        expected_node_type = dma_node_type(config.dma_type)
+        if node_type is not expected_node_type:
             raise ValueError(
-                f"{node_type.name} endpoint requires {expected_dma_type.name} config"
+                f"{node_type.name} endpoint cannot use {config.dma_type.name} config"
             )
         if (
             dma_commands is not None
@@ -147,6 +179,10 @@ class DMAEndpoint:
         self.config = config
         self.node_type = node_type
         self.dma_commands = dma_commands
+        self.clock_domain = DMAClockDomain(
+            endpoint_clock_mhz=config.endpoint_clock_mhz,
+            aci_clock_mhz=aci_clock_mhz,
+        )
         self.bindings: dict[NoCChannel, DMAChannelBinding] = {}
 
         # The hardware endpoint has one internal engine shared by CH0 and CH1.
@@ -201,10 +237,14 @@ class DMAEndpoint:
                 f"{address.fabric_id.name} binding"
             )
         self.bindings[address.fabric_id] = binding
+        if self.node_type in _DDR_NODE_TYPES:
+            return
         if self.node_type is NodeType.GM_WDMA:
             self.env.process(self._rx_service_loop(binding))
-        else:
+        elif self.node_type is NodeType.GM_RDMA:
             self.env.process(self._request_service_loop(binding))
+        else:
+            raise RuntimeError(f"unsupported DMA endpoint type: {self.node_type!r}")
 
     def binding_for(self, fabric_id: NoCChannel) -> DMAChannelBinding:
         try:
@@ -237,7 +277,9 @@ class DMAEndpoint:
             return configured_rate
         if self.node_type is NodeType.GM_WDMA:
             return _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
-        return _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
+        if self.node_type is NodeType.GM_RDMA:
+            return _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
+        raise RuntimeError(f"{self.node_type.name} service rate is uncalibrated")
 
     @property
     def descriptor_issue_cycles(self) -> float:
@@ -247,8 +289,8 @@ class DMAEndpoint:
         if self.node_type is NodeType.GM_WDMA:
             return _GM_WDMA_DESCRIPTOR_ISSUE_CYCLES
         raise RuntimeError(
-            "GM_RDMA descriptor issue timing is uncalibrated; configure "
-            "descriptor_issue_cycles explicitly"
+            f"{self.node_type.name} descriptor issue timing is uncalibrated; "
+            "configure descriptor_issue_cycles explicitly"
         )
 
     @property
@@ -260,7 +302,9 @@ class DMAEndpoint:
             return configured_capacity
         if self.node_type is NodeType.GM_WDMA:
             return _GM_WDMA_MAX_OUTSTANDING_DESCRIPTORS_PER_CHANNEL
-        raise RuntimeError("GM_RDMA descriptor capacity is not characterized")
+        raise RuntimeError(
+            f"{self.node_type.name} descriptor capacity is not characterized"
+        )
 
     def outstanding_descriptor_count(self, fabric_id: NoCChannel) -> int:
         """Return active GM_WDMA receive descriptors on one fabric."""
@@ -268,6 +312,7 @@ class DMAEndpoint:
 
     def send(self, message: Message) -> Process:
         """Post one dual-side GM RDMA command and inject its payload."""
+        self._require_command_execution_support()
         if self.node_type is not NodeType.GM_RDMA:
             raise NotImplementedError("GM_WDMA cannot inject payload data")
         self._validate_message_transport(message)
@@ -296,6 +341,7 @@ class DMAEndpoint:
 
     def recv_message(self, message: Message) -> Process:
         """Post one dual-side GM WDMA receive command."""
+        self._require_command_execution_support()
         if self.node_type is not NodeType.GM_WDMA:
             raise NotImplementedError("GM_RDMA cannot consume payload data")
         self._validate_message_transport(message)
@@ -636,6 +682,13 @@ class DMAEndpoint:
             raise RuntimeError("DMA command coordinator is unavailable")
         return self.dma_commands
 
+    def _require_command_execution_support(self) -> None:
+        if self.node_type in _DDR_NODE_TYPES:
+            raise NotImplementedError(
+                "Fix 14A creates DDR runtime resources, but DDR command "
+                "execution is deferred to Fix 14B and Fix 14C"
+            )
+
 
 DMAEndpointKey = tuple[NodeType, int]
 DMAEndpoints = dict[DMAEndpointKey, DMAEndpoint]
@@ -643,6 +696,7 @@ DMAEndpoints = dict[DMAEndpointKey, DMAEndpoint]
 
 __all__ = [
     "DMAChannelBinding",
+    "DMAClockDomain",
     "DMAEndpoint",
     "DMAEndpointKey",
     "DMAEndpoints",
