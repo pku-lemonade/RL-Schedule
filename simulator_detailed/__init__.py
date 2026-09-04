@@ -22,6 +22,7 @@ from .benchmark_workloads import (
 from .core import Core
 from .dma_endpoint import (
     DMAChannelBinding,
+    DMAClockDomain,
     DMAEndpoint,
     DMAReceiveEntry,
     DMAReceiveResult,
@@ -44,6 +45,7 @@ __all__ = [
     "BatchedNMCStreamResult",
     "Core",
     "DMAChannelBinding",
+    "DMAClockDomain",
     "DMAEndpoint",
     "DMAReceiveEntry",
     "DMAReceiveResult",
