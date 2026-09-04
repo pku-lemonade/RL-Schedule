@@ -133,6 +133,15 @@ class GMRDMABenchmarkReference:
         return rate * self.aci_clock_ghz
 
 
+@dataclass(frozen=True, slots=True)
+class DDRDMABenchmarkReference:
+    """Measured DDR direction-specific asymptotic service rates."""
+
+    kernels: tuple[str, ...]
+    wdma_service_bytes_per_aci_cycle: float
+    rdma_service_bytes_per_aci_cycle: float
+
+
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
     kernel="noc_rb54.cpp",
     flit_bytes=512,
@@ -239,4 +248,15 @@ GM_RDMA_REFERENCE: Final[GMRDMABenchmarkReference] = GMRDMABenchmarkReference(
     zero_hop_bulk_gbps=119.0,
     seven_hop_bulk_gbps=113.0,
     outcast_gbps_range=(120.0, 125.0),
+)
+
+
+DDR_DMA_REFERENCE: Final[DDRDMABenchmarkReference] = DDRDMABenchmarkReference(
+    kernels=(
+        "noc_ddr_ul_generic.cpp",
+        "noc_ddr_dl_generic.cpp",
+        "noc_ddr_ul_dualch.cpp",
+    ),
+    wdma_service_bytes_per_aci_cycle=117.0,
+    rdma_service_bytes_per_aci_cycle=102.0,
 )

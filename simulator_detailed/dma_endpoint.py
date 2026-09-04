@@ -36,6 +36,8 @@ _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
 _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
+_DDR_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 117.0
+_DDR_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 102.0
 
 @dataclass(frozen=True)
 class DMAClockDomain:
@@ -295,6 +297,10 @@ class DMAEndpoint:
             return _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
         if self.node_type is NodeType.GM_RDMA:
             return _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
+        if self.node_type is NodeType.DDR_WDMA:
+            return _DDR_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
+        if self.node_type is NodeType.DDR_RDMA:
+            return _DDR_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
         raise RuntimeError(f"{self.node_type.name} service rate is uncalibrated")
 
     @property

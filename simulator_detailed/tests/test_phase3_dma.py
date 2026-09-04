@@ -5,6 +5,7 @@ import simpy
 
 from simulator_detailed.architecture import Arch
 from simulator_detailed.benchmark_references import (
+    DDR_DMA_REFERENCE,
     GM_RDMA_REFERENCE,
     GM_WDMA_REFERENCE,
 )
@@ -149,7 +150,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         env.run()
         self.assertTrue(second_request.triggered)
 
-    def test_arch_binds_ddr_resources_without_enabling_execution(self) -> None:
+    def test_arch_binds_ddr_resources_and_defaults_service_rates(self) -> None:
         ddr_rdma_config = DMAEngineConfig(
             dma_type=DMAType.DDR_RDMA,
             instance_id=0,
@@ -214,6 +215,14 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             ddr_rdma.clock_domain.aci_cycles_to_endpoint_cycles(15.0),
             16.0,
         )
+        self.assertEqual(
+            ddr_wdma.service_bytes_per_aci_cycle,
+            DDR_DMA_REFERENCE.wdma_service_bytes_per_aci_cycle,
+        )
+        self.assertEqual(
+            ddr_rdma.service_bytes_per_aci_cycle,
+            DDR_DMA_REFERENCE.rdma_service_bytes_per_aci_cycle,
+        )
 
         first_request = ddr_wdma.internal_datapath.request()
         second_request = ddr_wdma.internal_datapath.request()
@@ -246,12 +255,16 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             data=[DimSlice(start=0, end=512)],
             dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
-        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "descriptor issue timing is uncalibrated",
+        ):
             ddr_wdma.recv_message(upload)
-        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "descriptor issue timing is uncalibrated",
+        ):
             ddr_rdma.send(download)
-        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
-            _ = ddr_rdma.service_bytes_per_aci_cycle
 
     def test_paired_ddr_requires_explicit_uncalibrated_parameters(self) -> None:
         for config, expected_error in (
@@ -349,7 +362,6 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=0,
                     channels=1,
                     local_ports=[PORT_DDR_RDMA],
-                    port_bw=64.0,
                     descriptor_issue_cycles=3.0,
                 ),
                 DMAEngineConfig(
@@ -358,7 +370,6 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=0,
                     channels=2,
                     local_ports=[PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
-                    port_bw=64.0,
                     descriptor_issue_cycles=3.0,
                     max_outstanding_descriptors_per_channel=2,
                 ),
@@ -367,6 +378,14 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         env, arch, cores = self._build_executable_runtime(noc_config)
         ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
         ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+        self.assertEqual(
+            ddr_wdma.service_bytes_per_aci_cycle,
+            DDR_DMA_REFERENCE.wdma_service_bytes_per_aci_cycle,
+        )
+        self.assertEqual(
+            ddr_rdma.service_bytes_per_aci_cycle,
+            DDR_DMA_REFERENCE.rdma_service_bytes_per_aci_cycle,
+        )
 
         upload = Message(
             src=cores[0].binding_for(NoCChannel.CH0).address,
@@ -444,7 +463,6 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=0,
                     channels=2 if is_wdma else 1,
                     local_ports=local_ports,
-                    port_bw=16.0,
                     descriptor_issue_cycles=10.0 if is_wdma else 0.0,
                     max_outstanding_descriptors_per_channel=(
                         2 if is_wdma else None
@@ -454,6 +472,15 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     NoCConfig(dma_engines=[config])
                 )
                 endpoint = arch.dma_endpoints[(node_type, 0)]
+                expected_service_rate = (
+                    DDR_DMA_REFERENCE.wdma_service_bytes_per_aci_cycle
+                    if is_wdma
+                    else DDR_DMA_REFERENCE.rdma_service_bytes_per_aci_cycle
+                )
+                self.assertEqual(
+                    endpoint.service_bytes_per_aci_cycle,
+                    expected_service_rate,
+                )
                 messages = tuple(
                     Message(
                         src=(
@@ -514,7 +541,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     )
                 self.assertAlmostEqual(
                     service_boundaries[1] - service_boundaries[0],
-                    endpoint.service_interval_aci_cycles,
+                    512.0 / expected_service_rate,
                 )
                 self.assertEqual(
                     arch.dma_commands.pending_dual_side_commands,

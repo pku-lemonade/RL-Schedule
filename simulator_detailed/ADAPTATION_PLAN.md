@@ -194,7 +194,7 @@ Implement in small, independently tested commits:
    quantities are measured.
 7. **Fix 14A, committed as `e8e3bd5`:** create DDR RDMA/WDMA runtime resources
    and explicit 1200 MHz to ACI conversion without enabling command execution.
-8. **Fix 14B, implemented locally:** add paired DDR command execution with one
+8. **Fix 14B, committed as `4bb9c54`:** add paired DDR command execution with one
    internal datapath per endpoint shared by CH0 and CH1. Require explicit DDR
    service rate, descriptor issue timing, and WDMA descriptor capacity until
    calibration. Model the measured DDR_WDMA CH0/CH1 descriptor-setup overlap
@@ -202,9 +202,22 @@ Implement in small, independently tested commits:
    DDR_RDMA descriptor issue endpoint-wide until measured. Reuse dual-side
    protocol pairing, but do not enable single-side DDR request/response behavior
    or apply GM completion calibrations.
-9. **Fix 14C:** add DDR single-side request/response behavior and calibrate
-   direction asymmetry, endpoint latency, and aggregate caps.
-10. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
+9. **Fix 14C-1, implemented locally:** default DDR_WDMA to the measured 117
+   B/ACI-cycle upload service rate and DDR_RDMA to the measured 102 B/ACI-cycle
+   download service rate. Preserve `port_bw` as an explicit override. The shared
+   endpoint datapaths make these per-controller CH0+CH1 aggregate caps.
+10. **Fix 14C-2:** add a size-regime-aware paired DDR_WDMA completion model for
+    the 193-cycle 512 B floor and the large-transfer `90 + bytes / 117` trend.
+11. **Fix 14C-3:** add a size-regime-aware paired DDR_RDMA completion model for
+    the 426-cycle 512 B floor and `337 + 17 * hops + bytes / 102` large-transfer
+    trend.
+12. **Fix 14C-4:** enable DDR single-side download request/RDMA-payload behavior
+    on its dedicated attachment without inventing unmeasured descriptor timing.
+13. **Fix 14C-5:** enable DDR single-side upload address-header/WDMA-response
+    behavior on its dedicated attachment without inventing queue capacity.
+14. **Fix 14C-6:** validate both directions, command modes, fabrics, and corner
+    controllers together, including protocol-state retirement.
+15. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
 
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
 `dma_engines` empty until the relevant command path is calibrated. GM_WDMA's

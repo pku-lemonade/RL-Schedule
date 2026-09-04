@@ -151,11 +151,14 @@ service resource shared by CH0 and CH1; their two directions remain independent.
 DDR_WDMA has per-fabric descriptor issuers because measured small-transfer setup
 overlaps across CH0 and CH1. DDR_RDMA retains one conservative endpoint-wide
 issuer until equivalent cross-fabric measurements exist.
-Until Fix 14C calibrates the DDR timing model, executable DDR configurations must
-provide `port_bw` and `descriptor_issue_cycles`, plus
-`max_outstanding_descriptors_per_channel` for DDR_WDMA. No GM completion floor,
-completion cadence, or default service rate is reused. DDR single-side commands
-still fail explicitly before scheduling runtime work.
+Fix 14C-1 defaults DDR_WDMA to the measured 117 B/ACI-cycle upload service rate
+and DDR_RDMA to the measured 102 B/ACI-cycle download service rate. Because each
+direction owns one shared endpoint datapath, each default is an aggregate CH0+CH1
+cap per controller rather than a per-fabric rate. `port_bw` remains an explicit
+override. Executable DDR configurations must still provide
+`descriptor_issue_cycles`, plus `max_outstanding_descriptors_per_channel` for
+DDR_WDMA. No GM completion floor or completion cadence is reused. DDR completion
+latency and single-side commands remain deferred to later Fix 14C sub-steps.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be
