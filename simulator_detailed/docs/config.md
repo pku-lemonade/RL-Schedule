@@ -161,7 +161,11 @@ DDR_WDMA. Fix 14C-2 adds a paired DDR_WDMA minimum-completion profile: 193 ACI
 cycles through one 512 B flit, linear interpolation between measured minima up to
 256 KiB, a continuous bridge to 512 KiB, then `90 + payload_bytes / 117`. The
 profile has no explicit hop term and does not reuse GM completion cadence.
-DDR_RDMA completion latency and DDR single-side commands remain deferred.
+Fix 14C-3 applies the paired DDR_RDMA completion floor at the receiving PE. It
+holds sub-flit commands at the measured 426-cycle 512 B floor, interpolates the
+measured zero-hop minima through 256 KiB, bridges continuously to 512 KiB, then
+uses `337 + 17 * hops + payload_bytes / 102`. Source-local DMA handoff remains a
+separate earlier boundary. DDR single-side commands remain deferred.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

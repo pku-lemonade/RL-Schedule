@@ -341,6 +341,107 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     ),
                 )
 
+    def test_ddr_rdma_latency_reference_covers_size_and_hop_regimes(self) -> None:
+        reference = DDR_DMA_REFERENCE
+        for payload_bytes, expected_latency in reference.rdma_min_latency_samples:
+            with self.subTest(payload_bytes=payload_bytes):
+                self.assertEqual(
+                    reference.rdma_min_operation_latency_aci_cycles(
+                        payload_bytes,
+                        0,
+                    ),
+                    expected_latency,
+                )
+
+        lower_size, lower_latency = reference.rdma_min_latency_samples[1]
+        upper_size, upper_latency = reference.rdma_min_latency_samples[2]
+        midpoint_size = (lower_size + upper_size) // 2
+        self.assertEqual(
+            reference.rdma_min_operation_latency_aci_cycles(midpoint_size, 0),
+            (lower_latency + upper_latency) / 2,
+        )
+        threshold = reference.rdma_large_min_threshold_bytes
+        hops = 3
+        hop_latency = hops * reference.rdma_hop_slope_aci_cycles
+        self.assertEqual(
+            reference.rdma_min_operation_latency_aci_cycles(threshold, hops),
+            reference.rdma_large_min_intercept_aci_cycles
+            + threshold / reference.rdma_service_bytes_per_aci_cycle
+            + hop_latency,
+        )
+        self.assertEqual(
+            reference.rdma_min_operation_latency_aci_cycles(
+                2 * threshold,
+                hops,
+            ),
+            reference.rdma_large_min_intercept_aci_cycles
+            + 2 * threshold / reference.rdma_service_bytes_per_aci_cycle
+            + hop_latency,
+        )
+        self.assertEqual(
+            reference.rdma_min_operation_latency_aci_cycles(1, 2),
+            reference.rdma_min_latency_samples[0][1]
+            + 2 * reference.rdma_hop_slope_aci_cycles,
+        )
+        with self.assertRaisesRegex(ValueError, "payload size must be positive"):
+            reference.rdma_min_operation_latency_aci_cycles(0, 0)
+        with self.assertRaisesRegex(ValueError, "hop count cannot be negative"):
+            reference.rdma_min_operation_latency_aci_cycles(512, -1)
+
+    def test_paired_ddr_rdma_completion_uses_size_and_hop_floor(self) -> None:
+        cases = (
+            (512, 0),
+            (4 * 1024, 0),
+            (10 * 1024, 0),
+            (64 * 1024, 0),
+            (64 * 1024, 7),
+        )
+        for payload_bytes, hops in cases:
+            with self.subTest(payload_bytes=payload_bytes, hops=hops):
+                noc_config = NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.DDR_RDMA,
+                            instance_id=0,
+                            router_id=0,
+                            channels=1,
+                            local_ports=[PORT_DDR_RDMA],
+                            descriptor_issue_cycles=0.0,
+                        )
+                    ]
+                )
+                env, arch, cores = self._build_executable_runtime(noc_config)
+                ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+                destination_id = hops * noc_config.x
+                message = Message(
+                    src=ddr_rdma.binding_for(NoCChannel.CH0).address,
+                    dst=cores[destination_id]
+                    .binding_for(NoCChannel.CH0)
+                    .address,
+                    index=910 + destination_id,
+                    data=[DimSlice(start=0, end=payload_bytes)],
+                    nmc_shape_mode=NMCShapeMode.STATIC,
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
+                )
+
+                receive = cores[destination_id].nmc_channel_for(
+                    NoCChannel.CH0
+                ).recv_message(message, NMCShapeMode.STATIC)
+                send = ddr_rdma.send(message)
+                env.run(until=env.all_of((receive, send)))
+
+                self.assertEqual(
+                    receive.value.operation_latency_aci_cycles,
+                    DDR_DMA_REFERENCE.rdma_min_operation_latency_aci_cycles(
+                        payload_bytes,
+                        hops,
+                    ),
+                )
+                self.assertLess(
+                    send.value.operation_completion_time_aci_cycles,
+                    receive.value.operation_completion_time_aci_cycles,
+                )
+
     def test_paired_ddr_requires_explicit_uncalibrated_parameters(self) -> None:
         for config, expected_error in (
             (

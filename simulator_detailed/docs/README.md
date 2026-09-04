@@ -46,8 +46,10 @@ can overlap across its per-fabric issuers while payload service remains shared;
 DDR_RDMA descriptor issue remains conservatively endpoint-wide. Paired DDR_WDMA
 completion follows the measured 193-cycle one-flit floor, interpolated measured
 minima through 256 KiB, and the large-transfer `90 + bytes / 117` trend from
-512 KiB. DDR_RDMA completion latency and single-side request/response behavior
-remain deferred.
+512 KiB. Paired DDR_RDMA completion is recorded at the receiving PE: it follows
+the measured 426-cycle one-flit floor, interpolated zero-hop minima through
+256 KiB, and the large-transfer `337 + 17 * hops + bytes / 102` trend from
+512 KiB. DDR single-side request/response behavior remains deferred.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54

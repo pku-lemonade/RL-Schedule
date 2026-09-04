@@ -6,6 +6,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
+from .benchmark_references import DDR_DMA_REFERENCE, GM_RDMA_REFERENCE
 from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
@@ -25,9 +26,6 @@ from .utils.definitions import (
     NodeType,
     TransType,
 )
-
-_GM_RDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 246.0
-_GM_RDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 
 
 @dataclass(frozen=True)
@@ -252,16 +250,19 @@ class NMCChannel:
         message: Message,
     ) -> float:
         """Return a measured direction-specific completion floor, if known."""
-        if message.src.node_type is not NodeType.GM_RDMA:
+        source_type = message.src.node_type
+        if source_type not in (NodeType.GM_RDMA, NodeType.DDR_RDMA):
             return 0.0
         source_x, source_y = self.binding.router.to_xy(message.src.router_id)
         destination_x, destination_y = self.binding.router.to_xy(
             message.dst.router_id
         )
         hops = abs(destination_x - source_x) + abs(destination_y - source_y)
-        return (
-            _GM_RDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES
-            + hops * _GM_RDMA_OPERATION_HOP_SLOPE_ACI_CYCLES
+        if source_type is NodeType.GM_RDMA:
+            return GM_RDMA_REFERENCE.operation_latency_aci_cycles(hops)
+        return DDR_DMA_REFERENCE.rdma_min_operation_latency_aci_cycles(
+            message.payload_bytes(),
+            hops,
         )
 
     def send(self, message: Message) -> Process:

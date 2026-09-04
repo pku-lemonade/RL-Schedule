@@ -206,14 +206,18 @@ Implement in small, independently tested commits:
    B/ACI-cycle upload service rate and DDR_RDMA to the measured 102 B/ACI-cycle
    download service rate. Preserve `port_bw` as an explicit override. The shared
    endpoint datapaths make these per-controller CH0+CH1 aggregate caps.
-10. **Fix 14C-2, implemented locally:** add a size-regime-aware paired DDR_WDMA
+10. **Fix 14C-2, committed as `250d491`:** add a size-regime-aware paired DDR_WDMA
     completion floor. Hold sub-flit commands at the measured 193-cycle 512 B
     floor, interpolate the measured minima through 256 KiB, bridge continuously
     to the 512 KiB boundary, and use `90 + bytes / 117` for larger payloads. Do
     not add a synthetic hop term or reuse GM completion cadence.
-11. **Fix 14C-3:** add a size-regime-aware paired DDR_RDMA completion model for
-    the 426-cycle 512 B floor and `337 + 17 * hops + bytes / 102` large-transfer
-    trend.
+11. **Fix 14C-3, implemented locally:** add a size-regime-aware paired DDR_RDMA
+    receive-completion floor. Hold sub-flit commands at the measured 426-cycle
+    512 B floor, interpolate measured zero-hop minima through 256 KiB, bridge
+    continuously to the 512 KiB boundary, and use
+    `337 + 17 * hops + bytes / 102` for larger payloads. Apply the measured
+    17-cycle download hop term in every size regime and keep source-local DMA
+    handoff distinct from destination-visible PE completion.
 12. **Fix 14C-4:** enable DDR single-side download request/RDMA-payload behavior
     on its dedicated attachment without inventing unmeasured descriptor timing.
 13. **Fix 14C-5:** enable DDR single-side upload address-header/WDMA-response

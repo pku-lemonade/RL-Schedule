@@ -4,6 +4,40 @@ from dataclasses import dataclass
 from typing import Final
 
 
+def _piecewise_min_latency_aci_cycles(
+    payload_bytes: int,
+    samples: tuple[tuple[int, float], ...],
+    large_threshold_bytes: int,
+    large_intercept_aci_cycles: float,
+    service_bytes_per_aci_cycle: float,
+    *,
+    direction_name: str,
+) -> float:
+    """Interpolate measured minima and join them to one large-size trend."""
+    if payload_bytes <= 0:
+        raise ValueError(f"{direction_name} payload size must be positive")
+    first_size, first_latency = samples[0]
+    if payload_bytes <= first_size:
+        return first_latency
+    if payload_bytes >= large_threshold_bytes:
+        return large_intercept_aci_cycles + (
+            payload_bytes / service_bytes_per_aci_cycle
+        )
+    large_boundary = (
+        large_threshold_bytes,
+        large_intercept_aci_cycles
+        + large_threshold_bytes / service_bytes_per_aci_cycle,
+    )
+    points = (*samples, large_boundary)
+    for point_index in range(1, len(points)):
+        lower = points[point_index - 1]
+        upper = points[point_index]
+        if payload_bytes <= upper[0]:
+            fraction = (payload_bytes - lower[0]) / (upper[0] - lower[0])
+            return lower[1] + fraction * (upper[1] - lower[1])
+    raise AssertionError(f"{direction_name} latency profile is incomplete")
+
+
 @dataclass(frozen=True, slots=True)
 class RTTBenchmarkReference:
     """Measured latency evidence from one hardware microbenchmark."""
@@ -143,33 +177,39 @@ class DDRDMABenchmarkReference:
     wdma_min_latency_samples: tuple[tuple[int, float], ...]
     wdma_large_min_threshold_bytes: int
     wdma_large_min_intercept_aci_cycles: float
+    rdma_min_latency_samples: tuple[tuple[int, float], ...]
+    rdma_large_min_threshold_bytes: int
+    rdma_large_min_intercept_aci_cycles: float
+    rdma_hop_slope_aci_cycles: float
 
     def wdma_min_operation_latency_aci_cycles(self, payload_bytes: int) -> float:
         """Return the size-aware minimum paired-upload latency."""
-        if payload_bytes <= 0:
-            raise ValueError("DDR WDMA payload size must be positive")
-        first_size, first_latency = self.wdma_min_latency_samples[0]
-        if payload_bytes <= first_size:
-            return first_latency
-        if payload_bytes >= self.wdma_large_min_threshold_bytes:
-            return (
-                self.wdma_large_min_intercept_aci_cycles
-                + payload_bytes / self.wdma_service_bytes_per_aci_cycle
-            )
-        large_boundary = (
+        return _piecewise_min_latency_aci_cycles(
+            payload_bytes,
+            self.wdma_min_latency_samples,
             self.wdma_large_min_threshold_bytes,
-            self.wdma_large_min_intercept_aci_cycles
-            + self.wdma_large_min_threshold_bytes
-            / self.wdma_service_bytes_per_aci_cycle,
+            self.wdma_large_min_intercept_aci_cycles,
+            self.wdma_service_bytes_per_aci_cycle,
+            direction_name="DDR WDMA",
         )
-        points = (*self.wdma_min_latency_samples, large_boundary)
-        for point_index in range(1, len(points)):
-            lower = points[point_index - 1]
-            upper = points[point_index]
-            if payload_bytes <= upper[0]:
-                fraction = (payload_bytes - lower[0]) / (upper[0] - lower[0])
-                return lower[1] + fraction * (upper[1] - lower[1])
-        raise AssertionError("DDR WDMA latency profile does not cover payload")
+
+    def rdma_min_operation_latency_aci_cycles(
+        self,
+        payload_bytes: int,
+        hops: int,
+    ) -> float:
+        """Return the size- and hop-aware minimum paired-download latency."""
+        if hops < 0:
+            raise ValueError("DDR RDMA hop count cannot be negative")
+        zero_hop_latency = _piecewise_min_latency_aci_cycles(
+            payload_bytes,
+            self.rdma_min_latency_samples,
+            self.rdma_large_min_threshold_bytes,
+            self.rdma_large_min_intercept_aci_cycles,
+            self.rdma_service_bytes_per_aci_cycle,
+            direction_name="DDR RDMA",
+        )
+        return zero_hop_latency + hops * self.rdma_hop_slope_aci_cycles
 
 
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
@@ -300,4 +340,16 @@ DDR_DMA_REFERENCE: Final[DDRDMABenchmarkReference] = DDRDMABenchmarkReference(
     ),
     wdma_large_min_threshold_bytes=512 * 1024,
     wdma_large_min_intercept_aci_cycles=90.0,
+    rdma_min_latency_samples=(
+        (512, 426.0),
+        (4 * 1024, 574.0),
+        (16 * 1024, 693.0),
+        (32 * 1024, 880.0),
+        (64 * 1024, 1169.0),
+        (128 * 1024, 1747.0),
+        (256 * 1024, 2988.0),
+    ),
+    rdma_large_min_threshold_bytes=512 * 1024,
+    rdma_large_min_intercept_aci_cycles=337.0,
+    rdma_hop_slope_aci_cycles=17.0,
 )
