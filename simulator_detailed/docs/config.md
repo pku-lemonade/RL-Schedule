@@ -111,20 +111,23 @@ explicit `NoCChannel` instead of supplying a raw local-port number. Physical
 ownership is unique per `(fabric_id, router_id, local_port)`, so matching router
 and port IDs on NoC0 and NoC1 are separate hardware attachments.
 
-For the current GM command path, `DMAEngineConfig.port_bw` controls the one
-internal per-endpoint service resource shared by CH0 and CH1, and `cdc_penalty`
+For the current GM command path, optional `DMAEngineConfig.port_bw` overrides the
+one internal per-endpoint service rate shared by CH0 and CH1, and `cdc_penalty`
 is an additional ACI-cycle delay before data service. The optional
 `descriptor_issue_cycles` and `max_outstanding_descriptors_per_channel` fields
 override command admission. GM_WDMA defaults to the measured 40 ACI cycles and
 four slots per channel. Its CH0 and CH1 slot pools are independent, while one
 conservative endpoint-wide issuer serializes posts because simultaneous-channel
-issue has not been characterized. GM_RDMA has no inferred descriptor timing and
-requires an explicit issue value for functional execution.
+issue has not been characterized.
 
-These settings are not yet a complete GM timing calibration. The WDMA
-small-command processing floor, direction-specific setup residuals, and RDMA
-service behavior remain subsequent fixes. The canonical `ada2s32.json` therefore
-keeps `dma_engines` empty.
+GM_WDMA's default shared service rate is 110 B/ACI-cycle. Its command-completion
+sequencer enforces the measured 273-cycle small-command drain interval, and its
+paired operation cannot complete before `138 + 17 * hops` ACI cycles. These are
+fixed WDMA hardware calibrations rather than payload-specific configuration
+profiles. GM_RDMA has no inferred descriptor timing or service rate and requires
+both `descriptor_issue_cycles` and `port_bw` for functional execution. The
+canonical `ada2s32.json` keeps `dma_engines` empty until the remaining GM modes
+are implemented.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

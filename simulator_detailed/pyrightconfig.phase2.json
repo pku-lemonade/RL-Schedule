@@ -4,6 +4,7 @@
     "architecture.py",
     "benchmark_references.py",
     "benchmark_workloads.py",
+    "command_coordination.py",
     "configs/schemas/arch_config.py",
     "configs/schemas/failure_configs.py",
     "core.py",

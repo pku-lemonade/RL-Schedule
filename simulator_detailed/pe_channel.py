@@ -6,6 +6,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
+from .command_coordination import PairedDMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
@@ -60,11 +61,13 @@ class PEChannelBinding:
 class NMCTransmitEntry:
     """One packetized message waiting for the directional upload engine."""
 
+    message: Message
     flits: tuple[Flit, ...]
     shape_mode: NMCShapeMode
     submission_time_aci_cycles: float
     descriptor_acceptance_time_aci_cycles: float
     endpoint_ready_time_aci_cycles: float
+    destination_ready: SimpyEvent | None
     completion: SimpyEvent
 
 
@@ -126,6 +129,7 @@ class NMCChannel:
         config: NMCChannelConfig,
         shape_timing: NMCShapeTimingConfig,
         binding: PEChannelBinding,
+        paired_dma_commands: PairedDMACommandCoordinator | None = None,
     ) -> None:
         if any(
             component_env is not env
@@ -139,11 +143,20 @@ class NMCChannel:
                 f"{binding.address.fabric_id.name} NMC channel and binding "
                 "must use the same SimPy environment"
             )
+        if (
+            paired_dma_commands is not None
+            and paired_dma_commands.env is not env
+        ):
+            raise ValueError(
+                "NMC channel and paired command coordinator must use the same "
+                "environment"
+            )
 
         self.env = env
         self.config = config
         self.shape_timing = shape_timing
         self.binding = binding
+        self.paired_dma_commands = paired_dma_commands
         self.tx_datapath = Resource(env, capacity=1)
         self.rx_datapath = Resource(env, capacity=1)
         self.descriptor_slots = Resource(
@@ -236,7 +249,7 @@ class NMCChannel:
             )
         flits = tuple(message.packetize())
         return self.env.process(
-            self._submit_tx(flits, message.nmc_shape_mode)
+            self._submit_tx(message, flits, message.nmc_shape_mode)
         )
 
     def recv_flit(self) -> Process:
@@ -315,6 +328,7 @@ class NMCChannel:
 
     def _submit_tx(
         self,
+        message: Message,
         flits: tuple[Flit, ...],
         shape_mode: NMCShapeMode,
     ) -> ProcessGenerator:
@@ -337,8 +351,18 @@ class NMCChannel:
             )
 
             completion = self.env.event()
+            destination_ready: SimpyEvent | None = None
+            if (
+                self.paired_dma_commands is not None
+                and message.dst.node_type is NodeType.GM_WDMA
+                and message.dst.attachment_mode is DMAAttachmentMode.DUAL_SIDE
+            ):
+                destination_ready = (
+                    self.paired_dma_commands.destination_ready_event(message)
+                )
             yield self.tx_data_queue.put(
                 NMCTransmitEntry(
+                    message=message,
                     flits=flits,
                     shape_mode=shape_mode,
                     submission_time_aci_cycles=submission_time_aci_cycles,
@@ -348,6 +372,7 @@ class NMCChannel:
                     endpoint_ready_time_aci_cycles=(
                         endpoint_ready_time_aci_cycles
                     ),
+                    destination_ready=destination_ready,
                     completion=completion,
                 )
             )
@@ -441,6 +466,14 @@ class NMCChannel:
         next_command_service_time_aci_cycles = float(self.env.now)
         while True:
             entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
+            if entry.destination_ready is not None:
+                yield entry.destination_ready
+                if self.paired_dma_commands is None:
+                    raise RuntimeError("paired DMA coordinator is unavailable")
+                self.paired_dma_commands.retire(
+                    entry.message,
+                    entry.destination_ready,
+                )
             turnaround_wait = (
                 next_command_service_time_aci_cycles - float(self.env.now)
             )

@@ -20,15 +20,20 @@ posted PE-to-GM receive. Each endpoint has one internal datapath shared by CH0
 and CH1, while same-fabric RDMA commands retain packet order. GM_WDMA descriptor
 admission uses the measured 40-cycle post time and independent four-entry CH0/CH1
 pools; one endpoint-wide issuer remains a conservative assumption until
-cross-channel issuing is measured. GM data service is not yet timing-calibrated,
-single-side request/response traffic is not modeled, and GM endpoints remain
-intentionally absent from the canonical architecture configuration.
+cross-channel issuing is measured. Its shared datapath is capped at 110
+B/ACI-cycle, small command completions are separated by at least 273 cycles, and
+the paired operation floor is `138 + 17 * hops` cycles. A timing-only dual-side
+admission gate prevents data from outrunning a full receive-descriptor queue.
+GM_RDMA timing is not yet calibrated, and single-side request/response traffic is
+not yet modeled, so GM endpoints remain intentionally absent from the canonical
+configuration.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
-latency and packetization evidence, and rb56/rb58 32 KB batched-throughput
-evidence are separate validation targets. They cannot select a runtime shape
-mode or alter static and dynamic endpoint timing. `benchmark_workloads.py`
+latency and packetization evidence, GM upload/rb55 measurements, and rb56/rb58
+32 KB batched-throughput evidence are separate validation targets. They cannot
+select a runtime shape mode or alter static and dynamic endpoint timing.
+`benchmark_workloads.py`
 provides typed sequential ping-pong, single-channel batch, shared-link
 contention, dual-channel same-direction, and dual-channel full-duplex replay
 schedules at the endpoint command boundary.

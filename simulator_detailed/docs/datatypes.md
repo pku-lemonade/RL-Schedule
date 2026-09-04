@@ -150,9 +150,27 @@ four-entry pool before its descriptor is issued. The two fabric pools are
 independent, but the current endpoint model conservatively shares one serialized
 issuer across CH0 and CH1 because cross-channel issue overlap is unmeasured. An
 unblocked issue takes 40 ACI cycles. The slot remains occupied until the matching
-TAIL/SINGLE flit completes endpoint service, so a fifth command on that fabric
-backpressures without consuming the other fabric's capacity. These constants do
-not apply to GM_RDMA, whose descriptor behavior remains uncalibrated.
+TAIL/SINGLE flit completes endpoint service and command completion processing, so
+a fifth command on that fabric backpressures without consuming the other fabric's
+capacity. These constants do not apply to GM_RDMA, whose descriptor behavior
+remains uncalibrated.
+
+GM_WDMA has one data-service resource shared across both fabrics at 110
+B/ACI-cycle and one shared command-completion sequencer. Natural flit service
+continues to pipeline, but consecutive command completions cannot be less than
+273 ACI cycles apart. A paired upload also cannot complete before `138 + 17 *
+hops` cycles from submission; this operation boundary includes the measured
+completion/synchronization effect and does not change the 8.5-cycle one-way DATA
+fabric slope. `tail_service_completion_time_aci_cycles` records raw endpoint data
+service, while `operation_completion_time_aci_cycles` includes these command
+boundaries.
+
+For dual-side PE-to-GM traffic, `PairedDMACommandCoordinator` exposes only a
+timing gate: the PE TX worker may program and queue its descriptor, but it cannot
+inject payload until the matching WDMA receive descriptor is accepted. This
+prevents data for a fifth command from occupying the destination link while the
+four-entry receive queue is full. It does not emit control packets or implement
+single-side request/response matching; those protocol states remain Fix 13F.
 
 `NoCChannel` uses the hardware channel values `CH0=0` and `CH1=1`.
 `DMAAttachmentMode` describes attachment topology and has no hardware numeric

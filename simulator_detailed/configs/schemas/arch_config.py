@@ -256,7 +256,7 @@ class DMAEngineConfig(BaseModel):
     router_id: int             # router ID this DMA is attached to
     channels: int = 1          # physical NoC attachments; endpoint service may be shared
     local_ports: list[int] = Field(default_factory=list[int])
-    port_bw: float = Field(default=106.0, gt=0)  # effective B/ACI-cycle
+    port_bw: float | None = Field(default=None, gt=0)  # effective B/ACI-cycle
     cdc_penalty: float = Field(default=0.0, ge=0)  # effective ACI cycles
     descriptor_issue_cycles: float | None = Field(default=None, ge=0)
     max_outstanding_descriptors_per_channel: int | None = Field(

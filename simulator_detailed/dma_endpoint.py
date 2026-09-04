@@ -8,6 +8,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
+from .command_coordination import PairedDMACommandCoordinator
 from .configs.schemas.arch_config import DMAEngineConfig, DMAType
 from .noc import Link, Router
 from .utils.definitions import (
@@ -23,6 +24,10 @@ from .utils.definitions import (
 
 _GM_WDMA_DESCRIPTOR_ISSUE_CYCLES = 40.0
 _GM_WDMA_MAX_OUTSTANDING_DESCRIPTORS_PER_CHANNEL = 4
+_GM_WDMA_MIN_COMMAND_COMPLETION_INTERVAL_ACI_CYCLES = 273.0
+_GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
+_GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
+_GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 
 
 @dataclass(frozen=True)
@@ -89,7 +94,7 @@ class DMATransmitResult:
 
 @dataclass(frozen=True)
 class DMAReceiveResult:
-    """One GM WDMA command completed after its TAIL reaches GM service."""
+    """One GM WDMA command through TAIL service and completion processing."""
 
     message: Message
     flits: tuple[Flit, ...]
@@ -114,6 +119,7 @@ class DMAEndpoint:
         env: simpy.Environment,
         config: DMAEngineConfig,
         node_type: NodeType,
+        paired_dma_commands: PairedDMACommandCoordinator | None = None,
     ) -> None:
         if node_type not in (NodeType.GM_RDMA, NodeType.GM_WDMA):
             raise ValueError("Phase 3 DMA runtime supports GM endpoints only")
@@ -126,14 +132,25 @@ class DMAEndpoint:
             raise ValueError(
                 f"{node_type.name} endpoint requires {expected_dma_type.name} config"
             )
+        if (
+            paired_dma_commands is not None
+            and paired_dma_commands.env is not env
+        ):
+            raise ValueError(
+                "DMA endpoint and paired command coordinator must use the same "
+                "environment"
+            )
         self.env = env
         self.config = config
         self.node_type = node_type
+        self.paired_dma_commands = paired_dma_commands
         self.bindings: dict[NoCChannel, DMAChannelBinding] = {}
 
         # The hardware endpoint has one internal engine shared by CH0 and CH1.
         self.internal_datapath = Resource(env, capacity=1)
         self.descriptor_issuer = Resource(env, capacity=1)
+        self.command_completion_sequencer = Resource(env, capacity=1)
+        self._last_command_completion_time_aci_cycles: float | None = None
         self.tx_command_slots = {
             fabric_id: Resource(env, capacity=1) for fabric_id in NoCChannel
         }
@@ -206,7 +223,18 @@ class DMAEndpoint:
 
     @property
     def service_interval_aci_cycles(self) -> float:
-        return FLIT_BYTES / self.config.port_bw
+        return FLIT_BYTES / self.service_bytes_per_aci_cycle
+
+    @property
+    def service_bytes_per_aci_cycle(self) -> float:
+        configured_rate = self.config.port_bw
+        if configured_rate is not None:
+            return configured_rate
+        if self.node_type is NodeType.GM_WDMA:
+            return _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
+        raise RuntimeError(
+            "GM_RDMA service rate is uncalibrated; configure port_bw explicitly"
+        )
 
     @property
     def descriptor_issue_cycles(self) -> float:
@@ -336,6 +364,11 @@ class DMAEndpoint:
             yield descriptor_request
             yield from self._dispatch_descriptor()
             descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            if (
+                self.paired_dma_commands is not None
+                and message.dst.attachment_mode is DMAAttachmentMode.DUAL_SIDE
+            ):
+                self.paired_dma_commands.admit_destination(message)
             if self.config.cdc_penalty > 0:
                 yield self.env.timeout(self.config.cdc_penalty)
 
@@ -371,6 +404,10 @@ class DMAEndpoint:
                 raise RuntimeError(
                     f"message {message.index} has no GM service boundary"
                 )
+            yield from self._complete_wdma_command(
+                message,
+                submission_time_aci_cycles,
+            )
             self._receive_ready.pop(message.index, None)
             return DMAReceiveResult(
                 message=message,
@@ -404,6 +441,42 @@ class DMAEndpoint:
             raise RuntimeError(
                 f"{self.node_type.name} does not own receive descriptor slots"
             ) from exc
+
+    def _complete_wdma_command(
+        self,
+        message: Message,
+        submission_time_aci_cycles: float,
+    ) -> ProcessGenerator:
+        request = self.command_completion_sequencer.request()
+        with request:
+            yield request
+            completion_floor = (
+                submission_time_aci_cycles
+                + self._minimum_operation_latency_aci_cycles(message)
+            )
+            if self._last_command_completion_time_aci_cycles is not None:
+                completion_floor = max(
+                    completion_floor,
+                    self._last_command_completion_time_aci_cycles
+                    + _GM_WDMA_MIN_COMMAND_COMPLETION_INTERVAL_ACI_CYCLES,
+                )
+            remaining_cycles = completion_floor - float(self.env.now)
+            if remaining_cycles > 0:
+                yield self.env.timeout(remaining_cycles)
+            self._last_command_completion_time_aci_cycles = float(self.env.now)
+
+    def _minimum_operation_latency_aci_cycles(self, message: Message) -> float:
+        source_x, source_y = self.binding_for(
+            message.dst.fabric_id
+        ).router.to_xy(message.src.router_id)
+        destination_x, destination_y = self.binding_for(
+            message.dst.fabric_id
+        ).router.to_xy(message.dst.router_id)
+        hops = abs(destination_x - source_x) + abs(destination_y - source_y)
+        return (
+            _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES
+            + hops * _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES
+        )
 
     def _receive_ready_event(self, message_id: int) -> SimpyEvent:
         event = self._receive_ready.get(message_id)

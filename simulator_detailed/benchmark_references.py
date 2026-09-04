@@ -1,4 +1,4 @@
-"""Immutable hardware measurements used to validate, not configure, Phase 2."""
+"""Immutable hardware measurements used to validate the detailed simulator."""
 
 from dataclasses import dataclass
 from typing import Final
@@ -83,6 +83,29 @@ class SharedLinkContentionReference:
     samples: tuple[SharedLinkContentionSample, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class GMWDMABenchmarkReference:
+    """Measured GM_WDMA command and data-service boundaries."""
+
+    kernels: tuple[str, ...]
+    descriptor_issue_aci_cycles: float
+    outstanding_descriptors_per_channel: int
+    small_message_completion_interval_aci_cycles: float
+    zero_hop_operation_latency_aci_cycles: float
+    operation_hop_slope_aci_cycles: float
+    bulk_bytes_per_aci_cycle: float
+    incast_bytes_per_aci_cycle_range: tuple[float, float]
+
+    def operation_latency_aci_cycles(self, hops: int) -> float:
+        """Return the calibrated paired-upload floor for a hop count."""
+        if hops < 0:
+            raise ValueError("GM_WDMA hop count cannot be negative")
+        return (
+            self.zero_hop_operation_latency_aci_cycles
+            + self.operation_hop_slope_aci_cycles * hops
+        )
+
+
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
     kernel="noc_rb54.cpp",
     flit_bytes=512,
@@ -161,4 +184,20 @@ RB53_CONTENTION_REFERENCE: Final[SharedLinkContentionReference] = (
             ),
         ),
     )
+)
+
+
+GM_WDMA_REFERENCE: Final[GMWDMABenchmarkReference] = GMWDMABenchmarkReference(
+    kernels=(
+        "noc_gm_ul_bench.cpp",
+        "noc_gm_ul_allpe.cpp",
+        "noc_rb55.cpp",
+    ),
+    descriptor_issue_aci_cycles=40.0,
+    outstanding_descriptors_per_channel=4,
+    small_message_completion_interval_aci_cycles=273.0,
+    zero_hop_operation_latency_aci_cycles=138.0,
+    operation_hop_slope_aci_cycles=17.0,
+    bulk_bytes_per_aci_cycle=110.0,
+    incast_bytes_per_aci_cycle_range=(100.0, 120.0),
 )

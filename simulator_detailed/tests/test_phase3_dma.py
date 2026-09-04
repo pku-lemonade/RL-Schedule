@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import simpy
 
 from simulator_detailed.architecture import Arch
+from simulator_detailed.benchmark_references import GM_WDMA_REFERENCE
 from simulator_detailed.configs.schemas.arch_config import (
     CoreConfig,
     DMAEngineConfig,
@@ -162,6 +163,7 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=28,
                     channels=1,
                     local_ports=[PORT_GM_RDMA],
+                    port_bw=64.0,
                     descriptor_issue_cycles=3.0,
                 ),
                 DMAEngineConfig(
@@ -219,11 +221,15 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             3.0,
         )
         self.assertEqual(
+            gm_receive.value.operation_completion_time_aci_cycles,
+            GM_WDMA_REFERENCE.operation_latency_aci_cycles(7),
+        )
+        self.assertLess(
             gm_receive.value.tail_service_completion_time_aci_cycles,
             gm_receive.value.operation_completion_time_aci_cycles,
         )
 
-    def test_dual_fabric_wdma_commands_share_one_internal_datapath(self) -> None:
+    def test_dual_fabric_wdma_commands_share_completion_cadence(self) -> None:
         noc_config = NoCConfig(
             dma_engines=[
                 DMAEngineConfig(
@@ -260,12 +266,148 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         env.run(until=env.all_of((*receive_processes, *send_processes)))
 
         completion_times = sorted(
-            process.value.tail_service_completion_time_aci_cycles
+            process.value.operation_completion_time_aci_cycles
             for process in receive_processes
         )
         self.assertAlmostEqual(
             completion_times[1] - completion_times[0],
-            gm_wdma.service_interval_aci_cycles,
+            GM_WDMA_REFERENCE.small_message_completion_interval_aci_cycles,
+        )
+
+    def test_wdma_single_source_latency_and_bulk_rate_match_reference(self) -> None:
+        for pe_id, hops in ((28, 0), (0, 7)):
+            with self.subTest(pe_id=pe_id, hops=hops):
+                noc_config = NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.GM_WDMA,
+                            instance_id=0,
+                            router_id=28,
+                            channels=2,
+                            local_ports=[
+                                PORT_GM_WDMA_CH0,
+                                PORT_GM_WDMA_CH1,
+                            ],
+                        )
+                    ]
+                )
+                env, arch, cores = self._build_executable_runtime(noc_config)
+                gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+                message = Message(
+                    src=cores[pe_id].binding_for(NoCChannel.CH0).address,
+                    dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+                    index=1500 + pe_id,
+                    data=[DimSlice(start=0, end=512)],
+                )
+
+                receive = gm_wdma.recv_message(message)
+                send = cores[pe_id].nmc_channel_for(NoCChannel.CH0).send(
+                    message
+                )
+                env.run(until=env.all_of((receive, send)))
+
+                self.assertEqual(
+                    receive.value.operation_latency_aci_cycles,
+                    GM_WDMA_REFERENCE.operation_latency_aci_cycles(hops),
+                )
+
+        bulk_bytes = 512 * 1024
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        bulk_message = Message(
+            src=cores[28].binding_for(NoCChannel.CH0).address,
+            dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+            index=1600,
+            data=[DimSlice(start=0, end=bulk_bytes)],
+        )
+
+        bulk_receive = gm_wdma.recv_message(bulk_message)
+        bulk_send = cores[28].nmc_channel_for(NoCChannel.CH0).send(
+            bulk_message
+        )
+        env.run(until=env.all_of((bulk_receive, bulk_send)))
+        effective_rate = (
+            bulk_bytes / bulk_receive.value.operation_latency_aci_cycles
+        )
+
+        self.assertEqual(
+            gm_wdma.service_bytes_per_aci_cycle,
+            GM_WDMA_REFERENCE.bulk_bytes_per_aci_cycle,
+        )
+        self.assertGreaterEqual(
+            effective_rate,
+            GM_WDMA_REFERENCE.bulk_bytes_per_aci_cycle * 0.96,
+        )
+        self.assertLessEqual(
+            effective_rate,
+            GM_WDMA_REFERENCE.bulk_bytes_per_aci_cycle,
+        )
+
+    def test_large_n_way_incast_uses_one_wdma_service_engine(self) -> None:
+        message_bytes = 128 * 1024
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.GM_WDMA,
+                    instance_id=0,
+                    router_id=28,
+                    channels=2,
+                    local_ports=[PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+                )
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        gm_wdma = arch.dma_endpoints[(NodeType.GM_WDMA, 0)]
+        source_ids = (28, 24, 20, 16, 12, 8, 4, 0)
+        messages = tuple(
+            Message(
+                src=cores[source_id]
+                .binding_for(NoCChannel.CH0)
+                .address,
+                dst=gm_wdma.binding_for(NoCChannel.CH0).address,
+                index=1700 + source_id,
+                data=[DimSlice(start=0, end=message_bytes)],
+            )
+            for source_id in source_ids
+        )
+
+        receive_processes = tuple(
+            gm_wdma.recv_message(message) for message in messages
+        )
+        send_processes = tuple(
+            cores[source_id]
+            .nmc_channel_for(NoCChannel.CH0)
+            .send(message)
+            for source_id, message in zip(source_ids, messages, strict=True)
+        )
+        env.run(until=env.all_of((*receive_processes, *send_processes)))
+
+        final_completion = max(
+            process.value.operation_completion_time_aci_cycles
+            for process in receive_processes
+        )
+        aggregate_rate = (
+            message_bytes * len(messages) / final_completion
+        )
+        minimum_rate, maximum_rate = (
+            GM_WDMA_REFERENCE.incast_bytes_per_aci_cycle_range
+        )
+        self.assertGreaterEqual(aggregate_rate, minimum_rate)
+        self.assertLessEqual(aggregate_rate, maximum_rate)
+        self.assertEqual(
+            gm_wdma.outstanding_descriptor_count(NoCChannel.CH0),
+            0,
         )
 
     def test_wdma_descriptor_capacity_is_independent_per_fabric(self) -> None:

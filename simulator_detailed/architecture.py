@@ -1,5 +1,6 @@
 import simpy
 
+from .command_coordination import PairedDMACommandCoordinator
 from .configs.schemas.arch_config import ArchConfig, CoreConfig, NoCConfig
 from .configs.schemas.failure_configs import (
     FailSlow,
@@ -30,6 +31,7 @@ class Arch:
         self.mapper = mapper
         self.fail_slow = failures
         self.endpoint_registry = EndpointRegistry(arch.noc)
+        self.paired_dma_commands = PairedDMACommandCoordinator(self.env)
         
         # construction
         self.nocs = self.build_nocs(env=self.env, config=self.config.noc)
@@ -56,6 +58,7 @@ class Arch:
         noc_config: NoCConfig,
         mapper: NetworkMapper,
     ) -> list[Core]:
+        paired_dma_commands = self._paired_dma_coordinator(env)
         cores: list[Core] = []
         for id in range(self.x_size * self.y_size):
             core = Core(
@@ -100,6 +103,7 @@ class Arch:
                     config=config.nmc.channel_config(fabric_id),
                     shape_timing=config.nmc.shape_timing,
                     binding=binding,
+                    paired_dma_commands=paired_dma_commands,
                 )
 
                 core.bind_channel(channel)
@@ -115,6 +119,7 @@ class Arch:
         env: simpy.Environment,
         noc_config: NoCConfig,
     ) -> DMAEndpoints:
+        paired_dma_commands = self._paired_dma_coordinator(env)
         endpoints: DMAEndpoints = {}
         for dma_config in noc_config.dma_engines:
             node_type = dma_node_type(dma_config.dma_type)
@@ -123,7 +128,12 @@ class Arch:
                     "Phase 3A runtime attachment supports GM DMA endpoints only"
                 )
             endpoint_key = (node_type, dma_config.instance_id)
-            endpoint = DMAEndpoint(env, dma_config, node_type)
+            endpoint = DMAEndpoint(
+                env,
+                dma_config,
+                node_type,
+                paired_dma_commands=paired_dma_commands,
+            )
             for address in self.endpoint_registry.configured_addresses(
                 node_type,
                 dma_config.instance_id,
@@ -170,6 +180,20 @@ class Arch:
             endpoint.validate_channel_bindings()
             endpoints[endpoint_key] = endpoint
         return endpoints
+
+    def _paired_dma_coordinator(
+        self,
+        env: simpy.Environment,
+    ) -> PairedDMACommandCoordinator:
+        coordinator = getattr(self, "paired_dma_commands", None)
+        if coordinator is None:
+            coordinator = PairedDMACommandCoordinator(env)
+            self.paired_dma_commands = coordinator
+        elif coordinator.env is not env:
+            raise ValueError(
+                "architecture and paired DMA coordinator must use the same environment"
+            )
+        return coordinator
 
 
     @staticmethod
