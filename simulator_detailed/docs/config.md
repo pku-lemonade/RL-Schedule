@@ -157,8 +157,11 @@ direction owns one shared endpoint datapath, each default is an aggregate CH0+CH
 cap per controller rather than a per-fabric rate. `port_bw` remains an explicit
 override. Executable DDR configurations must still provide
 `descriptor_issue_cycles`, plus `max_outstanding_descriptors_per_channel` for
-DDR_WDMA. No GM completion floor or completion cadence is reused. DDR completion
-latency and single-side commands remain deferred to later Fix 14C sub-steps.
+DDR_WDMA. Fix 14C-2 adds a paired DDR_WDMA minimum-completion profile: 193 ACI
+cycles through one 512 B flit, linear interpolation between measured minima up to
+256 KiB, a continuous bridge to 512 KiB, then `90 + payload_bytes / 117`. The
+profile has no explicit hop term and does not reuse GM completion cadence.
+DDR_RDMA completion latency and DDR single-side commands remain deferred.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

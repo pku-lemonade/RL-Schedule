@@ -266,6 +266,81 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         ):
             ddr_rdma.send(download)
 
+    def test_ddr_wdma_latency_reference_covers_each_size_regime(self) -> None:
+        reference = DDR_DMA_REFERENCE
+        for payload_bytes, expected_latency in reference.wdma_min_latency_samples:
+            with self.subTest(payload_bytes=payload_bytes):
+                self.assertEqual(
+                    reference.wdma_min_operation_latency_aci_cycles(payload_bytes),
+                    expected_latency,
+                )
+
+        lower_size, lower_latency = reference.wdma_min_latency_samples[1]
+        upper_size, upper_latency = reference.wdma_min_latency_samples[2]
+        midpoint_size = (lower_size + upper_size) // 2
+        self.assertEqual(
+            reference.wdma_min_operation_latency_aci_cycles(midpoint_size),
+            (lower_latency + upper_latency) / 2,
+        )
+        threshold = reference.wdma_large_min_threshold_bytes
+        self.assertEqual(
+            reference.wdma_min_operation_latency_aci_cycles(threshold),
+            reference.wdma_large_min_intercept_aci_cycles
+            + threshold / reference.wdma_service_bytes_per_aci_cycle,
+        )
+        self.assertEqual(
+            reference.wdma_min_operation_latency_aci_cycles(2 * threshold),
+            reference.wdma_large_min_intercept_aci_cycles
+            + 2 * threshold / reference.wdma_service_bytes_per_aci_cycle,
+        )
+        self.assertEqual(
+            reference.wdma_min_operation_latency_aci_cycles(1),
+            reference.wdma_min_latency_samples[0][1],
+        )
+        with self.assertRaisesRegex(ValueError, "payload size must be positive"):
+            reference.wdma_min_operation_latency_aci_cycles(0)
+
+    def test_paired_ddr_wdma_completion_uses_size_aware_floor(self) -> None:
+        for payload_bytes in (512, 4 * 1024, 10 * 1024, 64 * 1024):
+            with self.subTest(payload_bytes=payload_bytes):
+                noc_config = NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.DDR_WDMA,
+                            instance_id=0,
+                            router_id=0,
+                            channels=2,
+                            local_ports=[
+                                PORT_DDR_WDMA_CH0,
+                                PORT_DDR_WDMA_CH1,
+                            ],
+                            descriptor_issue_cycles=0.0,
+                            max_outstanding_descriptors_per_channel=2,
+                        )
+                    ]
+                )
+                env, arch, cores = self._build_executable_runtime(noc_config)
+                ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+                message = Message(
+                    src=cores[0].binding_for(NoCChannel.CH0).address,
+                    dst=ddr_wdma.binding_for(NoCChannel.CH0).address,
+                    index=909,
+                    data=[DimSlice(start=0, end=payload_bytes)],
+                    nmc_shape_mode=NMCShapeMode.STATIC,
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
+                )
+
+                receive = ddr_wdma.recv_message(message)
+                send = cores[0].nmc_channel_for(NoCChannel.CH0).send(message)
+                env.run(until=env.all_of((receive, send)))
+
+                self.assertEqual(
+                    receive.value.operation_latency_aci_cycles,
+                    DDR_DMA_REFERENCE.wdma_min_operation_latency_aci_cycles(
+                        payload_bytes
+                    ),
+                )
+
     def test_paired_ddr_requires_explicit_uncalibrated_parameters(self) -> None:
         for config, expected_error in (
             (
@@ -529,6 +604,18 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                             for process in dma_processes
                         ],
                         [10.0, 10.0],
+                    )
+                    self.assertEqual(
+                        [
+                            process.value.operation_latency_aci_cycles
+                            for process in dma_processes
+                        ],
+                        [
+                            DDR_DMA_REFERENCE.wdma_min_operation_latency_aci_cycles(
+                                512
+                            )
+                        ]
+                        * 2,
                     )
                     service_boundaries = sorted(
                         process.value.tail_service_completion_time_aci_cycles

@@ -135,11 +135,41 @@ class GMRDMABenchmarkReference:
 
 @dataclass(frozen=True, slots=True)
 class DDRDMABenchmarkReference:
-    """Measured DDR direction-specific asymptotic service rates."""
+    """Measured DDR direction-specific service and latency evidence."""
 
     kernels: tuple[str, ...]
     wdma_service_bytes_per_aci_cycle: float
     rdma_service_bytes_per_aci_cycle: float
+    wdma_min_latency_samples: tuple[tuple[int, float], ...]
+    wdma_large_min_threshold_bytes: int
+    wdma_large_min_intercept_aci_cycles: float
+
+    def wdma_min_operation_latency_aci_cycles(self, payload_bytes: int) -> float:
+        """Return the size-aware minimum paired-upload latency."""
+        if payload_bytes <= 0:
+            raise ValueError("DDR WDMA payload size must be positive")
+        first_size, first_latency = self.wdma_min_latency_samples[0]
+        if payload_bytes <= first_size:
+            return first_latency
+        if payload_bytes >= self.wdma_large_min_threshold_bytes:
+            return (
+                self.wdma_large_min_intercept_aci_cycles
+                + payload_bytes / self.wdma_service_bytes_per_aci_cycle
+            )
+        large_boundary = (
+            self.wdma_large_min_threshold_bytes,
+            self.wdma_large_min_intercept_aci_cycles
+            + self.wdma_large_min_threshold_bytes
+            / self.wdma_service_bytes_per_aci_cycle,
+        )
+        points = (*self.wdma_min_latency_samples, large_boundary)
+        for point_index in range(1, len(points)):
+            lower = points[point_index - 1]
+            upper = points[point_index]
+            if payload_bytes <= upper[0]:
+                fraction = (payload_bytes - lower[0]) / (upper[0] - lower[0])
+                return lower[1] + fraction * (upper[1] - lower[1])
+        raise AssertionError("DDR WDMA latency profile does not cover payload")
 
 
 RB54_LATENCY_REFERENCE: Final[RTTBenchmarkReference] = RTTBenchmarkReference(
@@ -259,4 +289,15 @@ DDR_DMA_REFERENCE: Final[DDRDMABenchmarkReference] = DDRDMABenchmarkReference(
     ),
     wdma_service_bytes_per_aci_cycle=117.0,
     rdma_service_bytes_per_aci_cycle=102.0,
+    wdma_min_latency_samples=(
+        (512, 193.0),
+        (4 * 1024, 346.0),
+        (16 * 1024, 465.0),
+        (32 * 1024, 601.0),
+        (64 * 1024, 890.0),
+        (128 * 1024, 1213.0),
+        (256 * 1024, 2335.0),
+    ),
+    wdma_large_min_threshold_bytes=512 * 1024,
+    wdma_large_min_intercept_aci_cycles=90.0,
 )

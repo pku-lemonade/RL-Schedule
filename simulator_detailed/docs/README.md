@@ -43,8 +43,11 @@ explicit provisional descriptor and WDMA capacity parameters. DDR_WDMA defaults
 to the measured 117 B/ACI-cycle aggregate service rate and DDR_RDMA defaults to
 102 B/ACI-cycle; `port_bw` can override either value. DDR_WDMA descriptor setup
 can overlap across its per-fabric issuers while payload service remains shared;
-DDR_RDMA descriptor issue remains conservatively endpoint-wide. DDR completion
-latency and single-side request/response behavior remain deferred.
+DDR_RDMA descriptor issue remains conservatively endpoint-wide. Paired DDR_WDMA
+completion follows the measured 193-cycle one-flit floor, interpolated measured
+minima through 256 KiB, and the large-transfer `90 + bytes / 117` trend from
+512 KiB. DDR_RDMA completion latency and single-side request/response behavior
+remain deferred.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54

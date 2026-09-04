@@ -9,6 +9,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 from simpy.resources.resource import Request, Resource
 
+from .benchmark_references import DDR_DMA_REFERENCE
 from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import DMAEngineConfig
 from .endpoint_registry import dma_node_type
@@ -36,8 +37,6 @@ _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
 _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
-_DDR_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 117.0
-_DDR_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 102.0
 
 @dataclass(frozen=True)
 class DMAClockDomain:
@@ -298,9 +297,9 @@ class DMAEndpoint:
         if self.node_type is NodeType.GM_RDMA:
             return _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
         if self.node_type is NodeType.DDR_WDMA:
-            return _DDR_WDMA_SERVICE_BYTES_PER_ACI_CYCLE
+            return DDR_DMA_REFERENCE.wdma_service_bytes_per_aci_cycle
         if self.node_type is NodeType.DDR_RDMA:
-            return _DDR_RDMA_SERVICE_BYTES_PER_ACI_CYCLE
+            return DDR_DMA_REFERENCE.rdma_service_bytes_per_aci_cycle
         raise RuntimeError(f"{self.node_type.name} service rate is uncalibrated")
 
     @property
@@ -611,6 +610,16 @@ class DMAEndpoint:
         submission_time_aci_cycles: float,
     ) -> ProcessGenerator:
         if self.node_type is NodeType.DDR_WDMA:
+            if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                completion_floor = (
+                    submission_time_aci_cycles
+                    + DDR_DMA_REFERENCE.wdma_min_operation_latency_aci_cycles(
+                        message.payload_bytes()
+                    )
+                )
+                remaining_cycles = completion_floor - float(self.env.now)
+                if remaining_cycles > 0:
+                    yield self.env.timeout(remaining_cycles)
             return
         if self.node_type is not NodeType.GM_WDMA:
             raise RuntimeError(f"{self.node_type.name} cannot complete WDMA commands")

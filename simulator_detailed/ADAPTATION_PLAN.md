@@ -202,12 +202,15 @@ Implement in small, independently tested commits:
    DDR_RDMA descriptor issue endpoint-wide until measured. Reuse dual-side
    protocol pairing, but do not enable single-side DDR request/response behavior
    or apply GM completion calibrations.
-9. **Fix 14C-1, implemented locally:** default DDR_WDMA to the measured 117
+9. **Fix 14C-1, committed as `a27bc23`:** default DDR_WDMA to the measured 117
    B/ACI-cycle upload service rate and DDR_RDMA to the measured 102 B/ACI-cycle
    download service rate. Preserve `port_bw` as an explicit override. The shared
    endpoint datapaths make these per-controller CH0+CH1 aggregate caps.
-10. **Fix 14C-2:** add a size-regime-aware paired DDR_WDMA completion model for
-    the 193-cycle 512 B floor and the large-transfer `90 + bytes / 117` trend.
+10. **Fix 14C-2, implemented locally:** add a size-regime-aware paired DDR_WDMA
+    completion floor. Hold sub-flit commands at the measured 193-cycle 512 B
+    floor, interpolate the measured minima through 256 KiB, bridge continuously
+    to the 512 KiB boundary, and use `90 + bytes / 117` for larger payloads. Do
+    not add a synthetic hop term or reuse GM completion cadence.
 11. **Fix 14C-3:** add a size-regime-aware paired DDR_RDMA completion model for
     the 426-cycle 512 B floor and `337 + 17 * hops + bytes / 102` large-transfer
     trend.
