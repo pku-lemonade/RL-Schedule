@@ -40,6 +40,17 @@ class NodeType(IntEnum):
     DDR_WDMA = 4  # DDR write DMA (data sink: NoC -> DDR)
 
 
+DMA_RDMA_NODE_TYPES: Final[frozenset[NodeType]] = frozenset(
+    (NodeType.GM_RDMA, NodeType.DDR_RDMA)
+)
+DMA_WDMA_NODE_TYPES: Final[frozenset[NodeType]] = frozenset(
+    (NodeType.GM_WDMA, NodeType.DDR_WDMA)
+)
+DDR_DMA_NODE_TYPES: Final[frozenset[NodeType]] = frozenset(
+    (NodeType.DDR_RDMA, NodeType.DDR_WDMA)
+)
+
+
 class FlitType(IntEnum):
     """Flit type in wormhole packetization."""
     SINGLE = 0  # Single-flit packet: establishes and releases the path
@@ -435,9 +446,9 @@ class Message(BaseModel):
 
     @model_validator(mode="after")
     def validate_endpoint_roles(self) -> Message:
-        if self.src.node_type in (NodeType.GM_WDMA, NodeType.DDR_WDMA):
+        if self.src.node_type in DMA_WDMA_NODE_TYPES:
             raise ValueError(f"{self.src.node_type.name} cannot inject payload data")
-        if self.dst.node_type in (NodeType.GM_RDMA, NodeType.DDR_RDMA):
+        if self.dst.node_type in DMA_RDMA_NODE_TYPES:
             raise ValueError(f"{self.dst.node_type.name} cannot consume payload data")
         if self.src.fabric_id is not self.dst.fabric_id:
             raise ValueError("message endpoints must use the same NoC fabric")
@@ -478,7 +489,7 @@ class Message(BaseModel):
                     "single-side commands require a single-side DMA attachment"
                 )
         if self.dma_command_mode is DMACommandMode.DUAL_SIDE and any(
-            endpoint.node_type in (NodeType.GM_WDMA, NodeType.DDR_WDMA)
+            endpoint.node_type in DMA_WDMA_NODE_TYPES
             and endpoint.attachment_mode is not DMAAttachmentMode.DUAL_SIDE
             for endpoint in dma_endpoints
         ):

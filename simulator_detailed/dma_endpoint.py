@@ -14,6 +14,9 @@ from .configs.schemas.arch_config import DMAEngineConfig
 from .endpoint_registry import dma_node_type
 from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
+    DDR_DMA_NODE_TYPES,
+    DMA_RDMA_NODE_TYPES,
+    DMA_WDMA_NODE_TYPES,
     FLIT_BYTES,
     DMAAttachmentMode,
     DMACommandMode,
@@ -33,9 +36,6 @@ _GM_WDMA_ZERO_HOP_OPERATION_LATENCY_ACI_CYCLES = 138.0
 _GM_WDMA_OPERATION_HOP_SLOPE_ACI_CYCLES = 17.0
 _GM_WDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
 _GM_RDMA_SERVICE_BYTES_PER_ACI_CYCLE = 110.0
-
-_DDR_NODE_TYPES = frozenset((NodeType.DDR_RDMA, NodeType.DDR_WDMA))
-
 
 @dataclass(frozen=True)
 class DMAClockDomain:
@@ -106,7 +106,7 @@ class DMAChannelBinding:
 
 @dataclass(frozen=True)
 class DMAReceiveEntry:
-    """One flit after shared GM WDMA service."""
+    """One flit after shared WDMA service."""
 
     flit: Flit
     service_completion_time_aci_cycles: float
@@ -114,7 +114,7 @@ class DMAReceiveEntry:
 
 @dataclass(frozen=True)
 class DMATransmitResult:
-    """One GM RDMA command completed through final local-link handoff."""
+    """One RDMA command completed through final local-link handoff."""
 
     message: Message
     flits: tuple[Flit, ...]
@@ -133,7 +133,7 @@ class DMATransmitResult:
 
 @dataclass(frozen=True)
 class DMAReceiveResult:
-    """One GM WDMA command through TAIL service and completion processing."""
+    """One WDMA command through TAIL service and completion processing."""
 
     message: Message
     flits: tuple[Flit, ...]
@@ -187,18 +187,36 @@ class DMAEndpoint:
 
         # The hardware endpoint has one internal engine shared by CH0 and CH1.
         self.internal_datapath = Resource(env, capacity=1)
-        self.descriptor_issuer = Resource(env, capacity=1)
+        if self.node_type is NodeType.DDR_WDMA:
+            # DDR WDMA measurements show CH0/CH1 setup overlap for small commands.
+            self.descriptor_issuers = {
+                fabric_id: Resource(env, capacity=1)
+                for fabric_id in NoCChannel
+            }
+        else:
+            shared_descriptor_issuer = Resource(env, capacity=1)
+            self.descriptor_issuers = {
+                fabric_id: shared_descriptor_issuer
+                for fabric_id in NoCChannel
+            }
         self.command_completion_sequencer = Resource(env, capacity=1)
         self._last_command_completion_time_aci_cycles: float | None = None
         self.tx_burst_arbiters = {
             fabric_id: RoundRobinArbiter(env) for fabric_id in NoCChannel
         }
         self.descriptor_slots: dict[NoCChannel, Resource] = {}
+        descriptor_capacity: int | None = None
         if self.node_type is NodeType.GM_WDMA:
+            descriptor_capacity = self.max_outstanding_descriptors_per_channel
+        elif self.node_type is NodeType.DDR_WDMA:
+            descriptor_capacity = (
+                self.config.max_outstanding_descriptors_per_channel
+            )
+        if descriptor_capacity is not None:
             self.descriptor_slots = {
                 fabric_id: Resource(
                     env,
-                    capacity=self.max_outstanding_descriptors_per_channel,
+                    capacity=descriptor_capacity,
                 )
                 for fabric_id in NoCChannel
             }
@@ -237,13 +255,11 @@ class DMAEndpoint:
                 f"{address.fabric_id.name} binding"
             )
         self.bindings[address.fabric_id] = binding
-        if self.node_type in _DDR_NODE_TYPES:
-            return
-        if self.node_type is NodeType.GM_WDMA:
+        if self.node_type in DMA_WDMA_NODE_TYPES:
             self.env.process(self._rx_service_loop(binding))
         elif self.node_type is NodeType.GM_RDMA:
             self.env.process(self._request_service_loop(binding))
-        else:
+        elif self.node_type is not NodeType.DDR_RDMA:
             raise RuntimeError(f"unsupported DMA endpoint type: {self.node_type!r}")
 
     def binding_for(self, fabric_id: NoCChannel) -> DMAChannelBinding:
@@ -307,14 +323,13 @@ class DMAEndpoint:
         )
 
     def outstanding_descriptor_count(self, fabric_id: NoCChannel) -> int:
-        """Return active GM_WDMA receive descriptors on one fabric."""
+        """Return active WDMA receive descriptors on one fabric."""
         return len(self._descriptor_slots_for(fabric_id).users)
 
     def send(self, message: Message) -> Process:
-        """Post one dual-side GM RDMA command and inject its payload."""
-        self._require_command_execution_support()
-        if self.node_type is not NodeType.GM_RDMA:
-            raise NotImplementedError("GM_WDMA cannot inject payload data")
+        """Post one dual-side RDMA command and inject its payload."""
+        if self.node_type not in DMA_RDMA_NODE_TYPES:
+            raise NotImplementedError("WDMA endpoints cannot inject payload data")
         self._validate_message_transport(message)
         binding = self.binding_for(message.src.fabric_id)
         if message.src != binding.address:
@@ -324,12 +339,19 @@ class DMAEndpoint:
             )
         if message.dst.node_type is not NodeType.PE:
             raise NotImplementedError(
-                "Phase 3B GM RDMA execution supports GM-to-PE transfers only"
+                "RDMA execution supports DMA-to-PE transfers only"
             )
         if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+            if self.node_type in DDR_DMA_NODE_TYPES:
+                raise NotImplementedError(
+                    "DDR single-side command execution is deferred to Fix 14C"
+                )
             raise ValueError(
                 "single-side GM downloads are initiated by NMCChannel.recv_message"
             )
+        if message.dma_command_mode is not DMACommandMode.DUAL_SIDE:
+            raise RuntimeError(f"message {message.index} has no DMA command mode")
+        self._validate_paired_execution_config()
         return self.env.process(
             self._send(
                 message,
@@ -340,10 +362,9 @@ class DMAEndpoint:
         )
 
     def recv_message(self, message: Message) -> Process:
-        """Post one dual-side GM WDMA receive command."""
-        self._require_command_execution_support()
-        if self.node_type is not NodeType.GM_WDMA:
-            raise NotImplementedError("GM_RDMA cannot consume payload data")
+        """Post one dual-side WDMA receive command."""
+        if self.node_type not in DMA_WDMA_NODE_TYPES:
+            raise NotImplementedError("RDMA endpoints cannot consume payload data")
         self._validate_message_transport(message)
         binding = self.binding_for(message.dst.fabric_id)
         if message.dst != binding.address:
@@ -353,12 +374,19 @@ class DMAEndpoint:
             )
         if message.src.node_type is not NodeType.PE:
             raise NotImplementedError(
-                "Phase 3B GM WDMA execution supports PE-to-GM transfers only"
+                "WDMA execution supports PE-to-DMA transfers only"
             )
         if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+            if self.node_type in DDR_DMA_NODE_TYPES:
+                raise NotImplementedError(
+                    "DDR single-side command execution is deferred to Fix 14C"
+                )
             raise ValueError(
                 "single-side GM uploads are initiated by NMCChannel.send"
             )
+        if message.dma_command_mode is not DMACommandMode.DUAL_SIDE:
+            raise RuntimeError(f"message {message.index} has no DMA command mode")
+        self._validate_paired_execution_config()
         receive_key = (message.dst.fabric_id, message.index)
         if receive_key in self._claimed_receive_ids:
             raise ValueError(
@@ -392,7 +420,7 @@ class DMAEndpoint:
     ) -> ProcessGenerator:
         submission_time_aci_cycles = float(self.env.now)
         if dispatch_descriptor:
-            yield from self._dispatch_descriptor()
+            yield from self._dispatch_descriptor(message.src.fabric_id)
         descriptor_acceptance_time_aci_cycles = float(self.env.now)
         dual_side_ready: SimpyEvent | None = None
         if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
@@ -448,7 +476,7 @@ class DMAEndpoint:
         try:
             descriptor_request = descriptor_slots.request()
             yield descriptor_request
-            yield from self._dispatch_descriptor()
+            yield from self._dispatch_descriptor(message.dst.fabric_id)
             descriptor_acceptance_time_aci_cycles = float(self.env.now)
             self._require_dma_commands().post_dual_side_destination(message)
             result = (
@@ -512,7 +540,7 @@ class DMAEndpoint:
 
         if tail_service_completion_time_aci_cycles is None:
             raise RuntimeError(
-                f"message {message.index} has no GM service boundary"
+                f"message {message.index} has no DMA service boundary"
             )
         yield from self._complete_wdma_command(
             message,
@@ -540,6 +568,10 @@ class DMAEndpoint:
         message: Message,
         binding: DMAChannelBinding,
     ) -> ProcessGenerator:
+        if self.node_type is not NodeType.GM_WDMA:
+            raise NotImplementedError(
+                "DDR single-side command execution is deferred to Fix 14C"
+            )
         submission_time_aci_cycles = float(self.env.now)
         yield from self._receive_payload(
             message,
@@ -553,8 +585,8 @@ class DMAEndpoint:
         )
         yield binding.tx_link.send_flit(response_flit)
 
-    def _dispatch_descriptor(self) -> ProcessGenerator:
-        request = self.descriptor_issuer.request()
+    def _dispatch_descriptor(self, fabric_id: NoCChannel) -> ProcessGenerator:
+        request = self.descriptor_issuers[fabric_id].request()
         with request:
             yield request
             yield self.env.timeout(self.descriptor_issue_cycles)
@@ -572,6 +604,10 @@ class DMAEndpoint:
         message: Message,
         submission_time_aci_cycles: float,
     ) -> ProcessGenerator:
+        if self.node_type is NodeType.DDR_WDMA:
+            return
+        if self.node_type is not NodeType.GM_WDMA:
+            raise RuntimeError(f"{self.node_type.name} cannot complete WDMA commands")
         request = self.command_completion_sequencer.request()
         with request:
             yield request
@@ -657,6 +693,10 @@ class DMAEndpoint:
                     f"unexpected {flit.traffic_type.name} flit"
                 )
             if flit.is_head and flit.dma_header_bytes > 0:
+                if self.node_type is not NodeType.GM_WDMA:
+                    raise NotImplementedError(
+                        "DDR single-side command execution is deferred to Fix 14C"
+                    )
                 message = (
                     self._require_dma_commands().accept_single_side_upload_header(
                         flit,
@@ -682,12 +722,13 @@ class DMAEndpoint:
             raise RuntimeError("DMA command coordinator is unavailable")
         return self.dma_commands
 
-    def _require_command_execution_support(self) -> None:
-        if self.node_type in _DDR_NODE_TYPES:
-            raise NotImplementedError(
-                "Fix 14A creates DDR runtime resources, but DDR command "
-                "execution is deferred to Fix 14B and Fix 14C"
-            )
+    def _validate_paired_execution_config(self) -> None:
+        _ = self.service_bytes_per_aci_cycle
+        _ = self.descriptor_issue_cycles
+        if self.node_type in DMA_WDMA_NODE_TYPES:
+            _ = self.max_outstanding_descriptors_per_channel
+            for fabric_id in NoCChannel:
+                self._descriptor_slots_for(fabric_id)
 
 
 DMAEndpointKey = tuple[NodeType, int]

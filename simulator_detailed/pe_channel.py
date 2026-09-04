@@ -10,6 +10,9 @@ from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
+    DDR_DMA_NODE_TYPES,
+    DMA_RDMA_NODE_TYPES,
+    DMA_WDMA_NODE_TYPES,
     FLIT_BYTES,
     DMAAttachmentMode,
     DMACommandMode,
@@ -315,25 +318,41 @@ class NMCChannel:
             raise NotImplementedError(
                 "NMC command execution does not support AIU-local paths"
             )
+        if (
+            message.dma_command_mode is DMACommandMode.SINGLE_SIDE
+            and (
+                message.src.node_type in DDR_DMA_NODE_TYPES
+                or message.dst.node_type in DDR_DMA_NODE_TYPES
+            )
+        ):
+            raise NotImplementedError(
+                "DDR single-side command execution is deferred to Fix 14C"
+            )
 
     def _validate_send_message(self, message: Message) -> None:
         self._validate_message_transport(message)
-        if message.src.node_type is not NodeType.PE or message.dst.node_type not in (
-            NodeType.PE,
-            NodeType.GM_WDMA,
+        if (
+            message.src.node_type is not NodeType.PE
+            or (
+                message.dst.node_type is not NodeType.PE
+                and message.dst.node_type not in DMA_WDMA_NODE_TYPES
+            )
         ):
             raise NotImplementedError(
-                "NMC send supports PE-to-PE and PE-to-GM transfers only"
+                "NMC send supports PE-to-PE and PE-to-WDMA transfers only"
             )
 
     def _validate_receive_message(self, message: Message) -> None:
         self._validate_message_transport(message)
-        if message.dst.node_type is not NodeType.PE or message.src.node_type not in (
-            NodeType.PE,
-            NodeType.GM_RDMA,
+        if (
+            message.dst.node_type is not NodeType.PE
+            or (
+                message.src.node_type is not NodeType.PE
+                and message.src.node_type not in DMA_RDMA_NODE_TYPES
+            )
         ):
             raise NotImplementedError(
-                "NMC receive supports PE-to-PE and GM-to-PE transfers only"
+                "NMC receive supports PE-to-PE and RDMA-to-PE transfers only"
             )
 
     def _select_receive_api(
@@ -376,7 +395,7 @@ class NMCChannel:
             completion = self.env.event()
             dual_side_ready: SimpyEvent | None = None
             single_side_completion: SimpyEvent | None = None
-            if message.dst.node_type is NodeType.GM_WDMA:
+            if message.dst.node_type in DMA_WDMA_NODE_TYPES:
                 dma_commands = self._require_dma_commands()
                 if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
                     dual_side_ready = dma_commands.post_dual_side_source(message)
@@ -439,7 +458,7 @@ class NMCChannel:
                 + self.config.descriptor_issue_cycles
                 + self.receive_endpoint_setup_residual_aci_cycles(shape_mode)
             )
-            if message.src.node_type is NodeType.GM_RDMA:
+            if message.src.node_type in DMA_RDMA_NODE_TYPES:
                 dma_commands = self._require_dma_commands()
                 if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
                     dma_commands.post_dual_side_destination(message)

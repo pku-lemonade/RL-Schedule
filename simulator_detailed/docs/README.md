@@ -35,6 +35,16 @@ standalone dual-side outer-sync timing, single-side WDMA fixed latency, and the
 single-side outstanding limit remain uncalibrated, so GM endpoints remain
 intentionally absent from the canonical configuration.
 
+Configured DDR endpoints are attached to both fabrics with explicit 1200 MHz to
+ACI clock conversion. Paired DDR commands execute through the shared dual-side
+coordinator, with one DDR_RDMA service resource and one DDR_WDMA service resource
+per controller, each shared across CH0 and CH1. DDR execution currently requires
+explicit provisional service, descriptor, and WDMA capacity parameters; it does
+not inherit GM latency or bandwidth defaults. DDR_WDMA descriptor setup can
+overlap across its per-fabric issuers while payload service remains shared;
+DDR_RDMA descriptor issue remains conservatively endpoint-wide. DDR single-side
+request/response behavior and hardware timing calibration remain deferred.
+
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
 latency and packetization evidence, GM upload/rb55 and GM download/outcast

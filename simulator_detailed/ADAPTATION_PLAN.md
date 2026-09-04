@@ -192,10 +192,16 @@ Implement in small, independently tested commits:
    keep AIU-local paths unsupported. Do not assign standalone outer-sync latency,
    single-side WDMA fixed latency, or a single-side outstanding limit until those
    quantities are measured.
-7. **Fix 14A, implemented locally:** create DDR RDMA/WDMA runtime resources and
-   explicit 1200 MHz to ACI conversion without enabling command execution.
-8. **Fix 14B:** add paired DDR command execution with one internal datapath per
-   endpoint shared by CH0 and CH1.
+7. **Fix 14A, committed as `e8e3bd5`:** create DDR RDMA/WDMA runtime resources
+   and explicit 1200 MHz to ACI conversion without enabling command execution.
+8. **Fix 14B, implemented locally:** add paired DDR command execution with one
+   internal datapath per endpoint shared by CH0 and CH1. Require explicit DDR
+   service rate, descriptor issue timing, and WDMA descriptor capacity until
+   calibration. Model the measured DDR_WDMA CH0/CH1 descriptor-setup overlap
+   with per-fabric issuers while retaining the shared payload datapath; keep
+   DDR_RDMA descriptor issue endpoint-wide until measured. Reuse dual-side
+   protocol pairing, but do not enable single-side DDR request/response behavior
+   or apply GM completion calibrations.
 9. **Fix 14C:** add DDR single-side request/response behavior and calibrate
    direction asymmetry, endpoint latency, and aggregate caps.
 10. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.

@@ -20,6 +20,7 @@ from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
+    PORT_DDR_WDMA,
     PORT_DDR_WDMA_CH0,
     PORT_DDR_WDMA_CH1,
     PORT_GM_RDMA,
@@ -190,6 +191,14 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             ddr_wdma.binding_for(NoCChannel.CH1).address.local_port,
             PORT_DDR_WDMA_CH1,
         )
+        self.assertIs(
+            ddr_rdma.descriptor_issuers[NoCChannel.CH0],
+            ddr_rdma.descriptor_issuers[NoCChannel.CH1],
+        )
+        self.assertIsNot(
+            ddr_wdma.descriptor_issuers[NoCChannel.CH0],
+            ddr_wdma.descriptor_issuers[NoCChannel.CH1],
+        )
 
         self.assertEqual(ddr_rdma.clock_domain.endpoint_clock_mhz, 1200.0)
         self.assertEqual(ddr_rdma.clock_domain.aci_clock_mhz, 1125.0)
@@ -237,12 +246,73 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             data=[DimSlice(start=0, end=512)],
             dma_command_mode=DMACommandMode.DUAL_SIDE,
         )
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14B and Fix 14C"):
+        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
             ddr_wdma.recv_message(upload)
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14B and Fix 14C"):
+        with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
             ddr_rdma.send(download)
         with self.assertRaisesRegex(RuntimeError, "service rate is uncalibrated"):
             _ = ddr_rdma.service_bytes_per_aci_cycle
+
+    def test_paired_ddr_requires_explicit_uncalibrated_parameters(self) -> None:
+        for config, expected_error in (
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_RDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=1,
+                    local_ports=[PORT_DDR_RDMA],
+                    port_bw=64.0,
+                ),
+                "descriptor issue timing is uncalibrated",
+            ),
+            (
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_WDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=2,
+                    local_ports=[PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+                    port_bw=64.0,
+                    descriptor_issue_cycles=0.0,
+                ),
+                "descriptor capacity is not characterized",
+            ),
+        ):
+            with self.subTest(dma_type=config.dma_type.name):
+                _, arch = self._build_runtime(NoCConfig(dma_engines=[config]))
+                node_type = (
+                    NodeType.DDR_RDMA
+                    if config.dma_type is DMAType.DDR_RDMA
+                    else NodeType.DDR_WDMA
+                )
+                endpoint = arch.dma_endpoints[(node_type, 0)]
+                pe_address = arch.endpoint_registry.resolve(
+                    NodeType.PE,
+                    0,
+                    fabric_id=NoCChannel.CH0,
+                )
+                message = Message(
+                    src=(
+                        endpoint.binding_for(NoCChannel.CH0).address
+                        if node_type is NodeType.DDR_RDMA
+                        else pe_address
+                    ),
+                    dst=(
+                        pe_address
+                        if node_type is NodeType.DDR_RDMA
+                        else endpoint.binding_for(NoCChannel.CH0).address
+                    ),
+                    index=908,
+                    data=[DimSlice(start=0, end=512)],
+                    dma_command_mode=DMACommandMode.DUAL_SIDE,
+                )
+
+                with self.assertRaisesRegex(RuntimeError, expected_error):
+                    if node_type is NodeType.DDR_RDMA:
+                        endpoint.send(message)
+                    else:
+                        endpoint.recv_message(message)
 
     def test_dma_endpoint_clock_conversion_uses_configured_aci_clock(self) -> None:
         ddr_config = NoCConfig(
@@ -269,6 +339,242 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             clock_domain.endpoint_cycles_to_aci_cycles(6.0),
             5.0,
         )
+
+    def test_paired_ddr_commands_execute_in_both_directions(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_RDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=1,
+                    local_ports=[PORT_DDR_RDMA],
+                    port_bw=64.0,
+                    descriptor_issue_cycles=3.0,
+                ),
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_WDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=2,
+                    local_ports=[PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+                    port_bw=64.0,
+                    descriptor_issue_cycles=3.0,
+                    max_outstanding_descriptors_per_channel=2,
+                ),
+            ]
+        )
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+        ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+
+        upload = Message(
+            src=cores[0].binding_for(NoCChannel.CH0).address,
+            dst=ddr_wdma.binding_for(NoCChannel.CH0).address,
+            index=902,
+            data=[DimSlice(start=0, end=1025)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+        download = Message(
+            src=ddr_rdma.binding_for(NoCChannel.CH1).address,
+            dst=cores[1].binding_for(NoCChannel.CH1).address,
+            index=903,
+            data=[DimSlice(start=0, end=513)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+
+        ddr_receive = ddr_wdma.recv_message(upload)
+        pe_send = cores[0].nmc_channel_for(NoCChannel.CH0).send(upload)
+        pe_receive = cores[1].nmc_channel_for(NoCChannel.CH1).recv_message(
+            download,
+            NMCShapeMode.DYNAMIC,
+        )
+        ddr_send = ddr_rdma.send(download)
+        env.run(until=env.all_of((ddr_receive, pe_send, pe_receive, ddr_send)))
+
+        self.assertIsInstance(ddr_receive.value, DMAReceiveResult)
+        self.assertIsInstance(ddr_send.value, DMATransmitResult)
+        self.assertEqual(
+            [flit.payload_bytes for flit in ddr_receive.value.flits],
+            [512, 512, 1],
+        )
+        self.assertEqual(
+            [flit.payload_bytes for flit in ddr_send.value.flits],
+            [512, 1],
+        )
+        self.assertEqual(
+            ddr_receive.value.descriptor_acceptance_time_aci_cycles,
+            3.0,
+        )
+        self.assertEqual(
+            ddr_send.value.descriptor_acceptance_time_aci_cycles,
+            3.0,
+        )
+        self.assertEqual(
+            ddr_wdma.outstanding_descriptor_count(NoCChannel.CH0),
+            0,
+        )
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+        traffic_types = {
+            event.traffic_type
+            for noc in arch.nocs.values()
+            for event in noc.tracer.events
+            if event.msg_id in (upload.index, download.index)
+        }
+        self.assertEqual(traffic_types, {FlitTrafficType.PAYLOAD})
+
+    def test_paired_ddr_channels_share_each_endpoint_datapath(self) -> None:
+        for dma_type, local_ports, node_type in (
+            (
+                DMAType.DDR_RDMA,
+                [PORT_DDR_RDMA],
+                NodeType.DDR_RDMA,
+            ),
+            (
+                DMAType.DDR_WDMA,
+                [PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+                NodeType.DDR_WDMA,
+            ),
+        ):
+            with self.subTest(dma_type=dma_type.name):
+                is_wdma = dma_type is DMAType.DDR_WDMA
+                config = DMAEngineConfig(
+                    dma_type=dma_type,
+                    instance_id=0,
+                    router_id=0,
+                    channels=2 if is_wdma else 1,
+                    local_ports=local_ports,
+                    port_bw=16.0,
+                    descriptor_issue_cycles=10.0 if is_wdma else 0.0,
+                    max_outstanding_descriptors_per_channel=(
+                        2 if is_wdma else None
+                    ),
+                )
+                env, arch, cores = self._build_executable_runtime(
+                    NoCConfig(dma_engines=[config])
+                )
+                endpoint = arch.dma_endpoints[(node_type, 0)]
+                messages = tuple(
+                    Message(
+                        src=(
+                            cores[0].binding_for(fabric_id).address
+                            if is_wdma
+                            else endpoint.binding_for(fabric_id).address
+                        ),
+                        dst=(
+                            endpoint.binding_for(fabric_id).address
+                            if is_wdma
+                            else cores[0].binding_for(fabric_id).address
+                        ),
+                        index=904 + int(fabric_id),
+                        data=[DimSlice(start=0, end=512)],
+                        dma_command_mode=DMACommandMode.DUAL_SIDE,
+                    )
+                    for fabric_id in NoCChannel
+                )
+
+                if is_wdma:
+                    dma_processes = tuple(
+                        endpoint.recv_message(message) for message in messages
+                    )
+                    pe_processes = tuple(
+                        cores[0]
+                        .nmc_channel_for(message.src.fabric_id)
+                        .send(message)
+                        for message in messages
+                    )
+                else:
+                    dma_processes = tuple(
+                        endpoint.send(message) for message in messages
+                    )
+                    pe_processes = tuple(
+                        cores[0]
+                        .nmc_channel_for(message.dst.fabric_id)
+                        .recv_message(message, NMCShapeMode.DYNAMIC)
+                        for message in messages
+                    )
+                env.run(until=env.all_of((*dma_processes, *pe_processes)))
+
+                if is_wdma:
+                    self.assertEqual(
+                        [
+                            process.value.descriptor_acceptance_time_aci_cycles
+                            for process in dma_processes
+                        ],
+                        [10.0, 10.0],
+                    )
+                    service_boundaries = sorted(
+                        process.value.tail_service_completion_time_aci_cycles
+                        for process in dma_processes
+                    )
+                else:
+                    service_boundaries = sorted(
+                        process.value.final_local_handoff_time_aci_cycles
+                        for process in dma_processes
+                    )
+                self.assertAlmostEqual(
+                    service_boundaries[1] - service_boundaries[0],
+                    endpoint.service_interval_aci_cycles,
+                )
+                self.assertEqual(
+                    arch.dma_commands.pending_dual_side_commands,
+                    0,
+                )
+
+    def test_ddr_single_side_execution_remains_deferred(self) -> None:
+        noc_config = NoCConfig(
+            dma_engines=[
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_RDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=1,
+                    local_ports=[PORT_DDR_RDMA],
+                    port_bw=64.0,
+                    descriptor_issue_cycles=0.0,
+                ),
+                DMAEngineConfig(
+                    dma_type=DMAType.DDR_WDMA,
+                    instance_id=0,
+                    router_id=0,
+                    channels=1,
+                    local_ports=[PORT_DDR_WDMA],
+                    port_bw=64.0,
+                    descriptor_issue_cycles=0.0,
+                    max_outstanding_descriptors_per_channel=2,
+                ),
+            ]
+        )
+        _, arch, cores = self._build_executable_runtime(noc_config)
+        ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+        ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+        upload = Message(
+            src=cores[0].binding_for(NoCChannel.CH0).address,
+            dst=ddr_wdma.binding_for(NoCChannel.CH0).address,
+            index=906,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+        )
+        download = Message(
+            src=ddr_rdma.binding_for(NoCChannel.CH1).address,
+            dst=cores[1].binding_for(NoCChannel.CH1).address,
+            index=907,
+            data=[DimSlice(start=0, end=512)],
+            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+        )
+
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+            cores[0].nmc_channel_for(NoCChannel.CH0).send(upload)
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+            ddr_wdma.recv_message(upload)
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+            cores[1].nmc_channel_for(NoCChannel.CH1).recv_message(
+                download,
+                NMCShapeMode.DYNAMIC,
+            )
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+            ddr_rdma.send(download)
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
 
     def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
         noc_config = NoCConfig(

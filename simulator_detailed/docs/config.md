@@ -143,9 +143,19 @@ Fix 14A creates configured DDR RDMA/WDMA endpoint resources and binds their
 validated CH0/CH1 ports. `DMAClockDomain` converts native endpoint durations to
 the ACI simulation timebase explicitly; at the canonical clocks, 16 DDR cycles
 equal 15 ACI cycles. This conversion does not reinterpret timing values already
-expressed in ACI cycles. DDR bindings deliberately start no command workers, and
-DDR `send`/`recv_message` calls fail explicitly until paired and single-side
-execution plus DDR-specific timing calibration are implemented in Fix 14B/14C.
+expressed in ACI cycles.
+
+Fix 14B enables paired DDR commands through the same dual-side source/destination
+admission protocol used by GM. DDR_RDMA and DDR_WDMA each own one internal data
+service resource shared by CH0 and CH1; their two directions remain independent.
+DDR_WDMA has per-fabric descriptor issuers because measured small-transfer setup
+overlaps across CH0 and CH1. DDR_RDMA retains one conservative endpoint-wide
+issuer until equivalent cross-fabric measurements exist.
+Until Fix 14C calibrates the DDR timing model, executable DDR configurations must
+provide `port_bw` and `descriptor_issue_cycles`, plus
+`max_outstanding_descriptors_per_channel` for DDR_WDMA. No GM completion floor,
+completion cadence, or default service rate is reused. DDR single-side commands
+still fail explicitly before scheduling runtime work.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be
