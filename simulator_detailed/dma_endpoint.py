@@ -377,12 +377,8 @@ class DMAEndpoint:
                 "WDMA execution supports PE-to-DMA transfers only"
             )
         if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
-            if self.node_type is NodeType.DDR_WDMA:
-                raise NotImplementedError(
-                    "DDR single-side upload execution is deferred to Fix 14C-5"
-                )
             raise ValueError(
-                "single-side GM uploads are initiated by NMCChannel.send"
+                "single-side uploads are initiated by NMCChannel.send"
             )
         if message.dma_command_mode is not DMACommandMode.DUAL_SIDE:
             raise RuntimeError(f"message {message.index} has no DMA command mode")
@@ -568,10 +564,6 @@ class DMAEndpoint:
         message: Message,
         binding: DMAChannelBinding,
     ) -> ProcessGenerator:
-        if self.node_type is not NodeType.GM_WDMA:
-            raise NotImplementedError(
-                "DDR single-side command execution is deferred to Fix 14C"
-            )
         submission_time_aci_cycles = float(self.env.now)
         yield from self._receive_payload(
             message,
@@ -615,6 +607,8 @@ class DMAEndpoint:
                 remaining_cycles = completion_floor - float(self.env.now)
                 if remaining_cycles > 0:
                     yield self.env.timeout(remaining_cycles)
+            # Single-side DDR completes after payload service and its response;
+            # a separate fixed latency and completion cadence are unmeasured.
             return
         if self.node_type is not NodeType.GM_WDMA:
             raise RuntimeError(f"{self.node_type.name} cannot complete WDMA commands")
@@ -703,10 +697,6 @@ class DMAEndpoint:
                     f"unexpected {flit.traffic_type.name} flit"
                 )
             if flit.is_head and flit.dma_header_bytes > 0:
-                if self.node_type is not NodeType.GM_WDMA:
-                    raise NotImplementedError(
-                        "DDR single-side command execution is deferred to Fix 14C"
-                    )
                 message = (
                     self._require_dma_commands().accept_single_side_upload_header(
                         flit,

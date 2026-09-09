@@ -218,15 +218,21 @@ Implement in small, independently tested commits:
     `337 + 17 * hops + bytes / 102` for larger payloads. Apply the measured
     17-cycle download hop term in every size regime and keep source-local DMA
     handoff distinct from destination-visible PE completion.
-12. **Fix 14C-4, implemented locally:** enable PE-initiated DDR single-side
+12. **Fix 14C-4, committed as `af0322d`:** enable PE-initiated DDR single-side
     downloads on dedicated DDR_RDMA port 7. Send one address-bearing request
     flit, match it by fabric and task ID, and return payload through the existing
     shared 102 B/ACI-cycle RDMA datapath without dispatching an unmeasured DDR
     descriptor. Apply the same size/hop completion floor at the receiving PE and
-    retire protocol state only after the payload is received. Keep DDR_WDMA
-    single-side upload deferred.
-13. **Fix 14C-5:** enable DDR single-side upload address-header/WDMA-response
-    behavior on its dedicated attachment without inventing queue capacity.
+    retire protocol state only after the payload is received.
+13. **Fix 14C-5, implemented locally:** enable PE-initiated DDR single-side
+    uploads on dedicated DDR_WDMA port 8. The first payload flit carries the
+    address header without reducing its 512 B payload capacity. Validate and
+    service the full payload through the shared 117 B/ACI-cycle WDMA datapath,
+    then return a completion response on the same fabric. Keep the PE command
+    outstanding until its matching response arrives and retire protocol state
+    there. Bypass target-side descriptor posting, and do not invent single-side
+    queue capacity, fixed latency, or completion cadence from paired DDR or GM
+    measurements.
 14. **Fix 14C-6:** validate both directions, command modes, fabrics, and corner
     controllers together, including protocol-state retirement.
 15. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.

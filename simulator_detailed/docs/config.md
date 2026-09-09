@@ -155,7 +155,7 @@ Fix 14C-1 defaults DDR_WDMA to the measured 117 B/ACI-cycle upload service rate
 and DDR_RDMA to the measured 102 B/ACI-cycle download service rate. Because each
 direction owns one shared endpoint datapath, each default is an aggregate CH0+CH1
 cap per controller rather than a per-fabric rate. `port_bw` remains an explicit
-override. Executable DDR configurations must still provide
+override. Paired DDR execution must still provide
 `descriptor_issue_cycles`, plus `max_outstanding_descriptors_per_channel` for
 DDR_WDMA. Fix 14C-2 adds a paired DDR_WDMA minimum-completion profile: 193 ACI
 cycles through one 512 B flit, linear interpolation between measured minima up to
@@ -169,8 +169,23 @@ separate earlier boundary. Fix 14C-4 enables PE-initiated DDR single-side
 downloads through dedicated DDR_RDMA port 7. The request is matched by fabric
 and task ID, then the endpoint returns payload through its shared calibrated
 datapath without dispatching a target-side descriptor, so this path does not
-require provisional `descriptor_issue_cycles`. DDR single-side upload remains
-deferred.
+require provisional `descriptor_issue_cycles`. Fix 14C-5 enables PE-initiated
+DDR single-side uploads through dedicated DDR_WDMA port 8. Configure that
+endpoint with `channels=1` and `local_ports=[PORT_DDR_WDMA]`; this attachment is
+present on both independent fabrics. Submit a `SINGLE_SIDE` message through
+`NMCChannel.send`. Its first payload flit carries the address header, and WDMA
+validates and services the full payload before returning a completion response
+on the same fabric. The header does not reduce the 512 B/flit payload capacity.
+The PE command remains outstanding until its matching response arrives.
+
+DDR single-side uploads use the shared 117 B/ACI-cycle service rate by default
+(or explicit `port_bw`). They do not post a target-side descriptor, so neither
+`descriptor_issue_cycles` nor `max_outstanding_descriptors_per_channel` is
+required for this path. Those paired-command parameters do not define a
+single-side outstanding limit. DDR single-side upload fixed latency and
+outstanding capacity remain unmeasured: completion currently follows modeled
+payload service and response transport, with no paired DDR latency floor or GM
+completion cadence applied.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

@@ -736,7 +736,116 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     0,
                 )
 
-    def test_ddr_single_side_upload_remains_deferred(self) -> None:
+    def test_single_side_ddr_upload_waits_for_response_and_retires_state(
+        self,
+    ) -> None:
+        for fabric_id, source_id, payload_bytes in (
+            (NoCChannel.CH0, 0, 1),
+            (NoCChannel.CH0, 0, 512),
+            (NoCChannel.CH1, 28, 513),
+            (NoCChannel.CH1, 31, 8 * 512 + 1),
+        ):
+            with self.subTest(
+                fabric_id=fabric_id.name,
+                source_id=source_id,
+                payload_bytes=payload_bytes,
+            ):
+                noc_config = NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.DDR_WDMA,
+                            instance_id=0,
+                            router_id=0,
+                            channels=1,
+                            local_ports=[PORT_DDR_WDMA],
+                        )
+                    ]
+                )
+                env, arch, cores = self._build_executable_runtime(noc_config)
+                ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+                nmc = cores[source_id].nmc_channel_for(fabric_id)
+                upload = Message(
+                    src=cores[source_id].binding_for(fabric_id).address,
+                    dst=ddr_wdma.binding_for(fabric_id).address,
+                    index=906,
+                    data=[DimSlice(start=0, end=payload_bytes)],
+                    dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                )
+                with self.assertRaisesRegex(ValueError, "initiated by NMCChannel"):
+                    ddr_wdma.recv_message(upload)
+
+                # Stall response consumption after allowing all upload service.
+                response_blocker = nmc.rx_datapath.request()
+                send = nmc.send(upload)
+                env.run()
+                self.assertFalse(send.triggered)
+                self.assertEqual(nmc.outstanding_descriptor_count, 1)
+                self.assertEqual(arch.dma_commands.pending_single_side_commands, 1)
+                self.assertEqual(ddr_wdma.descriptor_slots, {})
+
+                tracer = arch.nocs[fabric_id].tracer
+                injections = [
+                    event
+                    for event in tracer.events
+                    if event.action is FlitAction.INJECT
+                    and event.msg_id == upload.index
+                ]
+                payload = [
+                    event
+                    for event in injections
+                    if event.traffic_type is FlitTrafficType.PAYLOAD
+                ]
+                responses = [
+                    event
+                    for event in injections
+                    if event.traffic_type is FlitTrafficType.DMA_RESPONSE
+                ]
+                self.assertEqual(len(injections), upload.flit_count() + 1)
+                self.assertEqual(len(payload), upload.flit_count())
+                self.assertEqual(
+                    sum(event.payload_bytes for event in payload), payload_bytes
+                )
+                self.assertEqual(
+                    [event.dma_header_bytes for event in payload],
+                    [upload.header_bytes] + [0] * (upload.flit_count() - 1),
+                )
+                self.assertEqual(len(responses), 1)
+                response = responses[0]
+                self.assertEqual(
+                    (response.src_router, response.dst_router), (0, source_id)
+                )
+                self.assertEqual(response.dma_header_bytes, upload.header_bytes)
+                self.assertEqual(response.payload_bytes, 0)
+                payload_tail = next(
+                    event
+                    for event in tracer.events
+                    if event.action is FlitAction.EJECT
+                    and event.msg_id == upload.index
+                    and event.traffic_type is FlitTrafficType.PAYLOAD
+                    and event.is_tail
+                )
+                self.assertGreaterEqual(
+                    response.time - payload_tail.time,
+                    ddr_wdma.service_interval_aci_cycles,
+                )
+
+                nmc.rx_datapath.release(response_blocker)
+                env.run(until=send)
+                self.assertLess(
+                    send.value.final_local_handoff_time_aci_cycles,
+                    send.value.operation_completion_time_aci_cycles,
+                )
+                self.assertEqual(nmc.outstanding_descriptor_count, 0)
+                self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+                self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+                self.assertEqual(
+                    tracer.message_fabric_timings()[
+                        (fabric_id, upload.index)
+                    ].final_ejection_time_aci_cycles,
+                    payload_tail.time,
+                )
+
+    def test_single_side_ddr_uploads_share_service_across_fabrics(self) -> None:
         noc_config = NoCConfig(
             dma_engines=[
                 DMAEngineConfig(
@@ -745,26 +854,112 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     router_id=0,
                     channels=1,
                     local_ports=[PORT_DDR_WDMA],
-                    port_bw=64.0,
-                    descriptor_issue_cycles=0.0,
-                    max_outstanding_descriptors_per_channel=2,
+                    # Target-side paired descriptor settings must not gate
+                    # these PE-initiated single-side commands.
+                    descriptor_issue_cycles=10_000.0,
+                    max_outstanding_descriptors_per_channel=1,
                 ),
             ]
         )
-        _, arch, cores = self._build_executable_runtime(noc_config)
+        env, arch, cores = self._build_executable_runtime(noc_config)
+        ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+        sends = []
+        for fabric_id in NoCChannel:
+            upload = Message(
+                src=cores[0].binding_for(fabric_id).address,
+                dst=ddr_wdma.binding_for(fabric_id).address,
+                index=906,
+                data=[DimSlice(start=0, end=512)],
+                dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                nmc_shape_mode=NMCShapeMode.STATIC,
+            )
+            sends.append(cores[0].nmc_channel_for(fabric_id).send(upload))
+        env.run(until=env.all_of(sends))
+
+        response_times = []
+        for fabric_id in NoCChannel:
+            responses = [
+                event
+                for event in arch.nocs[fabric_id].tracer.events
+                if event.action is FlitAction.INJECT
+                and event.msg_id == 906
+                and event.traffic_type is FlitTrafficType.DMA_RESPONSE
+            ]
+            self.assertEqual(len(responses), 1)
+            response_times.append(responses[0].time)
+            self.assertEqual(ddr_wdma.outstanding_descriptor_count(fabric_id), 0)
+            self.assertEqual(
+                cores[0].nmc_channel_for(fabric_id).outstanding_descriptor_count, 0
+            )
+        response_times.sort()
+        self.assertAlmostEqual(response_times[1] - response_times[0], 512.0 / 117.0)
+        completion_times = sorted(
+            send.value.operation_completion_time_aci_cycles for send in sends
+        )
+        self.assertAlmostEqual(
+            completion_times[1] - completion_times[0], 512.0 / 117.0
+        )
+        self.assertLess(completion_times[-1], 10_000.0)
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+
+    def test_single_side_ddr_upload_rejects_invalid_header_and_response(self) -> None:
+        _, arch, cores = self._build_executable_runtime(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.DDR_WDMA,
+                        instance_id=0,
+                        router_id=0,
+                        channels=1,
+                        local_ports=[PORT_DDR_WDMA],
+                    )
+                ]
+            )
+        )
         ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
         upload = Message(
-            src=cores[0].binding_for(NoCChannel.CH0).address,
+            src=cores[28].binding_for(NoCChannel.CH0).address,
             dst=ddr_wdma.binding_for(NoCChannel.CH0).address,
             index=906,
             data=[DimSlice(start=0, end=512)],
             dma_command_mode=DMACommandMode.SINGLE_SIDE,
         )
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C-5"):
-            cores[0].nmc_channel_for(NoCChannel.CH0).send(upload)
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C-5"):
-            ddr_wdma.recv_message(upload)
-        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        commands = arch.dma_commands
+        completion = commands.post_single_side_upload(upload)
+        head = upload.packetize()[0]
+        with self.assertRaisesRegex(RuntimeError, "no accepted single-side upload"):
+            commands.create_single_side_upload_response(upload)
+        with self.assertRaisesRegex(RuntimeError, "wrong single-side target"):
+            commands.accept_single_side_upload_header(
+                head, ddr_wdma.binding_for(NoCChannel.CH1).address
+            )
+        with self.assertRaisesRegex(RuntimeError, "invalid flit"):
+            commands.accept_single_side_upload_header(
+                head.model_copy(update={"dma_header_bytes": 0}), upload.dst
+            )
+        commands.accept_single_side_upload_header(head, upload.dst)
+        with self.assertRaisesRegex(RuntimeError, "accepted twice"):
+            commands.accept_single_side_upload_header(head, upload.dst)
+        response = commands.create_single_side_upload_response(upload)
+        self.assertEqual(response.src_local_port, PORT_DDR_WDMA)
+        with self.assertRaisesRegex(RuntimeError, "created twice"):
+            commands.create_single_side_upload_response(upload)
+        with self.assertRaisesRegex(RuntimeError, "invalid single-side response"):
+            commands.accept_single_side_upload_response(
+                response, cores[0].binding_for(NoCChannel.CH0).address
+            )
+        with self.assertRaisesRegex(RuntimeError, "invalid single-side response"):
+            commands.accept_single_side_upload_response(
+                response.model_copy(update={"dma_header_bytes": 0}), upload.src
+            )
+        self.assertFalse(completion.triggered)
+        self.assertEqual(commands.pending_single_side_commands, 1)
+        commands.accept_single_side_upload_response(response, upload.src)
+        self.assertTrue(completion.triggered)
+        self.assertEqual(commands.pending_single_side_commands, 0)
+        with self.assertRaisesRegex(RuntimeError, "no pending single-side upload"):
+            commands.accept_single_side_upload_response(response, upload.src)
 
     def test_single_side_ddr_download_is_pe_initiated_on_both_fabrics(
         self,

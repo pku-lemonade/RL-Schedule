@@ -318,14 +318,6 @@ class NMCChannel:
             raise NotImplementedError(
                 "NMC command execution does not support AIU-local paths"
             )
-        if (
-            message.dma_command_mode is DMACommandMode.SINGLE_SIDE
-            and NodeType.DDR_WDMA
-            in (message.src.node_type, message.dst.node_type)
-        ):
-            raise NotImplementedError(
-                "DDR single-side upload execution is deferred to Fix 14C-5"
-            )
 
     def _validate_send_message(self, message: Message) -> None:
         self._validate_message_transport(message)

@@ -9,6 +9,7 @@ from simpy.events import Event as SimpyEvent
 
 from .utils.definitions import (
     DMA_RDMA_NODE_TYPES,
+    DMA_WDMA_NODE_TYPES,
     DMACommandMode,
     EndpointAddress,
     Flit,
@@ -81,7 +82,7 @@ class SingleSideDownloadState:
 
 @dataclass(slots=True)
 class SingleSideUploadState:
-    """One PE-initiated write request waiting for a GM_WDMA response."""
+    """One PE-initiated write request waiting for a WDMA response."""
 
     message: Message
     completion: SimpyEvent
@@ -232,11 +233,14 @@ class DMACommandCoordinator:
 
     def post_single_side_upload(self, message: Message) -> SimpyEvent:
         """Register a PE write command and return its response event."""
-        self._require_single_side_direction(
-            message,
-            source_type=NodeType.PE,
-            destination_type=NodeType.GM_WDMA,
-        )
+        self._require_mode(message, DMACommandMode.SINGLE_SIDE)
+        if (
+            message.src.node_type is not NodeType.PE
+            or message.dst.node_type not in DMA_WDMA_NODE_TYPES
+        ):
+            raise ValueError(
+                f"message {message.index} is not a supported single-side direction"
+            )
         key = SingleSideCommandKey.from_message(message)
         self._require_unused_single_side_key(key)
         completion = self.env.event()
@@ -251,7 +255,7 @@ class DMACommandCoordinator:
         first_flit: Flit,
         responder: EndpointAddress,
     ) -> Message:
-        """Match an address-bearing upload HEAD at GM_WDMA."""
+        """Match an address-bearing upload HEAD at its WDMA."""
         key = SingleSideCommandKey.from_flit(first_flit)
         state = self._single_side_uploads.get(key)
         if state is None:
@@ -275,7 +279,7 @@ class DMACommandCoordinator:
         return state.message
 
     def create_single_side_upload_response(self, message: Message) -> Flit:
-        """Build the GM_WDMA completion response after target-side service."""
+        """Build the WDMA completion response after target-side service."""
         key = SingleSideCommandKey.from_message(message)
         state = self._single_side_uploads.get(key)
         if state is None or state.message != message or not state.target_accepted:
@@ -357,23 +361,6 @@ class DMACommandCoordinator:
         if message.dma_command_mode is not mode:
             raise ValueError(
                 f"message {message.index} requires {mode.name} command mode"
-            )
-
-    @classmethod
-    def _require_single_side_direction(
-        cls,
-        message: Message,
-        *,
-        source_type: NodeType,
-        destination_type: NodeType,
-    ) -> None:
-        cls._require_mode(message, DMACommandMode.SINGLE_SIDE)
-        if (
-            message.src.node_type is not source_type
-            or message.dst.node_type is not destination_type
-        ):
-            raise ValueError(
-                f"message {message.index} is not a supported single-side direction"
             )
 
     @staticmethod

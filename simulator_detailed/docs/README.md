@@ -52,7 +52,14 @@ the measured 426-cycle one-flit floor, interpolated zero-hop minima through
 512 KiB. A single-side DDR download is initiated only by the receiving PE: an
 address-bearing request on dedicated DDR_RDMA port 7 activates payload service
 without a target-side descriptor, and completion uses the same receive-side
-latency floor. DDR single-side upload remains deferred.
+latency floor. A single-side DDR upload uses dedicated DDR_WDMA port 8: its first
+payload flit carries the address header, and WDMA returns a response after
+validating and servicing the full payload through its shared datapath. The PE
+command completes only after receiving the matching response. Neither
+single-side direction posts a target-side descriptor. Single-side DDR upload
+fixed latency and outstanding capacity remain unmeasured; this path uses modeled
+payload service and response transport without borrowing paired DDR latency or
+GM completion cadence.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
