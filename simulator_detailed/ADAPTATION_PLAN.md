@@ -211,15 +211,20 @@ Implement in small, independently tested commits:
     floor, interpolate the measured minima through 256 KiB, bridge continuously
     to the 512 KiB boundary, and use `90 + bytes / 117` for larger payloads. Do
     not add a synthetic hop term or reuse GM completion cadence.
-11. **Fix 14C-3, implemented locally:** add a size-regime-aware paired DDR_RDMA
+11. **Fix 14C-3, committed as `db0dfb4`:** add a size-regime-aware paired DDR_RDMA
     receive-completion floor. Hold sub-flit commands at the measured 426-cycle
     512 B floor, interpolate measured zero-hop minima through 256 KiB, bridge
     continuously to the 512 KiB boundary, and use
     `337 + 17 * hops + bytes / 102` for larger payloads. Apply the measured
     17-cycle download hop term in every size regime and keep source-local DMA
     handoff distinct from destination-visible PE completion.
-12. **Fix 14C-4:** enable DDR single-side download request/RDMA-payload behavior
-    on its dedicated attachment without inventing unmeasured descriptor timing.
+12. **Fix 14C-4, implemented locally:** enable PE-initiated DDR single-side
+    downloads on dedicated DDR_RDMA port 7. Send one address-bearing request
+    flit, match it by fabric and task ID, and return payload through the existing
+    shared 102 B/ACI-cycle RDMA datapath without dispatching an unmeasured DDR
+    descriptor. Apply the same size/hop completion floor at the receiving PE and
+    retire protocol state only after the payload is received. Keep DDR_WDMA
+    single-side upload deferred.
 13. **Fix 14C-5:** enable DDR single-side upload address-header/WDMA-response
     behavior on its dedicated attachment without inventing queue capacity.
 14. **Fix 14C-6:** validate both directions, command modes, fabrics, and corner

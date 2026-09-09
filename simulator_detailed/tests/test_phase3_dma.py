@@ -736,18 +736,9 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     0,
                 )
 
-    def test_ddr_single_side_execution_remains_deferred(self) -> None:
+    def test_ddr_single_side_upload_remains_deferred(self) -> None:
         noc_config = NoCConfig(
             dma_engines=[
-                DMAEngineConfig(
-                    dma_type=DMAType.DDR_RDMA,
-                    instance_id=0,
-                    router_id=0,
-                    channels=1,
-                    local_ports=[PORT_DDR_RDMA],
-                    port_bw=64.0,
-                    descriptor_issue_cycles=0.0,
-                ),
                 DMAEngineConfig(
                     dma_type=DMAType.DDR_WDMA,
                     instance_id=0,
@@ -761,7 +752,6 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             ]
         )
         _, arch, cores = self._build_executable_runtime(noc_config)
-        ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
         ddr_wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
         upload = Message(
             src=cores[0].binding_for(NoCChannel.CH0).address,
@@ -770,26 +760,87 @@ class Phase3DMAEndpointTests(unittest.TestCase):
             data=[DimSlice(start=0, end=512)],
             dma_command_mode=DMACommandMode.SINGLE_SIDE,
         )
-        download = Message(
-            src=ddr_rdma.binding_for(NoCChannel.CH1).address,
-            dst=cores[1].binding_for(NoCChannel.CH1).address,
-            index=907,
-            data=[DimSlice(start=0, end=512)],
-            dma_command_mode=DMACommandMode.SINGLE_SIDE,
-        )
-
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C-5"):
             cores[0].nmc_channel_for(NoCChannel.CH0).send(upload)
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
+        with self.assertRaisesRegex(NotImplementedError, "Fix 14C-5"):
             ddr_wdma.recv_message(upload)
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
-            cores[1].nmc_channel_for(NoCChannel.CH1).recv_message(
-                download,
-                NMCShapeMode.DYNAMIC,
-            )
-        with self.assertRaisesRegex(NotImplementedError, "Fix 14C"):
-            ddr_rdma.send(download)
         self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+
+    def test_single_side_ddr_download_is_pe_initiated_on_both_fabrics(
+        self,
+    ) -> None:
+        for fabric_id, destination_id, hops in (
+            (NoCChannel.CH0, 0, 0),
+            (NoCChannel.CH1, 28, 7),
+        ):
+            with self.subTest(fabric_id=fabric_id.name, hops=hops):
+                noc_config = NoCConfig(
+                    dma_engines=[
+                        DMAEngineConfig(
+                            dma_type=DMAType.DDR_RDMA,
+                            instance_id=0,
+                            router_id=0,
+                            channels=1,
+                            local_ports=[PORT_DDR_RDMA],
+                        )
+                    ]
+                )
+                env, arch, cores = self._build_executable_runtime(noc_config)
+                ddr_rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+                message = Message(
+                    src=ddr_rdma.binding_for(fabric_id).address,
+                    dst=cores[destination_id].binding_for(fabric_id).address,
+                    index=907 + int(fabric_id),
+                    data=[DimSlice(start=0, end=513)],
+                    dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                )
+
+                with self.assertRaisesRegex(ValueError, "initiated by NMCChannel"):
+                    ddr_rdma.send(message)
+                receive = cores[destination_id].nmc_channel_for(
+                    fabric_id
+                ).recv_message(message, NMCShapeMode.DYNAMIC)
+                env.run(until=receive)
+
+                self.assertEqual(
+                    receive.value.operation_latency_aci_cycles,
+                    DDR_DMA_REFERENCE.rdma_min_operation_latency_aci_cycles(
+                        513,
+                        hops,
+                    ),
+                )
+                self.assertEqual(
+                    [flit.dma_header_bytes for flit in receive.value.flits],
+                    [message.header_bytes, 0],
+                )
+                injections = [
+                    event
+                    for event in arch.nocs[fabric_id].tracer.events
+                    if event.action is FlitAction.INJECT
+                    and event.msg_id == message.index
+                ]
+                self.assertEqual(
+                    {event.traffic_type for event in injections},
+                    {FlitTrafficType.DMA_REQUEST, FlitTrafficType.PAYLOAD},
+                )
+                request = next(
+                    event
+                    for event in injections
+                    if event.traffic_type is FlitTrafficType.DMA_REQUEST
+                )
+                self.assertEqual(
+                    (request.src_router, request.dst_router),
+                    (destination_id, 0),
+                )
+                self.assertEqual(request.dma_header_bytes, message.header_bytes)
+                self.assertEqual(
+                    arch.dma_commands.pending_single_side_commands,
+                    0,
+                )
+                self.assertIn(
+                    (fabric_id, message.index),
+                    arch.nocs[fabric_id].tracer.message_fabric_timings(),
+                )
 
     def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
         noc_config = NoCConfig(

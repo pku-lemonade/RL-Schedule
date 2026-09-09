@@ -15,7 +15,6 @@ from .configs.schemas.arch_config import DMAEngineConfig
 from .endpoint_registry import dma_node_type
 from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
-    DDR_DMA_NODE_TYPES,
     DMA_RDMA_NODE_TYPES,
     DMA_WDMA_NODE_TYPES,
     FLIT_BYTES,
@@ -258,9 +257,9 @@ class DMAEndpoint:
         self.bindings[address.fabric_id] = binding
         if self.node_type in DMA_WDMA_NODE_TYPES:
             self.env.process(self._rx_service_loop(binding))
-        elif self.node_type is NodeType.GM_RDMA:
+        elif self.node_type in DMA_RDMA_NODE_TYPES:
             self.env.process(self._request_service_loop(binding))
-        elif self.node_type is not NodeType.DDR_RDMA:
+        else:
             raise RuntimeError(f"unsupported DMA endpoint type: {self.node_type!r}")
 
     def binding_for(self, fabric_id: NoCChannel) -> DMAChannelBinding:
@@ -332,7 +331,7 @@ class DMAEndpoint:
         return len(self._descriptor_slots_for(fabric_id).users)
 
     def send(self, message: Message) -> Process:
-        """Post one dual-side RDMA command and inject its payload."""
+        """Post one direct dual-side RDMA command and inject its payload."""
         if self.node_type not in DMA_RDMA_NODE_TYPES:
             raise NotImplementedError("WDMA endpoints cannot inject payload data")
         self._validate_message_transport(message)
@@ -347,12 +346,8 @@ class DMAEndpoint:
                 "RDMA execution supports DMA-to-PE transfers only"
             )
         if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
-            if self.node_type in DDR_DMA_NODE_TYPES:
-                raise NotImplementedError(
-                    "DDR single-side command execution is deferred to Fix 14C"
-                )
             raise ValueError(
-                "single-side GM downloads are initiated by NMCChannel.recv_message"
+                "single-side downloads are initiated by NMCChannel.recv_message"
             )
         if message.dma_command_mode is not DMACommandMode.DUAL_SIDE:
             raise RuntimeError(f"message {message.index} has no DMA command mode")
@@ -382,9 +377,9 @@ class DMAEndpoint:
                 "WDMA execution supports PE-to-DMA transfers only"
             )
         if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
-            if self.node_type in DDR_DMA_NODE_TYPES:
+            if self.node_type is NodeType.DDR_WDMA:
                 raise NotImplementedError(
-                    "DDR single-side command execution is deferred to Fix 14C"
+                    "DDR single-side upload execution is deferred to Fix 14C-5"
                 )
             raise ValueError(
                 "single-side GM uploads are initiated by NMCChannel.send"

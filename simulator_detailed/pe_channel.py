@@ -11,7 +11,6 @@ from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
 from .noc import Link, Router
 from .utils.definitions import (
-    DDR_DMA_NODE_TYPES,
     DMA_RDMA_NODE_TYPES,
     DMA_WDMA_NODE_TYPES,
     FLIT_BYTES,
@@ -321,13 +320,11 @@ class NMCChannel:
             )
         if (
             message.dma_command_mode is DMACommandMode.SINGLE_SIDE
-            and (
-                message.src.node_type in DDR_DMA_NODE_TYPES
-                or message.dst.node_type in DDR_DMA_NODE_TYPES
-            )
+            and NodeType.DDR_WDMA
+            in (message.src.node_type, message.dst.node_type)
         ):
             raise NotImplementedError(
-                "DDR single-side command execution is deferred to Fix 14C"
+                "DDR single-side upload execution is deferred to Fix 14C-5"
             )
 
     def _validate_send_message(self, message: Message) -> None:

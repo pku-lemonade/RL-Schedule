@@ -165,7 +165,12 @@ Fix 14C-3 applies the paired DDR_RDMA completion floor at the receiving PE. It
 holds sub-flit commands at the measured 426-cycle 512 B floor, interpolates the
 measured zero-hop minima through 256 KiB, bridges continuously to 512 KiB, then
 uses `337 + 17 * hops + payload_bytes / 102`. Source-local DMA handoff remains a
-separate earlier boundary. DDR single-side commands remain deferred.
+separate earlier boundary. Fix 14C-4 enables PE-initiated DDR single-side
+downloads through dedicated DDR_RDMA port 7. The request is matched by fabric
+and task ID, then the endpoint returns payload through its shared calibrated
+datapath without dispatching a target-side descriptor, so this path does not
+require provisional `descriptor_issue_cycles`. DDR single-side upload remains
+deferred.
 
 `RouterFail` and `LinkFail` also carry `fabric_id`. Existing single-fabric
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be

@@ -38,7 +38,7 @@ intentionally absent from the canonical configuration.
 Configured DDR endpoints are attached to both fabrics with explicit 1200 MHz to
 ACI clock conversion. Paired DDR commands execute through the shared dual-side
 coordinator, with one DDR_RDMA service resource and one DDR_WDMA service resource
-per controller, each shared across CH0 and CH1. DDR execution currently requires
+per controller, each shared across CH0 and CH1. Paired DDR execution requires
 explicit provisional descriptor and WDMA capacity parameters. DDR_WDMA defaults
 to the measured 117 B/ACI-cycle aggregate service rate and DDR_RDMA defaults to
 102 B/ACI-cycle; `port_bw` can override either value. DDR_WDMA descriptor setup
@@ -49,7 +49,10 @@ minima through 256 KiB, and the large-transfer `90 + bytes / 117` trend from
 512 KiB. Paired DDR_RDMA completion is recorded at the receiving PE: it follows
 the measured 426-cycle one-flit floor, interpolated zero-hop minima through
 256 KiB, and the large-transfer `337 + 17 * hops + bytes / 102` trend from
-512 KiB. DDR single-side request/response behavior remains deferred.
+512 KiB. A single-side DDR download is initiated only by the receiving PE: an
+address-bearing request on dedicated DDR_RDMA port 7 activates payload service
+without a target-side descriptor, and completion uses the same receive-side
+latency floor. DDR single-side upload remains deferred.
 
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54

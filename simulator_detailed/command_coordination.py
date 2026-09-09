@@ -8,6 +8,7 @@ import simpy
 from simpy.events import Event as SimpyEvent
 
 from .utils.definitions import (
+    DMA_RDMA_NODE_TYPES,
     DMACommandMode,
     EndpointAddress,
     Flit,
@@ -71,7 +72,7 @@ class DualSideCommandState:
 
 @dataclass(slots=True)
 class SingleSideDownloadState:
-    """One PE-initiated read request waiting for a GM_RDMA response."""
+    """One PE-initiated read request waiting for an RDMA response."""
 
     message: Message
     request_flit: Flit
@@ -176,11 +177,14 @@ class DMACommandCoordinator:
 
     def post_single_side_download(self, message: Message) -> Flit:
         """Register a PE read command and build its request header flit."""
-        self._require_single_side_direction(
-            message,
-            source_type=NodeType.GM_RDMA,
-            destination_type=NodeType.PE,
-        )
+        self._require_mode(message, DMACommandMode.SINGLE_SIDE)
+        if (
+            message.src.node_type not in DMA_RDMA_NODE_TYPES
+            or message.dst.node_type is not NodeType.PE
+        ):
+            raise ValueError(
+                f"message {message.index} is not a supported single-side direction"
+            )
         key = SingleSideCommandKey.from_message(message)
         self._require_unused_single_side_key(key)
         request_flit = self._control_flit(
@@ -198,7 +202,7 @@ class DMACommandCoordinator:
         request_flit: Flit,
         responder: EndpointAddress,
     ) -> Message:
-        """Match a request header at GM_RDMA by fabric and task ID."""
+        """Match a request header at its RDMA by fabric and task ID."""
         key = SingleSideCommandKey.from_flit(request_flit)
         state = self._single_side_downloads.get(key)
         if state is None:
