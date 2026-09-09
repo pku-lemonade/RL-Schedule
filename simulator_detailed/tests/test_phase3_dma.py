@@ -68,6 +68,78 @@ class Phase3DMAEndpointTests(unittest.TestCase):
         )
         return env, arch, cores
 
+    @staticmethod
+    def _all_ddr_controllers_config(
+        wdma_modes: tuple[DMACommandMode, ...],
+    ) -> NoCConfig:
+        engines = []
+        # Hardware controller order from NOC_ARCHITECTURE.md section 9.10.
+        for instance_id, (router_id, mode) in enumerate(
+            zip((0, 28, 3, 31), wdma_modes, strict=True)
+        ):
+            paired = mode is DMACommandMode.DUAL_SIDE
+            engines.extend(
+                (
+                    DMAEngineConfig(
+                        dma_type=DMAType.DDR_RDMA,
+                        instance_id=instance_id,
+                        router_id=router_id,
+                        channels=1,
+                        local_ports=[PORT_DDR_RDMA],
+                        descriptor_issue_cycles=3.0,
+                    ),
+                    DMAEngineConfig(
+                        dma_type=DMAType.DDR_WDMA,
+                        instance_id=instance_id,
+                        router_id=router_id,
+                        channels=2 if paired else 1,
+                        local_ports=(
+                            [PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1]
+                            if paired else [PORT_DDR_WDMA]
+                        ),
+                        descriptor_issue_cycles=3.0 if paired else None,
+                        max_outstanding_descriptors_per_channel=(
+                            1 if paired else None
+                        ),
+                    ),
+                )
+            )
+        return NoCConfig(dma_engines=engines)
+
+    def _assert_dma_runtime_drained(self, arch: Arch, cores: list[Core]) -> None:
+        self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+        self.assertEqual(arch.dma_commands.pending_single_side_commands, 0)
+        for endpoint in arch.dma_endpoints.values():
+            self.assertEqual(endpoint.rx_data_queue.items, [])
+            self.assertEqual(endpoint._receive_ready, {})
+            for resource in (
+                endpoint.internal_datapath,
+                *endpoint.descriptor_issuers.values(),
+                *endpoint.descriptor_slots.values(),
+            ):
+                self.assertEqual(resource.users, [])
+                self.assertEqual(resource.queue, [])
+            for arbiter in endpoint.tx_burst_arbiters.values():
+                self.assertIsNone(arbiter.owner)
+                self.assertEqual(arbiter.pending_ports, ())
+        for core in cores:
+            for fabric_id in NoCChannel:
+                nmc = core.nmc_channel_for(fabric_id)
+                self.assertEqual(nmc.outstanding_descriptor_count, 0)
+                self.assertEqual(nmc.descriptor_slots.queue, [])
+                self.assertEqual(nmc.tx_data_queue.items, [])
+                self.assertEqual(nmc.rx_data_queue.items, [])
+        for noc in arch.nocs.values():
+            for router in noc.routers:
+                self.assertEqual(router.reservation, {})
+                for arbiter in router.output_arbiters.values():
+                    self.assertIsNone(arbiter.owner)
+                    self.assertEqual(arbiter.pending_ports, ())
+                for link in (*router.port_in.values(), *router.port_out.values()):
+                    if link is not None:
+                        self.assertEqual(link.in_flight_flits, 0, link.link_name)
+                        self.assertEqual(link.flit_buffer.items, [], link.link_name)
+
     def test_arch_binds_gm_endpoints_to_both_data_fabrics(self) -> None:
         gm_rdma_config = DMAEngineConfig(
             dma_type=DMAType.GM_RDMA,
@@ -1036,6 +1108,208 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                     (fabric_id, message.index),
                     arch.nocs[fabric_id].tracer.message_fabric_timings(),
                 )
+
+    def test_ddr_mixed_commands_across_all_controllers_and_fabrics(self) -> None:
+        # One WDMA attachment per controller is configurable at a time. Swap
+        # layouts so every controller executes both upload protocols.
+        for first_mode in DMACommandMode:
+            with self.subTest(first_mode=first_mode.name):
+                other_mode = (
+                    DMACommandMode.SINGLE_SIDE
+                    if first_mode is DMACommandMode.DUAL_SIDE
+                    else DMACommandMode.DUAL_SIDE
+                )
+                wdma_modes = (first_mode, other_mode, first_mode, other_mode)
+                env, arch, cores = self._build_executable_runtime(
+                    self._all_ddr_controllers_config(wdma_modes)
+                )
+                for batch, (shape_mode, payload_bytes) in enumerate(
+                    (
+                        (NMCShapeMode.STATIC, 513),
+                        (NMCShapeMode.DYNAMIC, 8 * 512 + 1),
+                    )
+                ):
+                    commands = []
+                    processes = []
+                    for controller, corner in enumerate((0, 28, 3, 31)):
+                        rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, controller)]
+                        wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, controller)]
+                        for fabric_id in NoCChannel:
+                            # Cross-corner traffic contends on shared mesh links.
+                            pe = cores[31 - corner]
+                            nmc = pe.nmc_channel_for(fabric_id)
+                            pe_address = pe.binding_for(fabric_id).address
+                            task_id = 2000 + batch * 100 + controller * 10
+                            upload = Message(
+                                src=pe_address,
+                                dst=wdma.binding_for(fabric_id).address,
+                                index=task_id,
+                                data=[DimSlice(start=0, end=payload_bytes)],
+                                nmc_shape_mode=shape_mode,
+                                dma_command_mode=wdma_modes[controller],
+                            )
+                            send = nmc.send(upload)
+                            processes.append(send)
+                            completion = send
+                            if (
+                                upload.dma_command_mode
+                                is DMACommandMode.DUAL_SIDE
+                            ):
+                                completion = wdma.recv_message(upload)
+                                processes.append(completion)
+                            commands.append((upload, completion))
+
+                            # RDMA port 7 supports both command modes in the
+                            # same runtime, including on the same fabric.
+                            for offset, mode in enumerate(
+                                DMACommandMode, start=1
+                            ):
+                                download = Message(
+                                    src=rdma.binding_for(fabric_id).address,
+                                    dst=pe_address,
+                                    index=task_id + offset,
+                                    data=[DimSlice(start=0, end=payload_bytes)],
+                                    dma_command_mode=mode,
+                                )
+                                receive = nmc.recv_message(download, shape_mode)
+                                processes.append(receive)
+                                if mode is DMACommandMode.DUAL_SIDE:
+                                    processes.append(rdma.send(download))
+                                commands.append((download, receive))
+
+                    env.run(until=env.all_of(processes))
+                    # Drain delayed credit returns before the next batch.
+                    env.run()
+                    self._assert_dma_runtime_drained(arch, cores)
+                    for message, completion in commands:
+                        with self.subTest(
+                            batch=batch,
+                            fabric=message.src.fabric_id.name,
+                            task_id=message.index,
+                        ):
+                            self.assertEqual(
+                                completion.value.flits, tuple(message.packetize())
+                            )
+                            tracer = arch.nocs[message.src.fabric_id].tracer
+                            injections = [
+                                event for event in tracer.events
+                                if event.action is FlitAction.INJECT
+                                and event.msg_id == message.index
+                            ]
+                            is_download = (
+                                message.src.node_type is NodeType.DDR_RDMA
+                            )
+                            single = (
+                                message.dma_command_mode
+                                is DMACommandMode.SINGLE_SIDE
+                            )
+                            control_type = (
+                                FlitTrafficType.DMA_REQUEST
+                                if is_download else FlitTrafficType.DMA_RESPONSE
+                            )
+                            control = [
+                                event for event in injections
+                                if event.traffic_type is not FlitTrafficType.PAYLOAD
+                            ]
+                            self.assertEqual(len(control), int(single))
+                            if single:
+                                self.assertIs(control[0].traffic_type, control_type)
+                                self.assertEqual(
+                                    (control[0].src_router, control[0].dst_router),
+                                    (message.dst.router_id, message.src.router_id),
+                                )
+                            self.assertEqual(
+                                len(injections), message.flit_count() + int(single)
+                            )
+                            timing = tracer.message_fabric_timings()[
+                                (message.src.fabric_id, message.index)
+                            ]
+                            self.assertGreaterEqual(
+                                completion.value.operation_completion_time_aci_cycles,
+                                timing.final_ejection_time_aci_cycles,
+                            )
+                            if is_download:
+                                self.assertGreaterEqual(
+                                    completion.value.operation_latency_aci_cycles,
+                                    DDR_DMA_REFERENCE.rdma_min_operation_latency_aci_cycles(
+                                        payload_bytes, 10
+                                    ),
+                                )
+                            elif not single:
+                                self.assertGreaterEqual(
+                                    completion.value.operation_latency_aci_cycles,
+                                    DDR_DMA_REFERENCE.wdma_min_operation_latency_aci_cycles(
+                                        payload_bytes
+                                    ),
+                                )
+
+    def test_blocked_ddr_direction_does_not_block_other_engines(self) -> None:
+        for blocked_type in (NodeType.DDR_RDMA, NodeType.DDR_WDMA):
+            with self.subTest(blocked_type=blocked_type.name):
+                env, arch, cores = self._build_executable_runtime(
+                    self._all_ddr_controllers_config(
+                        (DMACommandMode.SINGLE_SIDE,) * 4
+                    )
+                )
+                blocked_endpoint = arch.dma_endpoints[(blocked_type, 0)]
+                blocker = blocked_endpoint.internal_datapath.request()
+                blocked_commands = []
+                independent_commands = []
+                for controller, corner in enumerate((0, 28, 3, 31)):
+                    rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, controller)]
+                    wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, controller)]
+                    for fabric_id in NoCChannel:
+                        # Local routes keep the independence check free of
+                        # shared inter-router links and unrelated congestion.
+                        pe = cores[corner]
+                        nmc = pe.nmc_channel_for(fabric_id)
+                        download = Message(
+                            src=rdma.binding_for(fabric_id).address,
+                            dst=pe.binding_for(fabric_id).address,
+                            index=3000 + controller * 10,
+                            data=[DimSlice(start=0, end=8 * 512 + 1)],
+                            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                        )
+                        upload = Message(
+                            src=pe.binding_for(fabric_id).address,
+                            dst=wdma.binding_for(fabric_id).address,
+                            index=download.index + 1,
+                            data=download.data,
+                            dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                        )
+                        receive = nmc.recv_message(download, NMCShapeMode.STATIC)
+                        send = nmc.send(upload)
+                        for node_type, command in (
+                            (NodeType.DDR_RDMA, receive),
+                            (NodeType.DDR_WDMA, send),
+                        ):
+                            if controller == 0 and node_type is blocked_type:
+                                blocked_commands.append(command)
+                            else:
+                                independent_commands.append(command)
+
+                env.run(until=env.all_of(independent_commands))
+                env.run()
+                self.assertTrue(
+                    all(command.triggered for command in independent_commands)
+                )
+                self.assertTrue(
+                    all(not command.triggered for command in blocked_commands)
+                )
+                self.assertEqual(arch.dma_commands.pending_single_side_commands, 2)
+                self.assertEqual(arch.dma_commands.pending_dual_side_commands, 0)
+                for fabric_id in NoCChannel:
+                    self.assertEqual(
+                        cores[0].nmc_channel_for(
+                            fabric_id
+                        ).outstanding_descriptor_count,
+                        1,
+                    )
+
+                blocked_endpoint.internal_datapath.release(blocker)
+                env.run(until=env.all_of(blocked_commands))
+                env.run()
+                self._assert_dma_runtime_drained(arch, cores)
 
     def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
         noc_config = NoCConfig(

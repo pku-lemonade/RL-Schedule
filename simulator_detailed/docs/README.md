@@ -113,3 +113,15 @@ receive reassembly, and architecture-owned Core/Task SEND/RECV execution on both
 fabrics and in opposite directions. They also replay static, dynamic, and mixed
 sequential RTT fits, the rb53 offered-load transition, and the named 32 KB
 simplex, dual-channel, and full-duplex throughput schedules.
+
+DDR integration tests also run 96 transfers across all four corner controllers
+and both fabrics. Two WDMA attachment layouts cover paired and single-side
+uploads at every controller, while paired and single-side downloads share each
+RDMA endpoint concurrently. Consecutive static/dynamic batches exercise partial
+final flits, multi-burst packets, and cross-corner contention. The tests check
+payload integrity, protocol routing, completion boundaries, and cleanup of
+active commands, receive readiness, descriptors, burst grants, and link credits.
+Separate stall/recovery cases hold either DDR0 datapath while the opposite
+direction and other controllers finish. These checks validate simulator resource
+isolation; aggregate throughput across four physical DDR controllers remains
+unmeasured.

@@ -224,7 +224,7 @@ Implement in small, independently tested commits:
     shared 102 B/ACI-cycle RDMA datapath without dispatching an unmeasured DDR
     descriptor. Apply the same size/hop completion floor at the receiving PE and
     retire protocol state only after the payload is received.
-13. **Fix 14C-5, implemented locally:** enable PE-initiated DDR single-side
+13. **Fix 14C-5, committed as `f6e3205`:** enable PE-initiated DDR single-side
     uploads on dedicated DDR_WDMA port 8. The first payload flit carries the
     address header without reducing its 512 B payload capacity. Validate and
     service the full payload through the shared 117 B/ACI-cycle WDMA datapath,
@@ -233,8 +233,19 @@ Implement in small, independently tested commits:
     there. Bypass target-side descriptor posting, and do not invent single-side
     queue capacity, fixed latency, or completion cadence from paired DDR or GM
     measurements.
-14. **Fix 14C-6:** validate both directions, command modes, fabrics, and corner
-    controllers together, including protocol-state retirement.
+14. **Fix 14C-6, implemented locally:** validate mixed uploads and downloads
+    across both fabrics and all four DDR controllers at routers 0, 28, 3, and 31.
+    Alternate WDMA attachment layouts so every controller runs both command
+    modes, and exercise paired/single-side RDMA commands concurrently on the
+    same endpoint. Run consecutive static/dynamic batches with partial tails
+    and multi-burst packets, retaining task-ID isolation across fabrics.
+    Check payload integrity, request/response routing, completion boundaries,
+    and retirement of active protocol state, receive readiness, descriptor
+    slots, burst grants, and link credits. Block either DDR0 datapath to verify
+    that the opposite direction and other controllers finish independently,
+    then release the block and verify recovery. These are simulator consistency
+    checks; four-controller hardware aggregate throughput and single-side WDMA
+    fixed latency/outstanding capacity remain uncalibrated.
 15. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
 
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
