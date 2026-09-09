@@ -61,6 +61,15 @@ fixed latency and outstanding capacity remain unmeasured; this path uses modeled
 payload service and response transport without borrowing paired DDR latency or
 GM completion cadence.
 
+DMA fail-slow intervals target one configured GM/DDR read or write engine and
+scale its payload service on both fabrics. Overlapping faults compose and
+recover independently. Typed service events retain endpoint, fabric, task, and
+fault-factor identity; shared-engine utilization is exported in each trace
+slice's `dmas` list. These are configurable fault experiments, not hardware
+fault calibrations. PE upload payload and single-side download requests share
+injection arbitration so requests enter at burst boundaries, including under
+backpressure.
+
 Hardware benchmark measurements live in `benchmark_references.py`, outside the
 runtime architecture configuration. The rb53 shared-link measurements, rb54
 latency and packetization evidence, GM upload/rb55 and GM download/outcast

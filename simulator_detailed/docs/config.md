@@ -191,3 +191,27 @@ completion cadence applied.
 fail-slow datasets default to CH0 during the transition; new CH1 targets must be
 explicit. The runtime resolves each target through `Arch.nocs`, so a CH0 failure
 cannot alter CH1 router or link state and vice versa.
+
+`FailSlow.dma` optionally injects a slowdown into a configured DMA payload
+engine. For example, this entry slows DDR_WDMA instance 0 by 3x from ACI cycle
+100 through cycle 300:
+
+```json
+{"node_type": 4, "instance_id": 0, "start_time": 100, "end_time": 300, "times": 3}
+```
+
+Node types are GM_RDMA=1, GM_WDMA=2, DDR_RDMA=3, and DDR_WDMA=4. Instance IDs
+range from 0 to 3 and the target must exist in `dma_engines`. Times must be
+finite, with `0 <= start_time < end_time` and `times >= 1`. Existing failure
+files may omit `dma`; it defaults to an empty list. A DMA failure has no
+`fabric_id`: its shared engine serves both CH0 and CH1. The opposite direction
+and other controllers retain their own service rates.
+
+The failure interval is half-open `[start_time, end_time)`. Each payload flit
+samples the combined active multiplier when service begins and keeps that
+duration through completion, even across a failure/recovery boundary. Overlapping
+faults multiply and each recovery removes its own factor. Descriptor timing,
+CDC setup, command-completion floors/cadence, and NoC links are not scaled by a
+DMA failure. Consequently, fixed completion floors may mask a short slowdown.
+These are configurable fault-injection semantics, not measured hardware fault
+profiles.

@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 import simpy
+from pydantic import ValidationError
 
 from simulator_detailed.architecture import Arch
 from simulator_detailed.benchmark_references import (
@@ -15,10 +16,17 @@ from simulator_detailed.configs.schemas.arch_config import (
     DMAType,
     NoCConfig,
 )
+from simulator_detailed.configs.schemas.failure_configs import DMAFail, FailSlow
 from simulator_detailed.core import Core
-from simulator_detailed.dma_endpoint import DMAReceiveResult, DMATransmitResult
+from simulator_detailed.dma_endpoint import (
+    DMAReceiveResult,
+    DMAServiceEvent,
+    DMATransmitResult,
+)
 from simulator_detailed.endpoint_registry import EndpointRegistry
 from simulator_detailed.noc import FlitAction
+from simulator_detailed.run import _collect_simulation_events
+from simulator_detailed.tracing import collect_dma_service_events, process_events
 from simulator_detailed.utils.definitions import (
     PORT_DDR_RDMA,
     PORT_DDR_WDMA,
@@ -28,6 +36,7 @@ from simulator_detailed.utils.definitions import (
     PORT_GM_WDMA,
     PORT_GM_WDMA_CH0,
     PORT_GM_WDMA_CH1,
+    BurstLenMode,
     DimSlice,
     DMAAttachmentMode,
     DMACommandMode,
@@ -129,6 +138,8 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 self.assertEqual(nmc.descriptor_slots.queue, [])
                 self.assertEqual(nmc.tx_data_queue.items, [])
                 self.assertEqual(nmc.rx_data_queue.items, [])
+                self.assertIsNone(nmc.tx_burst_arbiter.owner)
+                self.assertEqual(nmc.tx_burst_arbiter.pending_ports, ())
         for noc in arch.nocs.values():
             for router in noc.routers:
                 self.assertEqual(router.reservation, {})
@@ -1310,6 +1321,377 @@ class Phase3DMAEndpointTests(unittest.TestCase):
                 env.run(until=env.all_of(blocked_commands))
                 env.run()
                 self._assert_dma_runtime_drained(arch, cores)
+
+    def test_download_requests_enter_pe_upload_stream_only_at_burst_boundaries(
+        self,
+    ) -> None:
+        for mode, quantum in (
+            (BurstLenMode.BURST_LEN_0, 1),
+            (BurstLenMode.BURST_LEN_1, 2),
+            (BurstLenMode.BURST_LEN_3, 4),
+            (BurstLenMode.BURST_LEN_7, 8),
+            (BurstLenMode.BURST_LEN_DEFAULT, 8),
+        ):
+            with self.subTest(mode=mode.name):
+                env, arch, cores = self._build_executable_runtime(
+                    self._all_ddr_controllers_config((DMACommandMode.SINGLE_SIDE,) * 4)
+                )
+                rdma = arch.dma_endpoints[(NodeType.DDR_RDMA, 0)]
+                wdma = arch.dma_endpoints[(NodeType.DDR_WDMA, 0)]
+                nmc = cores[0].nmc_channel_for(NoCChannel.CH0)
+                upload = Message(
+                    src=cores[0].binding_for(NoCChannel.CH0).address,
+                    dst=wdma.binding_for(NoCChannel.CH0).address,
+                    index=4500,
+                    data=[DimSlice(start=0, end=64 * 512 + 1)],
+                    dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                    burst_len_mode=mode,
+                )
+                download = Message(
+                    src=rdma.binding_for(NoCChannel.CH0).address,
+                    dst=upload.src,
+                    index=4501,
+                    data=[DimSlice(start=0, end=513)],
+                    dma_command_mode=DMACommandMode.SINGLE_SIDE,
+                )
+                send = nmc.send(upload)
+                receive = nmc.recv_message(download, NMCShapeMode.STATIC)
+                env.run(until=env.all_of((send, receive)))
+                env.run()
+                injections = [
+                    event
+                    for event in arch.nocs[NoCChannel.CH0].tracer.events
+                    if event.action is FlitAction.INJECT
+                    and (
+                        (
+                            event.msg_id == upload.index
+                            and event.traffic_type is FlitTrafficType.PAYLOAD
+                        )
+                        or event.traffic_type is FlitTrafficType.DMA_REQUEST
+                    )
+                ]
+                requests = [
+                    index
+                    for index, event in enumerate(injections)
+                    if event.traffic_type is FlitTrafficType.DMA_REQUEST
+                ]
+                self.assertEqual(len(requests), 1)
+                payload_before_request = requests[0]
+                self.assertGreater(payload_before_request, 0)
+                self.assertLess(payload_before_request, upload.flit_count())
+                self.assertEqual(payload_before_request % quantum, 0)
+                self.assertEqual(len(injections), upload.flit_count() + 1)
+                self.assertEqual(receive.value.flits, tuple(download.packetize()))
+                self._assert_dma_runtime_drained(arch, cores)
+
+    def test_dma_failure_validation_and_unconfigured_target(self) -> None:
+        legacy = {"router": [], "link": [], "lsu": [], "tpu": []}
+        self.assertEqual(FailSlow.model_validate(legacy).dma, [])
+        valid = {
+            "node_type": NodeType.DDR_WDMA,
+            "instance_id": 0,
+            "start_time": 0.5,
+            "end_time": 10.5,
+            "times": 2.5,
+        }
+        for change in (
+            {"node_type": NodeType.PE},
+            {"instance_id": 4},
+            {"start_time": -1},
+            {"end_time": 0.5},
+            {"end_time": float("inf")},
+            {"times": float("nan")},
+            {"times": 0.5},
+            {"fabric_id": NoCChannel.CH0},
+        ):
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                DMAFail.model_validate(valid | change)
+        failure = DMAFail.model_validate(valid)
+        self.assertEqual(
+            DMAFail.model_validate_json(failure.model_dump_json()), failure
+        )
+        env, arch = self._build_runtime(NoCConfig())
+        arch.fail_slow = FailSlow.model_validate(legacy | {"dma": [failure]})
+        with self.assertRaisesRegex(ValueError, "DDR_WDMA\\[0\\] is not configured"):
+            arch.run_fail_slow()
+        env.run()
+        self.assertEqual(env.now, 0)
+        arch.preprocess_fail(times=3)
+        self.assertEqual(failure.times, 3)
+
+    def test_dma_faults_affect_both_fabrics_and_recover_for_all_command_paths(
+        self,
+    ) -> None:
+        layouts = {
+            NodeType.GM_RDMA: (DMAType.GM_RDMA, (28, 29), [PORT_GM_RDMA]),
+            NodeType.GM_WDMA: (
+                DMAType.GM_WDMA,
+                (28, 29),
+                [PORT_GM_WDMA_CH0, PORT_GM_WDMA_CH1],
+            ),
+            NodeType.DDR_RDMA: (DMAType.DDR_RDMA, (0, 28), [PORT_DDR_RDMA]),
+            NodeType.DDR_WDMA: (
+                DMAType.DDR_WDMA,
+                (0, 28),
+                [PORT_DDR_WDMA_CH0, PORT_DDR_WDMA_CH1],
+            ),
+        }
+        for fault_type in layouts:
+            for mode in DMACommandMode:
+                with self.subTest(fault_type=fault_type.name, mode=mode.name):
+                    opposite = {
+                        NodeType.GM_RDMA: NodeType.GM_WDMA,
+                        NodeType.GM_WDMA: NodeType.GM_RDMA,
+                        NodeType.DDR_RDMA: NodeType.DDR_WDMA,
+                        NodeType.DDR_WDMA: NodeType.DDR_RDMA,
+                    }[fault_type]
+                    engines = []
+                    for node_type, instance_id in (
+                        (fault_type, 0),
+                        (opposite, 0),
+                        (fault_type, 1),
+                    ):
+                        dma_type, routers, ports = layouts[node_type]
+                        if len(ports) == 2 and mode is DMACommandMode.SINGLE_SIDE:
+                            ports = [
+                                PORT_GM_WDMA
+                                if node_type is NodeType.GM_WDMA
+                                else PORT_DDR_WDMA
+                            ]
+                        engines.append(
+                            DMAEngineConfig(
+                                dma_type=dma_type,
+                                instance_id=instance_id,
+                                router_id=routers[instance_id],
+                                channels=len(ports),
+                                local_ports=ports,
+                                descriptor_issue_cycles=0.0,
+                                max_outstanding_descriptors_per_channel=1,
+                            )
+                        )
+                    env, arch, cores = self._build_executable_runtime(
+                        NoCConfig(dma_engines=engines)
+                    )
+                    arch.cores = cores
+                    arch.fail_slow = FailSlow(
+                        router=[],
+                        link=[],
+                        lsu=[],
+                        tpu=[],
+                        dma=[
+                            DMAFail(
+                                node_type=fault_type,
+                                instance_id=0,
+                                start_time=0,
+                                end_time=10_000,
+                                times=3,
+                            )
+                        ],
+                    )
+                    arch.run_fail_slow()
+                    for batch in range(2):
+                        commands = []
+                        for offset, endpoint in enumerate(arch.dma_endpoints.values()):
+                            for fabric_id in NoCChannel:
+                                address = endpoint.binding_for(fabric_id).address
+                                pe = cores[address.router_id]
+                                pe_address = pe.binding_for(fabric_id).address
+                                is_download = endpoint.node_type in (
+                                    NodeType.GM_RDMA,
+                                    NodeType.DDR_RDMA,
+                                )
+                                message = Message(
+                                    src=address if is_download else pe_address,
+                                    dst=pe_address if is_download else address,
+                                    index=4000 + batch * 10 + offset,
+                                    data=[DimSlice(start=0, end=4097)],
+                                    dma_command_mode=mode,
+                                )
+                                nmc = pe.nmc_channel_for(fabric_id)
+                                if is_download:
+                                    commands.append(
+                                        nmc.recv_message(message, NMCShapeMode.STATIC)
+                                    )
+                                    if mode is DMACommandMode.DUAL_SIDE:
+                                        commands.append(endpoint.send(message))
+                                else:
+                                    commands.append(nmc.send(message))
+                                    if mode is DMACommandMode.DUAL_SIDE:
+                                        commands.append(endpoint.recv_message(message))
+                        env.run(until=env.all_of(commands))
+                        streams = collect_dma_service_events(arch.dma_endpoints)
+                        self.assertEqual(list(streams), sorted(arch.dma_endpoints))
+                        for key, events in streams.items():
+                            recent = [
+                                event
+                                for event in events
+                                if event.message_id >= 4000 + batch * 10
+                            ]
+                            self.assertEqual(len(recent), 18)
+                            self.assertEqual(
+                                sum(event.payload_bytes for event in recent), 2 * 4097
+                            )
+                            factor = 3 if batch == 0 and key == (fault_type, 0) else 1
+                            endpoint = arch.dma_endpoints[key]
+                            self.assertIsNot(events, endpoint.service_events)
+                            for event in recent:
+                                self.assertEqual(
+                                    (event.node_type, event.instance_id), key
+                                )
+                                self.assertEqual(event.delay_factor, factor)
+                                self.assertAlmostEqual(
+                                    event.end_time - event.start_time,
+                                    512 / endpoint.service_bytes_per_aci_cycle * factor,
+                                )
+                            self.assertEqual(
+                                {event.fabric_id for event in recent}, set(NoCChannel)
+                            )
+                        if batch == 0:
+                            self.assertEqual(
+                                arch.dma_endpoints[
+                                    (fault_type, 0)
+                                ].service_delay_factor,
+                                3,
+                            )
+                        env.run()  # Recovery and delayed credit returns.
+                        self.assertEqual(
+                            arch.dma_endpoints[(fault_type, 0)].service_delay_factor, 1
+                        )
+                        self._assert_dma_runtime_drained(arch, cores)
+
+                    # Local DMA traffic has no inter-router or Core task events:
+                    # endpoint service must still contribute to the trace horizon.
+                    horizon, _, _, _, core_json, link_json, streams = (
+                        _collect_simulation_events(arch)
+                    )
+                    self.assertEqual((core_json, link_json), ([], []))
+                    self.assertEqual(
+                        horizon,
+                        max(
+                            event.end_time
+                            for events in streams.values()
+                            for event in events
+                        ),
+                    )
+                    trace = process_events(horizon, 5, [], [], dma_events=streams)
+                    self.assertTrue(
+                        all(len(item.dmas) == 3 for item in trace.time_slices)
+                    )
+                    self.assertTrue(
+                        all(
+                            0 <= dma.ultilization <= 1
+                            for item in trace.time_slices
+                            for dma in item.dmas
+                        )
+                    )
+
+    def test_overlapping_dma_faults_preserve_in_flight_flit_timing(self) -> None:
+        env, arch, cores = self._build_executable_runtime(
+            NoCConfig(
+                dma_engines=[
+                    DMAEngineConfig(
+                        dma_type=DMAType.GM_RDMA,
+                        instance_id=0,
+                        router_id=28,
+                        channels=1,
+                        local_ports=[PORT_GM_RDMA],
+                        descriptor_issue_cycles=0,
+                    )
+                ]
+            )
+        )
+        endpoint = arch.dma_endpoints[(NodeType.GM_RDMA, 0)]
+        arch.fail_slow = FailSlow(
+            router=[],
+            link=[],
+            lsu=[],
+            tpu=[],
+            dma=[
+                DMAFail(
+                    node_type=NodeType.GM_RDMA,
+                    instance_id=0,
+                    start_time=0,
+                    end_time=100.75,
+                    times=2,
+                ),
+                DMAFail(
+                    node_type=NodeType.GM_RDMA,
+                    instance_id=0,
+                    start_time=80.25,
+                    end_time=160.5,
+                    times=3,
+                ),
+            ],
+        )
+        arch.run_fail_slow()
+        message = Message(
+            src=endpoint.binding_for(NoCChannel.CH0).address,
+            dst=cores[28].binding_for(NoCChannel.CH0).address,
+            index=4100,
+            data=[DimSlice(start=0, end=32 * 512)],
+            dma_command_mode=DMACommandMode.DUAL_SIDE,
+        )
+        send = endpoint.send(message)
+        receive = (
+            cores[28]
+            .nmc_channel_for(NoCChannel.CH0)
+            .recv_message(message, NMCShapeMode.STATIC)
+        )
+        env.run(until=env.all_of((send, receive)))
+        env.run()
+        events = endpoint.service_events
+        self.assertEqual(len(events), 32)
+        self.assertEqual({event.delay_factor for event in events}, {1, 2, 3, 6})
+        for event in events:
+            expected = (2 if event.start_time < 100.75 else 1) * (
+                3 if 80.25 <= event.start_time < 160.5 else 1
+            )
+            self.assertEqual(event.delay_factor, expected)
+            self.assertAlmostEqual(
+                event.end_time - event.start_time, 512 / 110 * expected
+            )
+        for boundary in (80.25, 100.75, 160.5):
+            self.assertTrue(
+                any(event.start_time < boundary < event.end_time for event in events)
+            )
+        self.assertEqual(endpoint.service_delay_factor, 1)
+        self._assert_dma_runtime_drained(arch, cores)
+
+    def test_dma_trace_utilization_uses_half_open_fractional_service_intervals(
+        self,
+    ) -> None:
+        events = {
+            (NodeType.GM_RDMA, 0): [
+                DMAServiceEvent(
+                    NodeType.GM_RDMA, 0, NoCChannel.CH0, 1, 512, 0.25, 1.75, 1
+                ),
+                DMAServiceEvent(
+                    NodeType.GM_RDMA, 0, NoCChannel.CH1, 2, 1, 1.75, 3.25, 2
+                ),
+            ],
+            (NodeType.DDR_WDMA, 0): [
+                DMAServiceEvent(NodeType.DDR_WDMA, 0, NoCChannel.CH0, 3, 512, 2, 4, 1),
+            ],
+            (NodeType.GM_WDMA, 1): [],
+        }
+        trace = process_events(3, 2, [], [], dma_events=events)
+        expected = (
+            ((0.875, 2), (0, 0), (0, 0)),
+            ((0.625, 1), (0, 0), (1, 1)),
+        )
+        for item, values in zip(trace.time_slices, expected, strict=True):
+            self.assertEqual(
+                [(dma.node_type, dma.id) for dma in item.dmas], sorted(events)
+            )
+            self.assertEqual(
+                [(dma.ultilization, dma.op_num) for dma in item.dmas], list(values)
+            )
+            self.assertTrue(all(dma.fabric_id is None for dma in item.dmas))
+        self.assertEqual(
+            trace.model_dump(mode="json")["time_slices"][1]["dmas"][2]["node_type"],
+            int(NodeType.DDR_WDMA),
+        )
+        self.assertEqual(process_events(3, 2, [], []).time_slices[0].dmas, [])
 
     def test_gm_commands_execute_in_both_directions_and_fabrics(self) -> None:
         noc_config = NoCConfig(

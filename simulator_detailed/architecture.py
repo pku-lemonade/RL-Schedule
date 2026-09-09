@@ -3,6 +3,7 @@ import simpy
 from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import ArchConfig, CoreConfig, NoCConfig
 from .configs.schemas.failure_configs import (
+    DMAFail,
     FailSlow,
     LinkFail,
     LsuFail,
@@ -239,6 +240,9 @@ class Arch:
         for tpu_fail in self.fail_slow.tpu:
             tpu_fail.times = times
 
+        for dma_fail in self.fail_slow.dma:
+            dma_fail.times = times
+
 
     def link_fail(self, fail: LinkFail):
         noc = self._noc_for_fabric(fail.fabric_id)
@@ -265,6 +269,26 @@ class Arch:
     def _noc_for_fabric(self, fabric_id: NoCChannel) -> NoC:
         return self.nocs[fabric_id]
 
+    def _dma_for_failure(self, fail: DMAFail) -> DMAEndpoint:
+        key = (fail.node_type, fail.instance_id)
+        try:
+            return self.dma_endpoints[key]
+        except KeyError as exc:
+            raise ValueError(
+                f"DMA failure target {fail.node_type.name}[{fail.instance_id}] "
+                "is not configured"
+            ) from exc
+
+    def dma_fail(self, fail: DMAFail):
+        endpoint = self._dma_for_failure(fail)
+        yield self.env.timeout(fail.start_time)
+        factor = fail.times
+        endpoint.scale_service_delay(factor)
+        try:
+            yield self.env.timeout(fail.end_time - fail.start_time)
+        finally:
+            endpoint.scale_service_delay(1 / factor)
+
 
     def lsu_fail(self, fail: LsuFail):
         yield self.env.timeout(fail.start_time)
@@ -281,6 +305,10 @@ class Arch:
     
 
     def run_fail_slow(self):
+        # Reject missing DMA targets before scheduling any failure processes.
+        for dma_fail in self.fail_slow.dma:
+            self._dma_for_failure(dma_fail)
+
         for link_fail in self.fail_slow.link:
             self.env.process(self.link_fail(link_fail))
         
@@ -292,6 +320,9 @@ class Arch:
 
         for tpu_fail in self.fail_slow.tpu:
             self.env.process(self.tpu_fail(tpu_fail))
+
+        for dma_fail in self.fail_slow.dma:
+            self.env.process(self.dma_fail(dma_fail))
     
 
     def execute(self):

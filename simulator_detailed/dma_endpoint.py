@@ -105,6 +105,20 @@ class DMAChannelBinding:
 
 
 @dataclass(frozen=True)
+class DMAServiceEvent:
+    """One completed payload-flit service interval, excluding queue waits."""
+
+    node_type: NodeType
+    instance_id: int
+    fabric_id: NoCChannel
+    message_id: int
+    payload_bytes: int
+    start_time: float
+    end_time: float
+    delay_factor: float
+
+
+@dataclass(frozen=True)
 class DMAReceiveEntry:
     """One flit after shared WDMA service."""
 
@@ -184,6 +198,8 @@ class DMAEndpoint:
             aci_clock_mhz=aci_clock_mhz,
         )
         self.bindings: dict[NoCChannel, DMAChannelBinding] = {}
+        self.service_events: list[DMAServiceEvent] = []
+        self._service_delay_factor = 1.0
 
         # The hardware endpoint has one internal engine shared by CH0 and CH1.
         self.internal_datapath = Resource(env, capacity=1)
@@ -284,7 +300,42 @@ class DMAEndpoint:
 
     @property
     def service_interval_aci_cycles(self) -> float:
-        return FLIT_BYTES / self.service_bytes_per_aci_cycle
+        return (
+            FLIT_BYTES / self.service_bytes_per_aci_cycle
+            * self._service_delay_factor
+        )
+
+    @property
+    def service_delay_factor(self) -> float:
+        return self._service_delay_factor
+
+    def scale_service_delay(self, factor: float) -> None:
+        """Compose fault factors for subsequent flits on both fabrics."""
+        combined = self._service_delay_factor * factor
+        if (
+            not math.isfinite(factor) or factor <= 0
+            or not math.isfinite(combined) or combined <= 0
+        ):
+            raise ValueError("DMA service delay factor must be finite and positive")
+        self._service_delay_factor = combined
+
+    def _service_payload(self, flit: Flit) -> ProcessGenerator:
+        """Called while holding the endpoint's shared payload datapath."""
+        start_time = float(self.env.now)
+        delay_factor = self._service_delay_factor
+        yield self.env.timeout(self.service_interval_aci_cycles)
+        self.service_events.append(
+            DMAServiceEvent(
+                node_type=self.node_type,
+                instance_id=self.instance_id,
+                fabric_id=flit.fabric_id,
+                message_id=flit.msg_id,
+                payload_bytes=flit.payload_bytes,
+                start_time=start_time,
+                end_time=float(self.env.now),
+                delay_factor=delay_factor,
+            )
+        )
 
     @property
     def service_bytes_per_aci_cycle(self) -> float:
@@ -441,7 +492,7 @@ class DMAEndpoint:
                     datapath_request = self.internal_datapath.request()
                     with datapath_request:
                         yield datapath_request
-                        yield self.env.timeout(self.service_interval_aci_cycles)
+                        yield from self._service_payload(flit)
                     yield binding.tx_link.send_flit(flit)
             finally:
                 burst_arbiter.release(message.index)
@@ -708,7 +759,7 @@ class DMAEndpoint:
             request = self.internal_datapath.request()
             with request:
                 yield request
-                yield self.env.timeout(self.service_interval_aci_cycles)
+                yield from self._service_payload(flit)
                 yield self.rx_data_queue.put(
                     DMAReceiveEntry(
                         flit=flit,
@@ -743,5 +794,6 @@ __all__ = [
     "DMAEndpoints",
     "DMAReceiveEntry",
     "DMAReceiveResult",
+    "DMAServiceEvent",
     "DMATransmitResult",
 ]

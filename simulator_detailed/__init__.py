@@ -26,6 +26,7 @@ from .dma_endpoint import (
     DMAEndpoint,
     DMAReceiveEntry,
     DMAReceiveResult,
+    DMAServiceEvent,
     DMATransmitResult,
 )
 from .noc import Link, NoC, Router
@@ -49,6 +50,7 @@ __all__ = [
     "DMAEndpoint",
     "DMAReceiveEntry",
     "DMAReceiveResult",
+    "DMAServiceEvent",
     "DMATransmitResult",
     "Link",
     "NMCBenchmarkScenario",

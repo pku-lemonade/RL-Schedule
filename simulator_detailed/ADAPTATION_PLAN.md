@@ -19,8 +19,11 @@ GM endpoints now have an executable command path, and GM_WDMA descriptor
 admission, completion cadence, paired-upload latency, and shared service rate are
 calibrated. GM_RDMA download latency, shared service rate, and burst-level outcast
 sharing are also calibrated, while its descriptor behavior remains provisional.
-DDR execution, collectives, route reduction, detailed compute/SRAM contention,
-and the optional ML predictor adaptation remain separate later phases.
+Configured DDR endpoints also execute both command modes with calibrated shared
+service rates and measured completion floors where available. DMA fail-slow
+injection and service traces are implemented locally. Collectives, route
+reduction, detailed compute/SRAM contention, and optional ML predictor adaptation
+remain separate later phases.
 
 ## Confirmed Hardware Baseline
 
@@ -61,8 +64,8 @@ confirmed 512 B user payload carried by each flit.
 - `Message` owns resolved source and destination addresses and packetizes with
   `ceil(payload_bytes / 512)`.
 - `Flit` is immutable and retains fabric, route, message, and burst metadata.
-- Unsupported transfer types, AIU-local DMA paths, and DDR execution fail
-  explicitly.
+- Unsupported transfer types and AIU-local DMA paths fail explicitly. GM/DDR
+  execution is provided by the Phase 3 endpoint extensions below.
 
 ### Fabric Transport
 
@@ -144,7 +147,7 @@ timing logger still require a dedicated typing and dependency pass in the
 predictor phase. This exclusion is explicit; it must not be represented as a
 repository-wide strict pass.
 
-## Phase 3: GM and DDR Endpoints (In Progress)
+## Phase 3: GM and DDR Endpoints (Implemented; Calibration Gaps Remain)
 
 Implement in small, independently tested commits:
 
@@ -233,7 +236,7 @@ Implement in small, independently tested commits:
     there. Bypass target-side descriptor posting, and do not invent single-side
     queue capacity, fixed latency, or completion cadence from paired DDR or GM
     measurements.
-14. **Fix 14C-6, implemented locally:** validate mixed uploads and downloads
+14. **Fix 14C-6, committed as `bb3514b`:** validate mixed uploads and downloads
     across both fabrics and all four DDR controllers at routers 0, 28, 3, and 31.
     Alternate WDMA attachment layouts so every controller runs both command
     modes, and exercise paired/single-side RDMA commands concurrently on the
@@ -246,7 +249,20 @@ Implement in small, independently tested commits:
     then release the block and verify recovery. These are simulator consistency
     checks; four-controller hardware aggregate throughput and single-side WDMA
     fixed latency/outstanding capacity remain uncalibrated.
-15. **Fix 15:** add DMA endpoint failures and endpoint-level trace collection.
+15. **Fix 15, implemented locally:** add validated `DMAFail` intervals targeting
+    one configured GM/DDR RDMA or WDMA engine by node type and instance ID.
+    Scale payload-flit service on both fabrics, compose overlapping factors,
+    and recover independently of the other direction and controllers. Sample
+    the factor when each flit starts service; do not reschedule an in-flight
+    flit or scale descriptor timing, completion floors, or NoC links. Record
+    typed payload service intervals and collect shared-engine utilization in
+    `Trace.time_slices[].dmas`, retaining fabric identity on individual events.
+    Include DMA-only service in simulation trace horizons. Fault workloads
+    exposed PE download requests interleaving inside upload bursts; share one
+    NMC injection arbiter so requests enter only at configured burst boundaries.
+    Validate all four endpoint types, both protocols/fabrics, overlapping faults,
+    recovery, fractional trace windows, and 1/2/4/8-flit request arbitration.
+    Fault factors are simulation inputs, not hardware fault measurements.
 
 Do not reuse PE NMC shape targets for GM/DDR. The current canonical config keeps
 `dma_engines` empty until the relevant command path is calibrated. GM_WDMA's

@@ -227,6 +227,26 @@ request cannot be mistaken for payload timing. `per_msg_latency()` is retained
 only as a compatibility alias
 for packet fabric completion latency.
 
+`DMAServiceEvent` records one completed payload-flit service interval on a
+shared DMA engine: `node_type`, `instance_id`, `fabric_id`, `message_id`, actual
+`payload_bytes`, ACI `start_time`/`end_time`, and the sampled `delay_factor`.
+Intervals are half-open and exclude descriptor/setup waits, datapath queueing,
+link backpressure after RDMA service, command-completion floors, and protocol
+control flits. A partial final flit still occupies a full flit service interval.
+These events measure engine occupancy, not command latency.
+
+`collect_dma_service_events` returns snapshots ordered by node type and instance,
+including empty streams for configured idle endpoints. `process_events` accepts
+these streams as `dma_events` and fills each time slice's `dmas` list. Each
+entry uses `(node_type, id)` as the endpoint identity (`id` is the instance ID).
+Its `fabric_id` is `None` because utilization combines both fabrics on one
+engine. `ultilization` is exact busy-time overlap divided by the slice duration;
+`op_num` counts flit service intervals overlapping that slice. `slow` remains
+zero because the optional predictor does not yet score DMA endpoints. Raw events
+retain the fabric and injected fault factor for analysis. Both simulation entry
+points include DMA service in trace horizons and export the aggregated entries
+in `trace.json` without adding DMA streams to PE/link predictor inputs.
+
 `NMCBenchmarkScenario` names the supported end-to-end acceptance schedules:
 sequential ping-pong, single-channel batch, same-fabric shared-link contention,
 dual-channel same-direction batch, and dual-channel full-duplex batch.

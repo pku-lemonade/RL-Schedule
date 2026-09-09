@@ -9,7 +9,7 @@ from simpy.resources.resource import Request, Resource
 from .benchmark_references import DDR_DMA_REFERENCE, GM_RDMA_REFERENCE
 from .command_coordination import DMACommandCoordinator
 from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
-from .noc import Link, Router
+from .noc import Link, RoundRobinArbiter, Router
 from .utils.definitions import (
     DMA_RDMA_NODE_TYPES,
     DMA_WDMA_NODE_TYPES,
@@ -164,6 +164,7 @@ class NMCChannel:
         self.binding = binding
         self.dma_commands = dma_commands
         self.tx_datapath = Resource(env, capacity=1)
+        self.tx_burst_arbiter = RoundRobinArbiter(env)
         self.rx_datapath = Resource(env, capacity=1)
         self.descriptor_slots = Resource(
             env,
@@ -454,7 +455,13 @@ class NMCChannel:
                     dma_commands.post_dual_side_destination(message)
                 elif message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
                     request_flit = dma_commands.post_single_side_download(message)
-                    yield self.binding.tx_link.send_flit(request_flit)
+                    # Requests share the PE injection link with upload payload.
+                    # Enter only between bursts so a live router grant remains valid.
+                    yield self.tx_burst_arbiter.request(message.index)
+                    try:
+                        yield self.binding.tx_link.send_flit(request_flit)
+                    finally:
+                        self.tx_burst_arbiter.release(message.index)
                 else:
                     raise RuntimeError(
                         f"message {message.index} has no DMA command mode"
@@ -551,9 +558,17 @@ class NMCChannel:
                     + len(entry.flits) * self.tx_service_interval_aci_cycles
                     + self.config.inter_command_turnaround_aci_cycles
                 )
-                for flit in entry.flits:
-                    yield self.env.timeout(self.tx_service_interval_aci_cycles)
-                    yield self.binding.tx_link.send_flit(flit)
+                quantum = self.binding.router.config.resolve_burst_quantum_flits(
+                    entry.message.burst_len_mode
+                )
+                for start in range(0, len(entry.flits), quantum):
+                    yield self.tx_burst_arbiter.request(entry.message.index)
+                    try:
+                        for flit in entry.flits[start : start + quantum]:
+                            yield self.env.timeout(self.tx_service_interval_aci_cycles)
+                            yield self.binding.tx_link.send_flit(flit)
+                    finally:
+                        self.tx_burst_arbiter.release(entry.message.index)
             final_local_handoff_time_aci_cycles = float(self.env.now)
             if entry.dual_side_ready is not None:
                 self._require_dma_commands().complete_dual_side_source(

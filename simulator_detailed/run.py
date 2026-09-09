@@ -18,7 +18,12 @@ from .architecture import Arch, NoCFabrics
 from .configs.schemas.arch_config import ArchConfig
 from .configs.schemas.failure_configs import FailSlow
 from .noc import NoCLinkIdentity
-from .tracing import collect_noc_link_events, process_events
+from .tracing import (
+    DMAServiceStreams,
+    collect_dma_service_events,
+    collect_noc_link_events,
+    process_events,
+)
 from .utils.definitions import Event, Trace
 from .utils.mapper import NetworkMapper, parse_mapping
 
@@ -93,9 +98,11 @@ def _collect_simulation_events(
     list[NoCLinkIdentity],
     list[JsonEvent],
     list[JsonEvent],
+    DMAServiceStreams,
 ]:
     core_events: list[list[Event]] = [core.events for core in arch.cores]
     link_events, link_identities = collect_noc_link_events(arch.nocs)
+    dma_events = collect_dma_service_events(arch.dma_endpoints)
     core_events_json: list[JsonEvent] = []
     link_events_json: list[JsonEvent] = []
     maxtime = 0.0
@@ -110,6 +117,10 @@ def _collect_simulation_events(
             maxtime = max(maxtime, event.end_time)
             link_events_json.append(event.model_dump(mode="json"))
 
+    for service_stream in dma_events.values():
+        for service_event in service_stream:
+            maxtime = max(maxtime, service_event.end_time)
+
     return (
         maxtime,
         core_events,
@@ -117,6 +128,7 @@ def _collect_simulation_events(
         link_identities,
         core_events_json,
         link_events_json,
+        dma_events,
     )
 
 
@@ -178,6 +190,7 @@ def simulate_old() -> tuple[float, Trace, NoCFabrics]:
         link_identities,
         core_events_json,
         link_events_json,
+        dma_events,
     ) = _collect_simulation_events(arch)
 
     # with open("core.json", "w") as file:
@@ -208,6 +221,7 @@ def simulate_old() -> tuple[float, Trace, NoCFabrics]:
         core_events,
         link_events,
         link_identities,
+        dma_events=dma_events,
     )
 
     if core_probs is None or link_probs is None:
@@ -308,6 +322,7 @@ def simulate(
         link_identities,
         core_events_json,
         link_events_json,
+        dma_events,
     ) = _collect_simulation_events(arch)
     event_build_duration_ms = round((time.perf_counter() - event_build_started) * 1000, 3)
 
@@ -343,6 +358,7 @@ def simulate(
         core_events,
         link_events,
         link_identities,
+        dma_events=dma_events,
     )
 
     if core_probs is None or link_probs is None:

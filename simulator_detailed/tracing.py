@@ -1,9 +1,24 @@
 from collections.abc import Mapping, Sequence
 
+from .dma_endpoint import DMAEndpoint, DMAEndpointKey, DMAServiceEvent
 from .noc import NoC, NoCLinkIdentity
 from .utils.definitions import Event, NoCChannel, TimeSlice, Trace, TraceItem
 
 Interval = tuple[float, float]
+DMAServiceStreams = dict[DMAEndpointKey, list[DMAServiceEvent]]
+
+
+def collect_dma_service_events(
+    endpoints: Mapping[DMAEndpointKey, DMAEndpoint],
+) -> DMAServiceStreams:
+    """Collect shared-engine service streams in stable type/instance order."""
+    streams: DMAServiceStreams = {}
+    for key in sorted(endpoints):
+        endpoint = endpoints[key]
+        if key != (endpoint.node_type, endpoint.instance_id):
+            raise ValueError("DMA mapping key does not match its endpoint identity")
+        streams[key] = list(endpoint.service_events)
+    return streams
 
 
 def calc_intersection(L: float, R: float, l: float, r: float) -> float:
@@ -113,6 +128,8 @@ def process_events(
     cores_events: list[list[Event]],
     links_events: list[list[Event]],
     link_identities: Sequence[NoCLinkIdentity] | None = None,
+    *,
+    dma_events: Mapping[DMAEndpointKey, Sequence[DMAServiceEvent]] | None = None,
 ) -> Trace:
     if link_identities is not None and len(link_identities) != len(links_events):
         raise ValueError(
@@ -155,6 +172,27 @@ def process_events(
                 fabric_id=None if identity is None else identity.fabric_id,
             )
             slice_trace.links.append(slice_link_trace)
+
+        if dma_events is not None:
+            for (node_type, instance_id), events in sorted(dma_events.items()):
+                # Service intervals use continuous, half-open ACI time. Count
+                # both fabrics on their one shared engine, without queue waits.
+                overlaps = [
+                    min(event.end_time, slice_end)
+                    - max(event.start_time, slice_start)
+                    for event in events
+                    if event.start_time < slice_end and event.end_time > slice_start
+                ]
+                slice_trace.dmas.append(
+                    TraceItem(
+                        id=instance_id,
+                        node_type=node_type,
+                        fabric_id=None,
+                        slow=0,
+                        ultilization=sum(overlaps) / time_slice_len,
+                        op_num=len(overlaps),
+                    )
+                )
 
         traces.time_slices.append(slice_trace)
 
