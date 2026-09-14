@@ -1,0 +1,25 @@
+{
+  "core": {
+    "x": 3, "y": 2,
+    "nmc": {
+      "channel_default": {"tx_bytes_per_cycle": 5, "rx_bytes_per_cycle": 7},
+      "overrides": {"2": {"tx_bytes_per_cycle": 3, "rx_bytes_per_cycle": 4}}
+    }
+  },
+  "noc": {
+    "x": 3, "y": 2,
+    "fabric_ids": [0, 2],
+    "pe_local_port": 9,
+    "aci_clock_mhz": 2, "noc_clock_mhz": 3,
+    "router": {
+      "default_burst_len_mode": 3,
+      "flit": {"physical_flit_bytes": 11, "payload_capacity_bytes": 9, "header_bytes": 2}
+    },
+    "link": {"payload_bits_per_noc_cycle": 24, "wire_bits_per_noc_cycle": 27, "launch_interval_aci_cycles": 3},
+    "c2r_link": {"payload_bits_per_noc_cycle": 24, "wire_bits_per_noc_cycle": 27, "launch_interval_aci_cycles": 3},
+    "dma_engines": [
+      {"dma_type": 0, "instance_id": 12, "router_id": 1, "fabric_ids": [0, 2], "channels": 1, "local_ports": [40], "attachment_mode": "single_side", "endpoint_clock_mhz": 5, "port_bw": 3, "descriptor_issue_cycles": 2},
+      {"dma_type": 1, "instance_id": 12, "router_id": 4, "fabric_ids": [0, 2], "channels": 2, "local_ports": [41, 42], "attachment_mode": "dual_side", "endpoint_clock_mhz": 5, "port_bw": 3, "descriptor_issue_cycles": 2, "max_outstanding_descriptors_per_channel": 2}
+    ]
+  }
+}

@@ -1,0 +1,339 @@
+import math
+from enum import IntEnum
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from ...utils.definitions import (
+    FlitConfig,
+    DMAAttachmentMode,
+    BurstLenMode,
+    NMCShapeMode,
+    NoCChannel,
+)
+
+
+class DMAType(IntEnum):
+    """DMA engine type: read (source) or write (sink) attached to GM or DDR."""
+
+    GM_RDMA = 0  # GM read DMA, injects data from GM into NoC
+    GM_WDMA = 1  # GM write DMA, drains data from NoC to GM
+    DDR_RDMA = 2  # DDR read DMA, injects data from DDR into NoC
+    DDR_WDMA = 3  # DDR write DMA, drains data from NoC to DDR
+
+
+class MemType(IntEnum):
+    """Memory controller type behind the DMA engines."""
+
+    GM = 0  # On-chip global memory
+    DDR = 1  # Off-chip DDR memory
+
+
+class ConfigModel(BaseModel):
+    """Reject unknown settings and non-finite hardware parameters."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class SPMConfig(ConfigModel):
+    """Scratchpad memory (SRAM) config per memory bank."""
+
+    size: int  # B, total capacity of the SRAM bank
+    delay: int = 1  # cycles, fixed access latency per allocate/release
+
+
+class TPUConfig(ConfigModel):
+    """Tensor Processing Unit (compute engine) config per core."""
+
+    size: int = 1  # number of TPU instances (parallelism)
+    flops: int = 1  # FLOPs per cycle, peak compute throughput
+
+
+class LSUConfig(ConfigModel):
+    """Legacy compute-task load/store resource, separate from NMC transport."""
+
+    size: int = 1  # number of LSU instances
+    width: float = 1.0  # effective B/ACI-cycle for legacy LOAD/STORE tasks
+
+
+class RouterPipelineConfig(ConfigModel):
+    """Effective router-stage timing in the simulator's ACI-cycle domain."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    effective_rc_aci_cycles: float = Field(default=1.0, ge=0)
+    effective_sa_aci_cycles: float = Field(default=1.0, ge=0)
+    effective_st_aci_cycles: float = Field(default=1.0, ge=0)
+
+
+class RouterConfig(ConfigModel):
+    """Router microarchitecture config."""
+
+    type: str = "XY"  # routing algorithm, "XY" = X-first deterministic
+    vc: int = 1  # number of virtual channels per port
+    arbitration: str = "round_robin"  # arbitration policy
+    default_burst_len_mode: BurstLenMode = BurstLenMode.FLITS_1
+    flit: FlitConfig = Field(default_factory=FlitConfig)
+    pipeline: RouterPipelineConfig = Field(default_factory=RouterPipelineConfig)
+
+    @field_validator("default_burst_len_mode")
+    @classmethod
+    def validate_default_burst_len_mode(
+        cls,
+        mode: BurstLenMode,
+    ) -> BurstLenMode:
+        if mode is BurstLenMode.DEFAULT:
+            raise ValueError("router default must specify a positive burst quantum")
+        return mode
+
+    def resolve_burst_quantum_flits(self, mode: BurstLenMode) -> int:
+        """Resolve a transfer mode to an explicit arbitration quantum."""
+        resolved_mode = mode
+        if mode is BurstLenMode.DEFAULT:
+            resolved_mode = self.default_burst_len_mode
+        return resolved_mode.explicit_quantum_flits()
+
+
+class LinkConfig(ConfigModel):
+    """Native data-NoC width and effective ACI-domain link timing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    wire_bits_per_noc_cycle: int = Field(default=128, gt=0)
+    payload_bits_per_noc_cycle: int = Field(default=128, gt=0)
+    launch_interval_aci_cycles: float = Field(default=1.0, gt=0)
+    effective_link_stage_aci_cycles: float = Field(default=0.0, ge=0)
+    sync_credit_return_aci_cycles: float = Field(default=0.0, ge=0)
+    input_buffer_depth_flits: int = Field(default=1, gt=0, strict=True)
+    effective_in_flight_window_flits: int = Field(default=2, gt=0, strict=True)
+
+    @model_validator(mode="after")
+    def validate_native_width(self) -> "LinkConfig":
+        if self.payload_bits_per_noc_cycle > self.wire_bits_per_noc_cycle:
+            raise ValueError("payload bits cannot exceed physical wire bits")
+        if self.payload_bits_per_noc_cycle % 8 != 0:
+            raise ValueError("payload width must contain a whole number of bytes")
+        return self
+
+    def serialization_noc_cycles(self, flit: FlitConfig | None = None) -> int:
+        """Return native NoC cycles needed to serialize one logical flit."""
+        flit_bits = (flit or FlitConfig()).physical_flit_bytes * 8
+        return math.ceil(flit_bits / self.payload_bits_per_noc_cycle)
+
+    def serialization_aci_cycles(
+        self,
+        noc_cycles_per_aci_cycle: float,
+        flit: FlitConfig | None = None,
+    ) -> float:
+        """Convert native serialization time to the simulator's ACI timebase."""
+        if noc_cycles_per_aci_cycle <= 0:
+            raise ValueError("NoC-to-ACI clock ratio must be positive")
+        return self.serialization_noc_cycles(flit) / noc_cycles_per_aci_cycle
+
+    def required_in_flight_window_flits(
+        self,
+        noc_cycles_per_aci_cycle: float,
+        flit: FlitConfig | None = None,
+    ) -> int:
+        """Return the window needed to sustain the configured launch interval."""
+        zero_load_residence = (
+            self.serialization_aci_cycles(noc_cycles_per_aci_cycle, flit)
+            + self.effective_link_stage_aci_cycles
+            + self.sync_credit_return_aci_cycles
+        )
+        return max(
+            1,
+            math.ceil(zero_load_residence / self.launch_interval_aci_cycles),
+        )
+
+
+class NMCShapeTimingConfig(ConfigModel):
+    """Configured total setup targets for one NMC endpoint in ACI cycles."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    static_endpoint_setup_aci_cycles: float = Field(
+        default=0.0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    dynamic_endpoint_setup_aci_cycles: float = Field(
+        default=0.0,
+        ge=0,
+        allow_inf_nan=False,
+    )
+
+    def endpoint_setup_target_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return the configured total target for one endpoint setup path."""
+        if shape_mode is NMCShapeMode.STATIC:
+            return self.static_endpoint_setup_aci_cycles
+        if shape_mode is NMCShapeMode.DYNAMIC:
+            return self.dynamic_endpoint_setup_aci_cycles
+        raise ValueError(f"unsupported NMC shape mode: {shape_mode!r}")
+
+
+class NMCChannelConfig(ConfigModel):
+    """Configuration of one independent, full-duplex PE NMC channel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tx_bytes_per_cycle: float = Field(default=16.0, gt=0)
+    rx_bytes_per_cycle: float = Field(default=16.0, gt=0)
+    descriptor_issue_cycles: float = Field(default=0.0, ge=0)
+    # Fixed post-service bubble; excess NoC stalls can overlap it.
+    inter_command_turnaround_aci_cycles: float = Field(default=0.0, ge=0)
+    max_outstanding_descriptors: int = Field(default=1, gt=0)
+
+
+class NMCConfig(ConfigModel):
+    """Selectable channel settings and endpoint setup costs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    overrides: dict[NoCChannel, NMCChannelConfig] = Field(
+        default_factory=dict[NoCChannel, NMCChannelConfig]
+    )
+    channel_default: NMCChannelConfig = Field(default_factory=NMCChannelConfig)
+    shape_timing: NMCShapeTimingConfig = Field(default_factory=NMCShapeTimingConfig)
+
+    def channel_config(self, channel: NoCChannel) -> NMCChannelConfig:
+        """Return the configuration for a configured channel."""
+        if channel in self.overrides:
+            return self.overrides[channel]
+        return self.channel_default
+
+
+class CoreConfig(ConfigModel):
+    """Processing Element (PE core) config, one per mesh node."""
+
+    type: str = "Simple"  # core type identifier
+    x: int = 3  # number of columns in the core mesh
+    y: int = 2  # number of rows in the core mesh
+    width: int = 16  # effective B/ACI-cycle at the PE-to-router interface
+    blk_size: int = 16  # B, default block/tile size for tensor partitioning
+    spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=1024, delay=1))
+    weight_spm: SPMConfig = Field(default_factory=lambda: SPMConfig(size=1024, delay=1))
+    tpu: TPUConfig = Field(default_factory=TPUConfig)
+    lsu: LSUConfig = Field(default_factory=LSUConfig)
+    nmc: NMCConfig = Field(default_factory=NMCConfig)
+
+
+class DMAEngineConfig(ConfigModel):
+    """GM/DDR attachments with explicit parameters for payload execution.
+
+    All payload paths require port_bw. Paired commands also require descriptor
+    issue timing, plus per-channel descriptor capacity for WDMA receives.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dma_type: DMAType  # DMA direction: GM_RDMA/GM_WDMA/DDR_RDMA/DDR_WDMA
+    instance_id: int = Field(ge=0)
+    router_id: int = Field(ge=0)
+    attachment_mode: DMAAttachmentMode
+    fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1)
+    channels: int = Field(default=1, gt=0)
+    endpoint_clock_mhz: float = Field(default=1.0, gt=0)
+    descriptor_issuers_per_fabric: bool = False
+    internal_datapaths: int = Field(default=1, gt=0)
+    local_ports: list[int] = Field(default_factory=list[int])
+    port_bw: float | None = Field(default=None, gt=0)  # effective B/ACI-cycle
+    cdc_penalty: float = Field(default=0.0, ge=0)  # effective ACI cycles
+    descriptor_issue_cycles: float | None = Field(default=None, ge=0)
+    max_outstanding_descriptors_per_channel: int | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    @model_validator(mode="after")
+    def validate_ports(self) -> "DMAEngineConfig":
+        if not self.fabric_ids or len(set(self.fabric_ids)) != len(self.fabric_ids):
+            raise ValueError("DMA fabric IDs must be nonempty and unique")
+        if self.channels != len(self.local_ports):
+            raise ValueError("channels must match the number of configured local ports")
+        if len(self.local_ports) not in (1, len(self.fabric_ids)):
+            raise ValueError("supply one shared port or one port per fabric")
+        if any(port < 0 for port in self.local_ports):
+            raise ValueError("local ports must be nonnegative")
+        return self
+
+
+class MemoryControllerConfig(ConfigModel):
+    """Memory controller (GM/DDR) aggregate bandwidth model behind DMA engines."""
+
+    mem_type: MemType  # memory type: GM (on-chip) or DDR (off-chip)
+    aggregate_bw: float  # B/cycle, total bandwidth across all instances of this type
+    instances: list[int]  # instance IDs covered by this controller group
+    atomic_supported: bool = True  # whether atomic read-modify-write ops are supported
+    atomic_bw: float = (
+        1.0  # B/cycle, bandwidth available for atomic (reduce) operations
+    )
+
+
+class NoCConfig(ConfigModel):
+    """Network-on-Chip topology and component config."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1)
+    pe_local_port: int = Field(default=0, ge=0)
+    type: str = "Mesh"  # topology: Mesh/Torus/RingRoad/Dragonfly
+    x: int = Field(default=3, gt=0)  # mesh columns
+    y: int = Field(default=2, gt=0)  # mesh rows
+    aci_clock_mhz: float = Field(default=1.0, gt=0)
+    noc_clock_mhz: float = Field(default=1.0, gt=0)
+    router: RouterConfig = Field(default_factory=RouterConfig)
+    link: LinkConfig = Field(default_factory=LinkConfig)
+    c2r_link: LinkConfig = Field(default_factory=LinkConfig)
+    dma_engines: list[DMAEngineConfig] = Field(default_factory=list[DMAEngineConfig])
+    mem_controllers: list[MemoryControllerConfig] = Field(
+        default_factory=list[MemoryControllerConfig]
+    )
+
+    @model_validator(mode="after")
+    def validate_topology(self) -> "NoCConfig":
+        if self.x <= 0 or self.y <= 0:
+            raise ValueError("mesh dimensions must be positive")
+        if not self.fabric_ids or len(set(self.fabric_ids)) != len(self.fabric_ids):
+            raise ValueError("fabric IDs must be nonempty and unique")
+        for dma in self.dma_engines:
+            if dma.router_id >= self.x * self.y:
+                raise ValueError("DMA router is outside the configured mesh")
+            if not set(dma.fabric_ids) <= set(self.fabric_ids):
+                raise ValueError("DMA refers to an unconfigured fabric")
+        return self
+
+    @property
+    def noc_cycles_per_aci_cycle(self) -> float:
+        """Return native NoC cycles elapsed during one ACI simulation cycle."""
+        return self.noc_clock_mhz / self.aci_clock_mhz
+
+
+class MemConfig(ConfigModel):
+    """Off-chip / global memory interface config (top-level)."""
+
+    width: int = 128  # B/cycle, memory interface width
+    delay: int = 5  # cycles, fixed memory access latency
+
+
+class ArchConfig(ConfigModel):
+    """Top-level architecture config combining core, NoC, and memory subsystems."""
+
+    core: CoreConfig = Field(default_factory=CoreConfig)
+    noc: NoCConfig = Field(default_factory=NoCConfig)
+    mem: MemConfig = Field(default_factory=MemConfig)
+
+
+class ScratchpadConfig(ConfigModel):
+    """Legacy scratchpad config (backward compatibility alias)."""
+
+    size: int  # B, SRAM capacity
+    delay: int  # cycles, access latency

@@ -1,0 +1,16 @@
+{
+  "core": {"x": 3, "y": 2, "spm": {"size": 1024}},
+  "noc": {
+    "x": 3,
+    "y": 2,
+    "pe_local_port": 7,
+    "link": {"width": 5, "burst_beats": 3},
+    "attachments": [
+      {"node_type": 1, "instance_id": 12, "router_id": 1, "ports": [30], "channels": 3},
+      {"node_type": 2, "instance_id": 12, "router_id": 4, "ports": [32, 33], "channels": 2},
+      {"node_type": 5, "instance_id": 20, "router_id": 5, "ports": [36]}
+    ]
+  },
+  "clock": {"aci_mhz": 2, "ddr_mhz": 3},
+  "memory": {"gm_capacity": 1000, "ddr_capacity": 2000, "gm_engine_width": 3}
+}

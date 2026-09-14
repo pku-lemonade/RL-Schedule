@@ -1,0 +1,592 @@
+from dataclasses import dataclass
+from typing import Literal, cast
+
+import simpy
+from simpy.events import Event as SimpyEvent
+from simpy.events import Process, ProcessGenerator
+from simpy.resources.resource import Request, Resource
+
+from .command_coordination import DMACommandCoordinator
+from .configs.schemas.arch_config import NMCChannelConfig, NMCShapeTimingConfig
+from .noc import Link, RoundRobinArbiter, Router
+from .utils.definitions import (
+    DMA_RDMA_NODE_TYPES,
+    DMA_WDMA_NODE_TYPES,
+    DMACommandMode,
+    EndpointAddress,
+    Flit,
+    FlitTrafficType,
+    Message,
+    NMCShapeMode,
+    NoCChannel,
+    NodeType,
+)
+
+
+@dataclass(frozen=True)
+class PEChannelBinding:
+    """One PE's physical attachment to one data NoC fabric."""
+
+    address: EndpointAddress
+    tx_link: Link
+    rx_link: Link
+    router: Router
+
+    def __post_init__(self) -> None:
+        if self.address.node_type is not NodeType.PE:
+            raise ValueError("PE channel binding requires a PE endpoint address")
+        fabric_id = self.address.fabric_id
+        if self.router.fabric_id is not fabric_id:
+            raise ValueError(
+                f"{fabric_id.name} PE address cannot bind {self.router.name}"
+            )
+        if self.address.format != self.router.config.flit:
+            raise ValueError("PE address and router formats must match")
+        if (self.address.mesh_x, self.address.mesh_y) != (self.router.x_dim, self.router.y_dim):
+            raise ValueError("PE address and router geometry must match")
+        for link in (self.tx_link, self.rx_link):
+            if link.flit_format != self.address.format:
+                raise ValueError("PE address and link formats must match")
+            if link.fabric_id is not fabric_id:
+                raise ValueError(
+                    f"{fabric_id.name} PE address cannot bind {link.link_name}"
+                )
+            if link.tracer is not self.router.tracer:
+                raise ValueError(
+                    f"{link.link_name} and {self.router.name} use different tracers"
+                )
+        if self.tx_link is self.rx_link:
+            raise ValueError("PE TX and RX must use distinct physical links")
+        if self.router.id != self.address.router_id:
+            raise ValueError(
+                f"PE address maps to router {self.address.router_id}, "
+                f"not router {self.router.id}"
+            )
+
+
+@dataclass(frozen=True)
+class NMCTransmitEntry:
+    """One packetized message waiting for the directional upload engine."""
+
+    message: Message
+    flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
+    dual_side_ready: SimpyEvent | None
+    single_side_completion: SimpyEvent | None
+    completion: SimpyEvent
+
+
+@dataclass(frozen=True)
+class NMCTransmitResult:
+    """Endpoint-local SEND timing through final local Link handoff."""
+
+    flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
+    final_local_handoff_time_aci_cycles: float
+    operation_completion_time_aci_cycles: float
+
+    @property
+    def operation_latency_aci_cycles(self) -> float:
+        return (
+            self.operation_completion_time_aci_cycles
+            - self.submission_time_aci_cycles
+        )
+
+
+@dataclass(frozen=True)
+class NMCReceiveEntry:
+    """One flit after completion of the directional download service."""
+
+    flit: Flit
+    rx_service_completion_time_aci_cycles: float
+
+
+@dataclass(frozen=True)
+class NMCReceiveResult:
+    """One validated command-level receive completed after its TAIL flit."""
+
+    message: Message
+    flits: tuple[Flit, ...]
+    shape_mode: NMCShapeMode
+    submission_time_aci_cycles: float
+    descriptor_acceptance_time_aci_cycles: float
+    endpoint_ready_time_aci_cycles: float
+    tail_rx_service_completion_time_aci_cycles: float
+    operation_completion_time_aci_cycles: float
+
+    @property
+    def operation_latency_aci_cycles(self) -> float:
+        return (
+            self.operation_completion_time_aci_cycles
+            - self.submission_time_aci_cycles
+        )
+
+
+class NMCChannel:
+    """Runtime resources for one independent, full-duplex PE NMC channel."""
+
+    def __init__(
+        self,
+        env: simpy.Environment,
+        config: NMCChannelConfig,
+        shape_timing: NMCShapeTimingConfig,
+        binding: PEChannelBinding,
+        dma_commands: DMACommandCoordinator | None = None,
+    ) -> None:
+        if any(
+            component_env is not env
+            for component_env in (
+                binding.tx_link.env,
+                binding.rx_link.env,
+                binding.router.env,
+            )
+        ):
+            raise ValueError(
+                f"{binding.address.fabric_id.name} NMC channel and binding "
+                "must use the same SimPy environment"
+            )
+        if (
+            dma_commands is not None
+            and dma_commands.env is not env
+        ):
+            raise ValueError(
+                "NMC channel and DMA command coordinator must use the same "
+                "environment"
+            )
+
+        self.env = env
+        self.config = config
+        self.shape_timing = shape_timing
+        self.binding = binding
+        self.dma_commands = dma_commands
+        self.tx_datapath = Resource(env, capacity=1)
+        self.tx_burst_arbiter = RoundRobinArbiter(env)
+        self.rx_datapath = Resource(env, capacity=1)
+        self.descriptor_slots = Resource(
+            env,
+            capacity=config.max_outstanding_descriptors,
+        )
+        self.descriptor_issuer = Resource(env, capacity=1)
+
+        # Hardware data-FIFO depths are unresolved and remain distinct from the
+        # configured descriptor capacity enforced above.
+        self.tx_data_queue = simpy.Store(env)
+        self.rx_data_queue = simpy.FilterStore(env)
+        self._receive_api_mode: Literal["flit", "message"] | None = None
+        self._claimed_receive_ids: set[int] = set()
+        self.env.process(self._tx_service_loop())
+        self.env.process(self._rx_service_loop())
+
+    @property
+    def fabric_id(self) -> NoCChannel:
+        return self.binding.address.fabric_id
+
+    @property
+    def tx_service_interval_aci_cycles(self) -> float:
+        return self.binding.address.format.physical_flit_bytes / self.config.tx_bytes_per_cycle
+
+    @property
+    def rx_service_interval_aci_cycles(self) -> float:
+        return self.binding.address.format.physical_flit_bytes / self.config.rx_bytes_per_cycle
+
+    @property
+    def outstanding_descriptor_count(self) -> int:
+        return len(self.descriptor_slots.users)
+
+    @property
+    def first_injection_transport_aci_cycles(self) -> float:
+        """Nominal TX and PE-link time from endpoint-ready to router injection."""
+        return (
+            self.tx_service_interval_aci_cycles
+            + self.binding.tx_link.serialization_aci_cycles
+            + self.binding.tx_link.effective_link_stage_aci_cycles
+        )
+
+    @property
+    def post_injection_endpoint_completion_aci_cycles(self) -> float:
+        """Fixed non-hop time from router injection through PE RX service."""
+        pipeline = self.binding.router.config.pipeline
+        return (
+            pipeline.effective_rc_aci_cycles
+            + pipeline.effective_sa_aci_cycles
+            + pipeline.effective_st_aci_cycles
+            + self.binding.rx_link.serialization_aci_cycles
+            + self.binding.rx_link.effective_link_stage_aci_cycles
+            + self.rx_service_interval_aci_cycles
+        )
+
+    def endpoint_setup_residual_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return setup not represented through destination RX completion."""
+        represented_cycles = (
+            self.config.descriptor_issue_cycles
+            + self.first_injection_transport_aci_cycles
+            + self.post_injection_endpoint_completion_aci_cycles
+        )
+        residual_cycles = (
+            self.shape_timing.endpoint_setup_target_aci_cycles(shape_mode)
+            - represented_cycles
+        )
+        return max(0.0, residual_cycles)
+
+    def receive_endpoint_setup_residual_aci_cycles(
+        self,
+        shape_mode: NMCShapeMode,
+    ) -> float:
+        """Return receive setup not represented by descriptor posting."""
+        target_cycles = self.shape_timing.endpoint_setup_target_aci_cycles(
+            shape_mode
+        )
+        return max(0.0, target_cycles - self.config.descriptor_issue_cycles)
+
+    def send(self, message: Message) -> Process:
+        """Queue one source-owned message and complete after NMC TX service."""
+        self._validate_send_message(message)
+        if message.src != self.binding.address:
+            raise ValueError(
+                f"{self.fabric_id.name} NMC channel at PE "
+                f"{self.binding.address.node_id} cannot send from "
+                f"{message.src.node_type.name}[{message.src.node_id}]"
+            )
+        flits = tuple(message.packetize())
+        return self.env.process(
+            self._submit_tx(message, flits, message.nmc_shape_mode)
+        )
+
+    def recv_flit(self) -> Process:
+        """Wait for one flit after configured NMC RX service."""
+        self._select_receive_api("flit")
+        return self.env.process(self._recv_flit())
+
+    def recv_message(
+        self,
+        message: Message,
+        shape_mode: NMCShapeMode,
+    ) -> Process:
+        """Post one receive command and complete after its validated TAIL."""
+        self._validate_receive_message(message)
+        if message.dst != self.binding.address:
+            raise ValueError(
+                f"{self.fabric_id.name} NMC channel at PE "
+                f"{self.binding.address.node_id} cannot receive for "
+                f"{message.dst.node_type.name}[{message.dst.node_id}]"
+            )
+        self._select_receive_api("message")
+        if message.index in self._claimed_receive_ids:
+            raise ValueError(
+                f"message {message.index} already has a receive command on "
+                f"{self.fabric_id.name} PE{self.binding.address.node_id}"
+            )
+        self._claimed_receive_ids.add(message.index)
+        return self.env.process(self._recv_message(message, shape_mode))
+
+    def _validate_send_message(self, message: Message) -> None:
+        message.validate_transport()
+        if (
+            message.src.node_type is not NodeType.PE
+            or (
+                message.dst.node_type is not NodeType.PE
+                and message.dst.node_type not in DMA_WDMA_NODE_TYPES
+            )
+        ):
+            raise NotImplementedError(
+                "NMC send supports PE-to-PE and PE-to-WDMA transfers only"
+            )
+
+    def _validate_receive_message(self, message: Message) -> None:
+        message.validate_transport()
+        if (
+            message.dst.node_type is not NodeType.PE
+            or (
+                message.src.node_type is not NodeType.PE
+                and message.src.node_type not in DMA_RDMA_NODE_TYPES
+            )
+        ):
+            raise NotImplementedError(
+                "NMC receive supports PE-to-PE and RDMA-to-PE transfers only"
+            )
+
+    def _select_receive_api(
+        self,
+        mode: Literal["flit", "message"],
+    ) -> None:
+        if self._receive_api_mode is None:
+            self._receive_api_mode = mode
+            return
+        if self._receive_api_mode != mode:
+            raise RuntimeError(
+                f"{self.fabric_id.name} PE{self.binding.address.node_id} cannot "
+                "mix raw-flit and command-level receive APIs"
+            )
+
+    def _submit_tx(
+        self,
+        message: Message,
+        flits: tuple[Flit, ...],
+        shape_mode: NMCShapeMode,
+    ) -> ProcessGenerator:
+        submission_time_aci_cycles = float(self.env.now)
+        descriptor_request: Request | None = None
+        try:
+            issue_request = self.descriptor_issuer.request()
+            with issue_request:
+                yield issue_request
+                descriptor_request = self.descriptor_slots.request()
+                yield descriptor_request
+                descriptor_issue_start_time = float(self.env.now)
+                yield self.env.timeout(self.config.descriptor_issue_cycles)
+
+            descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            endpoint_ready_time_aci_cycles = (
+                descriptor_issue_start_time
+                + self.config.descriptor_issue_cycles
+                + self.endpoint_setup_residual_aci_cycles(shape_mode)
+            )
+
+            completion = self.env.event()
+            dual_side_ready: SimpyEvent | None = None
+            single_side_completion: SimpyEvent | None = None
+            if message.dst.node_type in DMA_WDMA_NODE_TYPES:
+                dma_commands = self._require_dma_commands()
+                if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                    dual_side_ready = dma_commands.post_dual_side_source(message)
+                elif message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                    single_side_completion = (
+                        dma_commands.post_single_side_upload(message)
+                    )
+                else:
+                    raise RuntimeError(
+                        f"message {message.index} has no DMA command mode"
+                    )
+            yield self.tx_data_queue.put(
+                NMCTransmitEntry(
+                    message=message,
+                    flits=flits,
+                    shape_mode=shape_mode,
+                    submission_time_aci_cycles=submission_time_aci_cycles,
+                    descriptor_acceptance_time_aci_cycles=(
+                        descriptor_acceptance_time_aci_cycles
+                    ),
+                    endpoint_ready_time_aci_cycles=(
+                        endpoint_ready_time_aci_cycles
+                    ),
+                    dual_side_ready=dual_side_ready,
+                    single_side_completion=single_side_completion,
+                    completion=completion,
+                )
+            )
+            return cast(NMCTransmitResult, (yield completion))
+        finally:
+            if descriptor_request is not None:
+                if descriptor_request.triggered:
+                    self.descriptor_slots.release(descriptor_request)
+                else:
+                    descriptor_request.cancel()
+
+    def _recv_flit(self) -> ProcessGenerator:
+        entry = cast(NMCReceiveEntry, (yield self.rx_data_queue.get()))
+        return entry.flit
+
+    def _recv_message(
+        self,
+        message: Message,
+        shape_mode: NMCShapeMode,
+    ) -> ProcessGenerator:
+        submission_time_aci_cycles = float(self.env.now)
+        descriptor_request: Request | None = None
+        try:
+            issue_request = self.descriptor_issuer.request()
+            with issue_request:
+                yield issue_request
+                descriptor_request = self.descriptor_slots.request()
+                yield descriptor_request
+                descriptor_issue_start_time = float(self.env.now)
+                yield self.env.timeout(self.config.descriptor_issue_cycles)
+
+            descriptor_acceptance_time_aci_cycles = float(self.env.now)
+            endpoint_ready_time_aci_cycles = (
+                descriptor_issue_start_time
+                + self.config.descriptor_issue_cycles
+                + self.receive_endpoint_setup_residual_aci_cycles(shape_mode)
+            )
+            if message.src.node_type in DMA_RDMA_NODE_TYPES:
+                dma_commands = self._require_dma_commands()
+                if message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                    dma_commands.post_dual_side_destination(message)
+                elif message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                    request_flit = dma_commands.post_single_side_download(message)
+                    # Requests share the PE injection link with upload payload.
+                    # Enter only between bursts so a live router grant remains valid.
+                    yield self.tx_burst_arbiter.request(message.index)
+                    try:
+                        yield self.binding.tx_link.send_flit(request_flit)
+                    finally:
+                        self.tx_burst_arbiter.release(message.index)
+                else:
+                    raise RuntimeError(
+                        f"message {message.index} has no DMA command mode"
+                    )
+            flits: list[Flit] = []
+            tail_rx_service_completion_time_aci_cycles: float | None = None
+            expected_flit_count = message.flit_count()
+            for flit_index in range(expected_flit_count):
+                entry = cast(
+                    NMCReceiveEntry,
+                    (
+                        yield self.rx_data_queue.get(
+                            lambda queued, message_id=message.index: (
+                                queued.flit.msg_id == message_id
+                            )
+                        )
+                    ),
+                )
+                message.validate_flit(
+                    entry.flit,
+                    flit_index,
+                    expected_flit_count,
+                )
+                flits.append(entry.flit)
+                tail_rx_service_completion_time_aci_cycles = (
+                    entry.rx_service_completion_time_aci_cycles
+                )
+
+            if tail_rx_service_completion_time_aci_cycles is None:
+                raise RuntimeError(
+                    f"message {message.index} has no receive-service boundary"
+                )
+            setup_wait = endpoint_ready_time_aci_cycles - float(self.env.now)
+            if setup_wait > 0:
+                yield self.env.timeout(setup_wait)
+            if message.dma_command_mode is DMACommandMode.SINGLE_SIDE:
+                self._require_dma_commands().complete_single_side_download(
+                    message
+                )
+            elif message.dma_command_mode is DMACommandMode.DUAL_SIDE:
+                self._require_dma_commands().complete_dual_side_destination(
+                    message
+                )
+            return NMCReceiveResult(
+                message=message,
+                flits=tuple(flits),
+                shape_mode=shape_mode,
+                submission_time_aci_cycles=submission_time_aci_cycles,
+                descriptor_acceptance_time_aci_cycles=(
+                    descriptor_acceptance_time_aci_cycles
+                ),
+                endpoint_ready_time_aci_cycles=endpoint_ready_time_aci_cycles,
+                tail_rx_service_completion_time_aci_cycles=(
+                    tail_rx_service_completion_time_aci_cycles
+                ),
+                operation_completion_time_aci_cycles=float(self.env.now),
+            )
+        finally:
+            if descriptor_request is not None:
+                if descriptor_request.triggered:
+                    self.descriptor_slots.release(descriptor_request)
+                else:
+                    descriptor_request.cancel()
+
+    def _tx_service_loop(self) -> ProcessGenerator:
+        next_command_service_time_aci_cycles = float(self.env.now)
+        while True:
+            entry = cast(NMCTransmitEntry, (yield self.tx_data_queue.get()))
+            if entry.dual_side_ready is not None:
+                yield entry.dual_side_ready
+            turnaround_wait = (
+                next_command_service_time_aci_cycles - float(self.env.now)
+            )
+            if turnaround_wait > 0:
+                yield self.env.timeout(turnaround_wait)
+            setup_wait = (
+                entry.endpoint_ready_time_aci_cycles - float(self.env.now)
+            )
+            if setup_wait > 0:
+                yield self.env.timeout(setup_wait)
+            request = self.tx_datapath.request()
+            with request:
+                yield request
+                command_service_start_time_aci_cycles = float(self.env.now)
+                next_command_service_time_aci_cycles = (
+                    command_service_start_time_aci_cycles
+                    + len(entry.flits) * self.tx_service_interval_aci_cycles
+                    + self.config.inter_command_turnaround_aci_cycles
+                )
+                quantum = self.binding.router.config.resolve_burst_quantum_flits(
+                    entry.message.burst_len_mode
+                )
+                for start in range(0, len(entry.flits), quantum):
+                    yield self.tx_burst_arbiter.request(entry.message.index)
+                    try:
+                        for flit in entry.flits[start : start + quantum]:
+                            yield self.env.timeout(self.tx_service_interval_aci_cycles)
+                            yield self.binding.tx_link.send_flit(flit)
+                    finally:
+                        self.tx_burst_arbiter.release(entry.message.index)
+            final_local_handoff_time_aci_cycles = float(self.env.now)
+            if entry.dual_side_ready is not None:
+                self._require_dma_commands().complete_dual_side_source(
+                    entry.message,
+                    entry.dual_side_ready,
+                )
+            if entry.single_side_completion is not None:
+                yield entry.single_side_completion
+            entry.completion.succeed(
+                NMCTransmitResult(
+                    flits=entry.flits,
+                    shape_mode=entry.shape_mode,
+                    submission_time_aci_cycles=(
+                        entry.submission_time_aci_cycles
+                    ),
+                    descriptor_acceptance_time_aci_cycles=(
+                        entry.descriptor_acceptance_time_aci_cycles
+                    ),
+                    endpoint_ready_time_aci_cycles=(
+                        entry.endpoint_ready_time_aci_cycles
+                    ),
+                    final_local_handoff_time_aci_cycles=(
+                        final_local_handoff_time_aci_cycles
+                    ),
+                    operation_completion_time_aci_cycles=float(self.env.now),
+                )
+            )
+
+    def _rx_service_loop(self) -> ProcessGenerator:
+        while True:
+            flit = cast(Flit, (yield self.binding.rx_link.recv_flit()))
+            request = self.rx_datapath.request()
+            with request:
+                yield request
+                yield self.env.timeout(self.rx_service_interval_aci_cycles)
+                if flit.traffic_type is FlitTrafficType.DMA_RESPONSE:
+                    self._require_dma_commands().accept_single_side_upload_response(
+                        flit,
+                        self.binding.address,
+                    )
+                elif flit.traffic_type is FlitTrafficType.PAYLOAD:
+                    yield self.rx_data_queue.put(
+                        NMCReceiveEntry(
+                            flit=flit,
+                            rx_service_completion_time_aci_cycles=(
+                                float(self.env.now)
+                            ),
+                        )
+                    )
+                else:
+                    raise RuntimeError(
+                        f"{self.fabric_id.name} PE received unexpected "
+                        f"{flit.traffic_type.name} flit"
+                    )
+                yield self.binding.rx_link.ack_credit()
+
+    def _require_dma_commands(self) -> DMACommandCoordinator:
+        if self.dma_commands is None:
+            raise RuntimeError("DMA command coordinator is unavailable")
+        return self.dma_commands
