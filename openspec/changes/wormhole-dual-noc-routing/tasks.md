@@ -8,11 +8,11 @@
 
 ## 2. Canonical torus binding, route oracle and resource order (TR-D01..03)
 
-- [ ] 2.1 Add the generic torus builder/profile binding in `simulator_detailed/torus.py`, preserving canonical identities, physical roles, raw maps, worker masks and resource aliases; verify configurable small grids and the 240-router/480-link Wormhole inventory, including harvested-worker transit and explicit endpoint admission.
-- [ ] 2.2 Add deterministic XY/YX modular unicast compilation, local routes and immutable port/link paths; verify all 28,800 ordered pairs on the selected profile against an independently expressed physical-coordinate oracle, including the four-versus-eighteen-hop example and unavailable-edge rejection.
-- [ ] 2.3 Compile request/response dateline lane paths and their dependency graph/ranks, including local channels and packet ownership; verify configurable shifted datelines on small tori and rejection of wrong-phase, within-axis reset, unsupported turn/class and dependency-cycle mutations.
-- [ ] 2.4 Add independently transcribed source/route fixtures with immutable URLs, source hashes or inherited evidence explicitly identified; verify the oracle does not call production builders and the version-1 explicit-route DAG guard still rejects its cyclic negative case.
-- [ ] 2.5 Run binding/routing/negative fixtures, strict type/lint and relevant legacy routing tests; review the written resource-order argument against compiled paths and commit this part before part 3 with its validation evidence.
+- [x] 2.1 Add the generic torus builder/profile binding in `simulator_detailed/torus.py`, preserving canonical identities, physical roles, raw maps, worker masks and resource aliases; verify configurable small grids and the 240-router/480-link Wormhole inventory, including harvested-worker transit and explicit endpoint admission.
+- [x] 2.2 Add deterministic XY/YX modular unicast compilation, local routes and immutable port/link paths; verify all 28,800 ordered pairs on the selected profile against an independently expressed physical-coordinate oracle, including the four-versus-eighteen-hop example and unavailable-edge rejection.
+- [x] 2.3 Compile request/response dateline lane paths and their dependency graph/ranks, including local channels and packet ownership; verify configurable shifted datelines on small tori and rejection of wrong-phase, within-axis reset, unsupported turn/class and dependency-cycle mutations.
+- [x] 2.4 Add independently transcribed source/route fixtures with immutable URLs, source hashes or inherited evidence explicitly identified; verify the oracle does not call production builders and the version-1 explicit-route DAG guard still rejects its cyclic negative case.
+- [x] 2.5 Run binding/routing/negative fixtures, strict type/lint and relevant legacy routing tests; review the written resource-order argument against compiled paths and commit this part before part 3 with its validation evidence.
 
 ## 3. Finite lanes and one physical serializer (TR-D03, D04, D06)
 

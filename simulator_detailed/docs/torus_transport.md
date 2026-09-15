@@ -1,7 +1,7 @@
 # Version-2 torus transport: incremental delivery
 
-Only the configuration and immutable record contracts are implemented so far
-(part 1 of `wormhole-dual-noc-routing`). They do **not** execute torus traffic.
+The configuration/record contracts and pure topology/route compiler are implemented
+(parts 1–2 of `wormhole-dual-noc-routing`). They do **not** execute torus traffic.
 The existing CLI still accepts only version-1 replay. Profile inspection remains
 inventory-only and full profile/DFG execution remains gated.
 
@@ -126,8 +126,35 @@ a pinned citation is a provenance-format check. Profile worker selection remains
 illustrative, memory capacity remains inventory, and passing tests establish no
 silicon timing accuracy.
 
-Still pending: torus graph/endpoint binding and route oracle, dateline dependency
-validation, finite VC/credit kernel, cut-through routing, causal response execution,
+## Part 2: topology binding, routes and static resource order
+
+`torus.py` now binds either the normalized profile inventory or a complete canonical
+graph. Profile binding generates exactly one positive directed edge per axis and
+router, retaining all 120 physical tiles, 240 fabric-qualified routers, 480 directed
+links, 240 source attachments, the selected worker mask and memory aliases. A
+harvested worker retains its router as transit but cannot be selected as an initiating
+endpoint. Endpoint roles, local ports and source permissions remain an explicit
+allowlist; memory endpoints cannot become independent request sources. Availability
+defaults fill unknown profile fields, while source-disabled routers/links and
+unavailable deterministic route edges fail before any runtime allocation.
+
+The route compiler takes positive modular hops in configured dimension order. NoC0
+uses raw XY and NoC1 raw YX; both fabric IDs remain explicit. Same-router paths have
+only local channels. The `(9,11) → (1,1)` router path is four hops on NoC0 and eighteen
+on NoC1. A small canonical torus test uses shifted datelines and a separately written
+coordinate oracle; the profile test enumerates 28,800 ordered source/destination pairs
+across the two 10x12 fabrics.
+
+`dimension_dateline_v1` assigns request and response classes two modeled phases per
+network edge. The dateline edge switches to phase 1, phase resets only at a dimension
+turn, and ranks increase through both dimensions. Local injection/ejection channels
+and packet owners are included in `torus_dependencies.py`; causal descriptor edges
+lead into independently draining response injection resources without reversing the
+request dependency. The resulting graph is checked with a topological sort and
+declared ranks. This is a static policy check, not proof of runtime scheduling or
+silicon VC behavior.
+
+Still pending: finite VC/credit kernel, cut-through routing, causal response execution,
 directed slowdown execution, runtime traces and version-2 CLI integration. Hardware
 VC encoding/buddy/priority modes, NIU packetization/transactions, memory/compute
 execution, multicast/synchronization, tensor/checkpoint execution and hardware

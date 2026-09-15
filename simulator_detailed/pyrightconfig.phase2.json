@@ -28,7 +28,9 @@
     "replay_topology.py",
     "topology_compatibility.py",
     "torus_contract.py",
-    "torus_records.py"
+    "torus_records.py",
+    "torus.py",
+    "torus_dependencies.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

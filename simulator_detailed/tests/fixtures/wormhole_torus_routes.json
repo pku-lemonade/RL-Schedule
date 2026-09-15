@@ -1,0 +1,34 @@
+{
+  "extraction": "Independent physical-coordinate route transcription using pinned routing directions; not generated from the torus builder.",
+  "extent": [10, 12],
+  "sources": {
+    "coordinates": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/Coordinates.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "328f014798fe3cec46ec2c9555a8d843074b7eb62eb4de996e6d85a0f7ec9174",
+      "evidence_status": "Inherited from the independently checked profile fixture; not freshly fetched in part 2."
+    },
+    "routing": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/RoutingPaths.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "656f6fb36b74de0ac30fcd0b76c5c028a6760eb8879c70dd647f1da57b9c006b",
+      "evidence_status": "Inherited from the child design's 2026-09-15 raw-byte verification."
+    }
+  },
+  "cases": [
+    {
+      "fabric_id": 0,
+      "source": [9, 11],
+      "destination": [1, 1],
+      "physical_destinations": [[0, 11], [1, 11], [1, 0], [1, 1]]
+    },
+    {
+      "fabric_id": 1,
+      "source": [9, 11],
+      "destination": [1, 1],
+      "physical_destinations": [[9, 10], [9, 9], [9, 8], [9, 7], [9, 6], [9, 5], [9, 4], [9, 3], [9, 2], [9, 1], [8, 1], [7, 1], [6, 1], [5, 1], [4, 1], [3, 1], [2, 1], [1, 1]]
+    },
+    {"fabric_id": 0, "source": [3, 4], "destination": [3, 4], "physical_destinations": []},
+    {"fabric_id": 1, "source": [0, 0], "destination": [9, 11], "physical_destinations": [[0, 11], [9, 11]]}
+  ]
+}
