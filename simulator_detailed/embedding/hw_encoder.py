@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 from ..noc import NoC
-from ..topology_compatibility import legacy_coordinates, require_legacy_topology
+from ..topology_compatibility import legacy_coordinates, require_legacy_nocs
 from ..utils.definitions import NoCChannel
 
 
@@ -18,18 +18,7 @@ def build_hardware_graph(
         node_feature: (N_c + N_l, feature_dim)
         edge_feature: (2, num_edges)
     """
-    if not noc_instances:
-        raise ValueError("hardware graph requires at least one fabric")
-
-    topology = next(iter(noc_instances.values())).topology
-    if topology is None:
-        raise ValueError("hardware graph requires canonical topology")
-    config = require_legacy_topology(topology, "detailed_encoder")
-    if set(noc_instances) != set(config.fabric_ids):
-        raise ValueError("hardware graph requires exactly the configured fabrics")
-    for fabric, noc in noc_instances.items():
-        if noc.fabric_id is not fabric or noc.topology is None or noc.topology.content_hash != topology.content_hash:
-            raise ValueError("hardware graph fabrics must share one canonical topology")
+    noc_instances, topology = require_legacy_nocs(noc_instances)
     coordinates = legacy_coordinates(topology)
 
     routers = [

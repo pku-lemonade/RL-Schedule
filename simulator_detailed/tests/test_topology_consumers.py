@@ -6,12 +6,14 @@ import unittest
 from simulator_detailed.configs.schemas.arch_config import NoCConfig
 from simulator_detailed.configs.schemas.topology import CanonicalTopology
 from simulator_detailed.predictor.topology import Mesh
+from simulator_detailed.tests.test_phase2_noc import build_runtime
 from simulator_detailed.tests.test_topology import REFERENCE_PATH
 from simulator_detailed.tests.test_topology_replay import EXAMPLE
 from simulator_detailed.topology import Topology, topology_from_legacy
 from simulator_detailed.topology_compatibility import (
     legacy_coordinates,
     legacy_event_rows,
+    require_legacy_nocs,
     require_legacy_topology,
 )
 from simulator_detailed.transport import ReplayPlan, ReplayRuntime
@@ -19,6 +21,25 @@ from simulator_detailed.utils.definitions import NoCChannel
 
 
 class TopologyConsumerTests(unittest.TestCase):
+    def test_encoder_runtime_guard_rejects_documents_and_changed_objects(self):
+        _, arch, _ = build_runtime(NoCConfig(x=3, y=2))
+        nocs, topology = require_legacy_nocs(arch.nocs)
+        self.assertEqual(nocs, arch.nocs)
+        self.assertIs(topology, arch.nocs[NoCChannel.CH0].topology)
+        for value in ({"kind": "topology_replay_result"}, ReplayPlan.load(EXAMPLE).topology, {}, []):
+            with self.assertRaises(TypeError):
+                require_legacy_nocs(value)
+        with self.assertRaisesRegex(ValueError, "exactly"):
+            require_legacy_nocs({NoCChannel.CH0: arch.nocs[NoCChannel.CH0]})
+        noc = arch.nocs[NoCChannel.CH0]
+        noc.r2r_links.reverse()
+        with self.assertRaisesRegex(ValueError, "runtime links"):
+            require_legacy_nocs(arch.nocs)
+        noc.r2r_links.reverse()
+        noc.routers.reverse()
+        with self.assertRaisesRegex(ValueError, "runtime routers"):
+            require_legacy_nocs(arch.nocs)
+
     def test_supported_legacy_contract_and_canonical_coordinates(self):
         for shape in ((1, 1), (3, 2), (4, 4)):
             config = NoCConfig(x=shape[0], y=shape[1], fabric_ids=(NoCChannel(7), NoCChannel.CH0), pe_local_port=9)

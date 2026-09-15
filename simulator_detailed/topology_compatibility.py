@@ -6,7 +6,9 @@ from collections.abc import Mapping
 from typing import cast
 
 from .configs.schemas.arch_config import NoCConfig
+from .noc import NoC
 from .topology import Topology, content_digest, topology_from_legacy
+from .utils.definitions import NoCChannel
 
 CONSUMERS = frozenset({"detailed_predictor", "detailed_encoder"})
 
@@ -67,3 +69,36 @@ def legacy_coordinates(topology: Topology) -> dict[tuple[int, int], tuple[int, i
             raise ValueError("legacy coordinate is missing")
         coordinates[(router.fabric_id, topology.router_indices[router.key])] = (router.coordinate.x, router.coordinate.y)
     return coordinates
+
+
+def require_legacy_nocs(value: object) -> tuple[dict[NoCChannel, NoC], Topology]:
+    """Validate actual encoder runtime objects before optional tensor operations."""
+    if not isinstance(value, Mapping) or not value:
+        raise TypeError("detailed encoder requires a nonempty mapping of legacy NoC instances")
+    nocs: dict[NoCChannel, NoC] = {}
+    for fabric, noc in cast(Mapping[object, object], value).items():
+        if not isinstance(fabric, NoCChannel) or not isinstance(noc, NoC):
+            raise TypeError("detailed encoder requires legacy NoC instances; topology/replay documents are unsupported")
+        if noc.fabric_id is not fabric:
+            raise ValueError("encoder fabric key does not match its NoC")
+        nocs[fabric] = noc
+    topology = next(iter(nocs.values())).topology
+    config = require_legacy_topology(topology, "detailed_encoder")
+    if set(nocs) != set(config.fabric_ids):
+        raise ValueError("hardware graph requires exactly the configured fabrics")
+    for fabric, noc in nocs.items():
+        require_legacy_topology(noc.topology, "detailed_encoder")
+        if noc.topology.content_hash != topology.content_hash:
+            raise ValueError("hardware graph fabrics must share one canonical topology")
+        expected_routers = sorted(index for (f, _), index in topology.router_indices.items() if f == fabric)
+        if [r.id for r in noc.routers] != expected_routers:
+            raise ValueError("encoder runtime routers differ from canonical topology order")
+        expected_links = [
+            (topology.link_indices[e.key], topology.router_indices[(int(fabric), e.src_router)],
+             topology.router_indices[(int(fabric), e.dst_router)])
+            for e in sorted((e for e in topology.graph.links if e.fabric_id == fabric),
+                            key=lambda e: topology.link_indices[e.key])
+        ]
+        if [(l.identity.link_id, l.identity.src_router, l.identity.dst_router) for l in noc.r2r_links] != expected_links:
+            raise ValueError("encoder runtime links differ from canonical topology order")
+    return nocs, topology

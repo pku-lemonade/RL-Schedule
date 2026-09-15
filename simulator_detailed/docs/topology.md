@@ -229,3 +229,9 @@ Replay accounting follow-up: all packet counts now reuse integer
 retains its final partial flit in the result, without allocating that packet. Nine
 replay tests, strict Pyright and applicable Ruff pass. Example identities/timing
 remain unchanged; this does not claim that impractically large traffic was executed.
+
+Encoder admission follow-up: the tensor entry point delegates runtime input checks
+to `require_legacy_nocs()`. This dependency-free-of-ML guard rejects raw replay
+documents, missing/mismatched fabrics and runtime router/link ordering inconsistent
+with the graph. Five real offline consumer tests pass, including actual NoC objects;
+strict Pyright and scoped Ruff pass. Tensor execution remains unavailable.
