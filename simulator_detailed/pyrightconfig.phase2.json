@@ -7,6 +7,7 @@
     "configs/schemas/arch_config.py",
     "configs/schemas/failure_configs.py",
     "configs/schemas/hardware_profile.py",
+    "configs/schemas/topology.py",
     "core.py",
     "dma_endpoint.py",
     "endpoint_registry.py",
@@ -17,6 +18,7 @@
     "predictor/topology.py",
     "run.py",
     "tracing.py",
+    "topology.py",
     "utils/definitions.py",
     "utils/dfg.py",
     "utils/task.py"
