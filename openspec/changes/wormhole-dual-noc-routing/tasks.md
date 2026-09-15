@@ -1,10 +1,10 @@
 ## 1. Versioned transport contracts and admission (TR-D01, D06, D09)
 
-- [ ] 1.1 Add strict version-2 replay configuration in `simulator_detailed/configs/schemas/torus_replay.py` with tagged graph/profile input, transport binding, explicit native clock/timing/capacity fields and policy revision; verify round trips and rejection of unknown versions/fields, invalid units, nonfinite values and missing assumptions.
-- [ ] 1.2 Define finite packet/causal-response fixture and directed-slowdown records, including endpoint roles and interval rules; verify invalid classes, nested responses, duplicate identities, overlapping intervals and unsupported hardware modes fail at admission.
-- [ ] 1.3 Define immutable effective-plan/result/envelope contracts and deterministic source/config identity rules without enabling the CLI runtime; verify reordering normalization, path-independent identity, meaningful setting changes, and preservation of legacy flit serialization and version-1 schemas.
-- [ ] 1.4 Extend strict Pyright coverage for the new module(s) and add focused admission tests; verify the existing profile execution gate and detailed suite remain valid before any new runtime construction is enabled.
-- [ ] 1.5 Run the focused contract tests, applicable strict type/lint and `git diff --check`; review source/evidence assumptions and commit this completed part before part 2, recording the commands and commit in the change's delivery notes.
+- [x] 1.1 Add strict version-2 replay configuration in `simulator_detailed/configs/schemas/torus_replay.py` with tagged graph/profile input, transport binding, explicit native clock/timing/capacity fields and policy revision; verify round trips and rejection of unknown versions/fields, invalid units, nonfinite values and missing assumptions.
+- [x] 1.2 Define finite packet/causal-response fixture and directed-slowdown records, including endpoint roles and interval rules; verify invalid classes, nested responses, duplicate identities, overlapping intervals and unsupported hardware modes fail at admission.
+- [x] 1.3 Define immutable effective-plan/result/envelope contracts and deterministic source/config identity rules without enabling the CLI runtime; verify reordering normalization, path-independent identity, meaningful setting changes, and preservation of legacy flit serialization and version-1 schemas.
+- [x] 1.4 Extend strict Pyright coverage for the new module(s) and add focused admission tests; verify the existing profile execution gate and detailed suite remain valid before any new runtime construction is enabled.
+- [x] 1.5 Run the focused contract tests, applicable strict type/lint and `git diff --check`; review source/evidence assumptions and commit this completed part before part 2, recording the commands and commit in the change's delivery notes.
 
 ## 2. Canonical torus binding, route oracle and resource order (TR-D01..03)
 

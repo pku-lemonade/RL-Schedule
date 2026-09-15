@@ -11,6 +11,7 @@ unavailable. See that page for commands, byte/trace semantics and validation evi
 - [Configuration](config.md)
 - [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
 - [Topology and endpoint mapping](topology.md)
+- [Version-2 torus contracts and incremental implementation](torus_transport.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

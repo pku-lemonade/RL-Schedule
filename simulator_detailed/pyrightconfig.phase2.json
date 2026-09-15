@@ -8,6 +8,7 @@
     "configs/schemas/failure_configs.py",
     "configs/schemas/hardware_profile.py",
     "configs/schemas/topology.py",
+    "configs/schemas/torus_replay.py",
     "core.py",
     "dma_endpoint.py",
     "endpoint_registry.py",
@@ -25,7 +26,9 @@
     "utils/task.py",
     "transport.py",
     "replay_topology.py",
-    "topology_compatibility.py"
+    "topology_compatibility.py",
+    "torus_contract.py",
+    "torus_records.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
