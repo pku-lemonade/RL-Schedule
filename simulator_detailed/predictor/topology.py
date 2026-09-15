@@ -1,5 +1,8 @@
 from typing import Literal
 
+from ..configs.schemas.arch_config import NoCConfig
+from ..topology import Topology, topology_from_legacy
+from ..topology_compatibility import legacy_coordinates, require_legacy_topology
 from ..utils.definitions import NoCChannel
 
 PathNode = tuple[Literal["link", "core"], int]
@@ -8,8 +11,16 @@ PathNode = tuple[Literal["link", "core"], int]
 class Mesh:
     """Fabric-qualified directional mesh used by the failure predictor."""
 
-    def __init__(self, x: int, y: int, fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1)):
+    def __init__(self, x: int, y: int, fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1),
+                 *, topology: Topology | None = None):
+        self.topology = topology if topology is not None else topology_from_legacy(NoCConfig(x=x, y=y, fabric_ids=fabric_ids))
+        config = require_legacy_topology(self.topology, "detailed_predictor")
+        if (x, y) != (config.x, config.y) or set(fabric_ids) != set(config.fabric_ids) or len(set(fabric_ids)) != len(fabric_ids):
+            raise ValueError("mesh view dimensions/fabrics differ from canonical topology")
+        self.coordinates = legacy_coordinates(self.topology)
         self.fabric_ids = tuple(sorted(fabric_ids))
+        self.coordinate_ids = {xy: index for (fabric, index), xy in self.coordinates.items()
+                               if fabric == int(self.fabric_ids[0])}
         self.x = x
         self.y = y
         self.core_count = x * y
@@ -22,7 +33,10 @@ class Mesh:
         self._build_links()
 
     def _core_id(self, x: int, y: int) -> int:
-        return y * self.x + x
+        try:
+            return self.coordinate_ids[(x, y)]
+        except KeyError as exc:
+            raise ValueError("coordinate is outside the mesh view") from exc
 
     def _register_link(
         self,
@@ -48,19 +62,12 @@ class Mesh:
         return link_id
 
     def _build_links(self) -> None:
-        # Keep this order identical to NoC.build_connection_mesh().
-        for fabric_id in self.fabric_ids:
-            for y in range(self.y):
-                for x in range(self.x):
-                    current = self._core_id(x, y)
-                    if x < self.x - 1:
-                        east = self._core_id(x + 1, y)
-                        self._register_link(fabric_id, current, east)
-                        self._register_link(fabric_id, east, current)
-                    if y < self.y - 1:
-                        north = self._core_id(x, y + 1)
-                        self._register_link(fabric_id, current, north)
-                        self._register_link(fabric_id, north, current)
+        for edge in sorted(self.topology.graph.links, key=lambda e: (e.fabric_id, self.topology.link_indices[e.key])):
+            self._register_link(
+                NoCChannel(edge.fabric_id),
+                self.topology.router_indices[(edge.fabric_id, edge.src_router)],
+                self.topology.router_indices[(edge.fabric_id, edge.dst_router)],
+            )
 
     def manhattan_path_nodes(
         self,
@@ -68,14 +75,14 @@ class Mesh:
         dst: int,
         fabric_id: NoCChannel,
     ) -> list[PathNode]:
+        if fabric_id not in self.fabric_ids or (int(fabric_id), src) not in self.coordinates or (int(fabric_id), dst) not in self.coordinates:
+            raise ValueError("path endpoint/fabric is outside the mesh view")
         nodes: list[PathNode] = []
         if src == dst:
             return nodes
 
-        current_x = src % self.x
-        current_y = src // self.x
-        dst_x = dst % self.x
-        dst_y = dst // self.x
+        current_x, current_y = self.coordinates[(int(fabric_id), src)]
+        dst_x, dst_y = self.coordinates[(int(fabric_id), dst)]
         while current_x != dst_x:
             next_x = current_x + 1 if dst_x > current_x else current_x - 1
             current = self._core_id(current_x, current_y)

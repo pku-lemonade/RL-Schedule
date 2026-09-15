@@ -178,3 +178,43 @@ Example graph SHA-256:
 Example plan SHA-256:
 `1a59e3e5b7ed7c6155fe618ca13b025a9908959093d174eb89d9f1e3c8e09fba`.
 These identify synthetic test inputs, not hardware validation.
+
+## Existing model consumer contracts
+
+`topology_compatibility.require_legacy_topology()` accepts only named detailed
+predictor/encoder consumers and the legacy event contract. It revalidates the graph,
+checks the embedded NoC configuration/source hash, and compares full canonical
+structure and index maps with the shared legacy adapter. Equal counts or a supplied
+compatibility label do not establish support. Changed roles, directed edges,
+endpoint semantics or maps are incompatible. `legacy_event_rows()` rejects versioned
+graph/replay wrappers and raw replay events before feature construction.
+
+`predictor.topology.Mesh` is now a canonical legacy graph view: its constructor,
+sorted fabric order, flattened link indices and intermediate path-node ordering
+remain supported. Edges come from the shared adapter, and coordinates come from
+canonical records. The detailed builder and predictor accept an optional compiled
+`topology=`; supplied dimensions/fabrics must match. `detect()` uses the actual legacy
+NoC configuration; the predictor cache includes its graph identity. Guards run before
+feature generation/checkpoint loading. Non-Mesh builder inputs fail explicitly.
+
+The detailed predictor keeps **7-D** core and link features: core FLOP/rate/duration
+statistics and instruction density; link byte/throughput/per-hop-delay statistics and
+communication density. Physical cores are shared across fabrics; directed links are
+fabric-qualified. The detailed encoder keeps **4-D** rows `[kind, fabric, x, y]`,
+with a router row per fabric and a link row using its source-router coordinates.
+Its guard validates the complete fabric set and common topology before tensors.
+Existing checkpoint shape errors still require migration/retraining; shape agreement
+does not establish predictive accuracy on new hardware. Heterogeneous replay graphs
+and replay traces are unsupported by both consumers.
+
+Part 5: all 82 detailed tests pass, including four offline consumer tests and the
+legacy runtime regressions. Independent 3x2 expectations verify flattened edge,
+relation and XY path-node ordering; same-count role/edge changes and spoofed origins
+are rejected. Strict Pyright covers the dependency-free guard/view with zero errors
+or warnings. Applicable guard/view/test Ruff, correctness Ruff and Python syntax
+checks on the four changed optional-ML modules pass. Their real guard call sites and
+unchanged 7-D/4-D feature expressions were inspected. Torch and torch_geometric are
+unavailable: **tensor execution, checkpoint loading and model accuracy were not
+validated**. No fake-package tests substitute for those checks. Separate top-level
+simulator/predictor/embedding/RL code, model files, observations/actions, rewards and
+failure/workload datasets are unchanged.

@@ -24,7 +24,8 @@
     "utils/dfg.py",
     "utils/task.py",
     "transport.py",
-    "replay_topology.py"
+    "replay_topology.py",
+    "topology_compatibility.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

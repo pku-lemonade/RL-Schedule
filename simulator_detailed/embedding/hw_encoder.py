@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 
 from ..noc import NoC
+from ..topology_compatibility import legacy_coordinates, require_legacy_topology
 from ..utils.definitions import NoCChannel
 
 
@@ -19,6 +20,17 @@ def build_hardware_graph(
     """
     if not noc_instances:
         raise ValueError("hardware graph requires at least one fabric")
+
+    topology = next(iter(noc_instances.values())).topology
+    if topology is None:
+        raise ValueError("hardware graph requires canonical topology")
+    config = require_legacy_topology(topology, "detailed_encoder")
+    if set(noc_instances) != set(config.fabric_ids):
+        raise ValueError("hardware graph requires exactly the configured fabrics")
+    for fabric, noc in noc_instances.items():
+        if noc.fabric_id is not fabric or noc.topology is None or noc.topology.content_hash != topology.content_hash:
+            raise ValueError("hardware graph fabrics must share one canonical topology")
+    coordinates = legacy_coordinates(topology)
 
     routers = [
         (fabric_id, router)
@@ -37,16 +49,14 @@ def build_hardware_graph(
     
     # router node feature
     for router_index, (fabric_id, router) in enumerate(routers):
-        r_x, r_y = router.to_xy(router.id)
+        r_x, r_y = coordinates[(int(fabric_id), router.id)]
         node_features.append([0, fabric_id.value, r_x, r_y])
         router_indices[(fabric_id, router.id)] = router_index
         
     # link node feature
     for fabric_id, link in links:
         identity = link.identity
-        noc = noc_instances[fabric_id]
-        src_x = identity.src_router % noc.x
-        src_y = identity.src_router // noc.x
+        src_x, src_y = coordinates[(int(fabric_id), identity.src_router)]
         node_features.append([1, fabric_id.value, src_x, src_y])
 
     x = torch.tensor(node_features, dtype=torch.float)

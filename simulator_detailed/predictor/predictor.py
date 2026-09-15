@@ -8,6 +8,9 @@ import torch
 
 from .data_loader import ManycoreDatasetBuilder, TimeWindowConfig, build_sequences
 from .model_hetero import HeteroTemporalModel
+from ..topology import Topology, topology_from_legacy
+from ..configs.schemas.arch_config import NoCConfig
+from ..topology_compatibility import require_legacy_topology
 from ..utils.definitions import NoCChannel
 
 
@@ -21,7 +24,8 @@ class FailurePredictor:
                  lookback: int = 2,
                  device: str = 'cuda',
                  threshold: float = 0.5,
-                 fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1)):
+                 fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1),
+                 *, topology: Topology | None = None):
         """
         初始化预测器
         
@@ -35,6 +39,10 @@ class FailurePredictor:
             device: 运行设备 ('cuda' 或 'cpu')
             threshold: 预测阈值
         """
+        self.topology = topology if topology is not None else topology_from_legacy(NoCConfig(x=mesh_x, y=mesh_y, fabric_ids=fabric_ids))
+        config = require_legacy_topology(self.topology, "detailed_predictor")
+        if (mesh_x, mesh_y) != (config.x, config.y) or set(fabric_ids) != set(config.fabric_ids):
+            raise ValueError("predictor dimensions/fabrics differ from canonical topology")
         self.fabric_ids = fabric_ids
         self.mesh_x = mesh_x
         self.mesh_y = mesh_y
@@ -54,7 +62,7 @@ class FailurePredictor:
         self.window_cfg.min_events_per_window = 1
         
         # 初始化数据构建器
-        self.builder = ManycoreDatasetBuilder(mesh_x, mesh_y, "Mesh", self.window_cfg, fabric_ids)
+        self.builder = ManycoreDatasetBuilder(mesh_x, mesh_y, "Mesh", self.window_cfg, fabric_ids, topology=self.topology)
         
         # 加载模型
         self.model = self._load_model(model_path)
@@ -68,6 +76,7 @@ class FailurePredictor:
     
     def _load_model(self, model_path: str) -> HeteroTemporalModel:
         """加载训练好的模型"""
+        require_legacy_topology(self.topology, "detailed_predictor")
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"模型文件不存在: {model_path}")
         
@@ -76,13 +85,9 @@ class FailurePredictor:
             'core': 7,  # 7维特征
             'link': 7,  # 7维特征
         }
-        core_count = self.mesh_x * self.mesh_y
-        directional_links_per_fabric = 2 * (
-            (self.mesh_x - 1) * self.mesh_y
-            + self.mesh_x * (self.mesh_y - 1)
-        )
-        link_count = len(self.fabric_ids) * directional_links_per_fabric
-        
+        core_count = self.builder.mesh.core_count
+        link_count = self.builder.mesh.link_count
+
         model = HeteroTemporalModel(
             in_dims=in_dims,
             core_count=core_count,
@@ -104,6 +109,9 @@ class FailurePredictor:
         return model
     
     def predict(self, graphs, verbose: bool = True) -> Tuple[List[float], List[float], Dict[str, Any]]:
+        require_legacy_topology(self.topology, "detailed_predictor")
+        if isinstance(graphs, dict):
+            raise ValueError("predict expects legacy feature graphs, not a topology/replay document")
         if not graphs:
             raise ValueError('No graphs built from trace directory')
         

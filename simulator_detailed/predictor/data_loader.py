@@ -7,6 +7,8 @@ import numpy as np
 import torch
 from torch_geometric.data import HeteroData
 
+from ..topology import Topology
+from ..topology_compatibility import legacy_event_rows, require_legacy_topology
 from ..utils.definitions import NoCChannel
 from .topology import Mesh, parse_fabric_id
 
@@ -64,14 +66,15 @@ class ManycoreDatasetBuilder:
                  y: int,
                  noc_type: str,
                  window_cfg: TimeWindowConfig,
-                 fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1)):
-        if noc_type == 'Mesh':
-            self.mesh = Mesh(x, y, fabric_ids)
+                 fabric_ids: tuple[NoCChannel, ...] = (NoCChannel.CH0, NoCChannel.CH1),
+                 *, topology: Topology | None = None):
+        if noc_type != 'Mesh':
+            raise ValueError("detailed predictor requires legacy Mesh topology")
+        self.mesh = Mesh(x, y, fabric_ids, topology=topology)
         self.window_cfg = window_cfg
 
     def _calculate_link_endpoint(self, router_id: int, direction: int) -> int:
-        rx = router_id % self.mesh.x
-        ry = router_id // self.mesh.x
+        rx, ry = self.mesh.coordinates[(int(self.mesh.fabric_ids[0]), router_id)]
         match direction:
             case 0:  # NORTH (y+1)
                 if ry >= self.mesh.y - 1:
@@ -114,6 +117,9 @@ class ManycoreDatasetBuilder:
         # tmp = _load_json(comp_path) if os.path.exists(comp_path) else []
         # comp_events = tmp['trace']
 
+        require_legacy_topology(self.mesh.topology, "detailed_predictor")
+        comp_events = legacy_event_rows(comp_events, "compute")
+        comm_events = legacy_event_rows(comm_events, "communication")
         windows = _split_windows(comm_events, comp_events, self.window_cfg)
 
         # Optional failure annotations
@@ -186,10 +192,13 @@ class ManycoreDatasetBuilder:
         comm_path = os.path.join(trace_dir, 'comm_trace.json')
         comp_path = os.path.join(trace_dir, 'comp_trace.json')
         tmp = _load_json(comm_path) if os.path.exists(comm_path) else {}
-        comm_events = tmp.get('trace', [])
+        comm_events = legacy_event_rows(tmp, "communication")
         tmp = _load_json(comp_path) if os.path.exists(comp_path) else {}
-        comp_events = tmp.get('trace', [])
+        comp_events = legacy_event_rows(tmp, "compute")
 
+        require_legacy_topology(self.mesh.topology, "detailed_predictor")
+        comp_events = legacy_event_rows(comp_events, "compute")
+        comm_events = legacy_event_rows(comm_events, "communication")
         windows = _split_windows(comm_events, comp_events, self.window_cfg)
 
         # Optional failure annotations
@@ -254,6 +263,9 @@ class ManycoreDatasetBuilder:
     def _build_window_graph(self,
                             comm_win: List[Dict[str, Any]],
                             comp_win: List[Dict[str, Any]]) -> HeteroData:
+        require_legacy_topology(self.mesh.topology, "detailed_predictor")
+        comm_win = legacy_event_rows(comm_win, "communication")
+        comp_win = legacy_event_rows(comp_win, "compute")
         mesh = self.mesh
         window_len = float(self.window_cfg.window_size)
 
