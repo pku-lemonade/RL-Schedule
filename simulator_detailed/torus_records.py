@@ -159,6 +159,8 @@ class TransportTraceEvent(GraphRecord):
         "transfer_start", "transfer_end", "link_launch", "serialization_end",
         "link_arrive", "credit_wait", "credit_return", "arbitration_wait",
         "arrival_order_wait", "sink_complete", "response_ready", "failure_start", "failure_end",
+        "owner_acquire", "owner_release", "credit_reserve", "link_ready", "link_take",
+        "credit_release", "propagation_start",
     ]
     time_aci_cycles: Cycles
     fabric_id: Index

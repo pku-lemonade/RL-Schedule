@@ -16,11 +16,11 @@
 
 ## 3. Finite lanes and one physical serializer (TR-D03, D04, D06)
 
-- [ ] 3.1 Add the generic opt-in lane/credit kernel in `simulator_detailed/virtual_channel.py` with explicit bounded storage and exact token lifecycle; verify tiny capacities, delayed returns, queue/register accounting, overflow/double-return rejection and cross-plan rejection without state mutation.
-- [ ] 3.2 Implement independent per-lane FIFO/packet ownership and fair eligible-lane arbitration over one physical serializer; verify a zero-credit or idle-owner lane cannot block ready lanes, same-lane packets retain order and different lanes share rather than multiply bandwidth.
-- [ ] 3.3 Implement explicit native-to-ACI serialization, launch spacing, propagation and bounded staging, reusing/extracting only appropriate pure helpers; verify two width/clock analytical cases and backpressure from small capacity without silently enlarging its budget.
-- [ ] 3.4 Add lane/token/stage events and occupancy/drain inspection needed to diagnose kernel behavior; verify events reconcile to actual launches, credits and configured bounds, and any shared-helper extraction retains the legacy custom-mesh timing fixture.
-- [ ] 3.5 Run focused kernel/analytical tests, strict type/lint and affected legacy link tests; audit every shared grant for downstream waits and every retained flit for bounded storage, then commit this part before part 4.
+- [x] 3.1 Add the generic opt-in lane/credit kernel in `simulator_detailed/virtual_channel.py` with explicit bounded storage and exact token lifecycle; verify tiny capacities, delayed returns, queue/register accounting, overflow/double-return rejection and cross-plan rejection without state mutation.
+- [x] 3.2 Implement independent per-lane FIFO/packet ownership and fair eligible-lane arbitration over one physical serializer; verify a zero-credit or idle-owner lane cannot block ready lanes, same-lane packets retain order and different lanes share rather than multiply bandwidth.
+- [x] 3.3 Implement explicit native-to-ACI serialization, launch spacing, propagation and bounded staging, reusing/extracting only appropriate pure helpers; verify two width/clock analytical cases and backpressure from small capacity without silently enlarging its budget.
+- [x] 3.4 Add lane/token/stage events and occupancy/drain inspection needed to diagnose kernel behavior; verify events reconcile to actual launches, credits and configured bounds, and any shared-helper extraction retains the legacy custom-mesh timing fixture.
+- [x] 3.5 Run focused kernel/analytical tests, strict type/lint and affected legacy link tests; audit every shared grant for downstream waits and every retained flit for bounded storage, then commit this part before part 4.
 
 ## 4. Cut-through torus router and one-way replay (TR-D02..04, D08)
 

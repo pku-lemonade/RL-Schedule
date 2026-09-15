@@ -1,7 +1,8 @@
 # Version-2 torus transport: incremental delivery
 
-The configuration/record contracts and pure topology/route compiler are implemented
-(parts 1–2 of `wormhole-dual-noc-routing`). They do **not** execute torus traffic.
+The configuration/record contracts, topology/route compiler and isolated lane/link
+kernel are implemented (parts 1–3 of `wormhole-dual-noc-routing`). The kernel executes
+bounded single-channel fixtures; it does **not** yet execute complete torus replays.
 The existing CLI still accepts only version-1 replay. Profile inspection remains
 inventory-only and full profile/DFG execution remains gated.
 
@@ -94,12 +95,11 @@ credit returns and packet owners count as pending even after payload delivery.
 Credit-return events require lane/token identity; physical-launch events require
 lane, packet, sequence, launch factor and byte cost.
 
-These records are **data contracts, not runtime admission tokens**. They do not yet
-prove that routes realize a torus, that ports/targets exist, that the listed packets
-and resources exhaust a compiled runtime, or that a trace was produced by execution.
-Tests manually construct record fixtures to validate these constraints. The next
-parts must compile graph permissions and the dateline dependency policy, validate
-envelopes against an admitted plan, and produce complete runtime accounting.
+These records are **data contracts, not runtime admission tokens**. Structural
+record checks alone do not prove route validity or exhaustive runtime accounting.
+Part 1 tests manually construct record fixtures. Parts 2–3 add the actual topology
+compiler and per-channel envelope checks described below; complete replay resource
+accounting still requires the router and endpoint runtime.
 
 ## Validation and remaining scope
 
@@ -154,8 +154,93 @@ request dependency. The resulting graph is checked with a topological sort and
 declared ranks. This is a static policy check, not proof of runtime scheduling or
 silicon VC behavior.
 
-Still pending: finite VC/credit kernel, cut-through routing, causal response execution,
-directed slowdown execution, runtime traces and version-2 CLI integration. Hardware
+Still pending after part 2: the runtime work described in the following section
+and the remaining router/endpoint/replay integration. Hardware
 VC encoding/buddy/priority modes, NIU packetization/transactions, memory/compute
 execution, multicast/synchronization, tensor/checkpoint execution and hardware
 calibration are not provided by these records.
+
+
+## Part 3: bounded lanes and shared physical service
+
+`virtual_channel.py` adds an isolated SimPy link kernel. `LinkContract.from_plan`
+projects a compiled plan into immutable channel settings and packet templates. It
+resolves network/local overrides and profile quantities through the existing
+prepared contract. `envelope(packet, index)` produces metadata for the admitted
+channel hop. Reservation revalidates every field against that template, including
+plan hash, payload/padding, sequence bounds, endpoints, class, dateline, hop and
+burst quantum, before changing any resource or trace. Configured slowdowns are
+explicitly rejected until part 6 implements them.
+
+Network channels have four modeled lanes; local channels have two class lanes.
+`VirtualChannelLink` exposes nonblocking operations: `try_reserve` returns a token
+or `None`, `make_ready` publishes its already charged flit, `take` transfers a
+received token into consumer-held storage, and `release` starts credit return.
+Callers wait on `changed` while retaining their own charged upstream storage.
+There is no pending SimPy put/get queue containing additional uncharged flits.
+Tokens are checked by instance identity, so equal-looking IDs from another link
+instance cannot authorize staging or credit release. Duplicate/out-of-order
+flits and double release fail before state changes.
+
+| Resource | Allocation and release boundary |
+| --- | --- |
+| Per-lane effective budget B | Reservation through delayed credit return; includes reserved, ready, serializing, propagating, received and consumer-held flits |
+| Ready/receive lane FIFOs | References to the same tokens already charged to B; each therefore contains at most B flits |
+| Shared wire staging S | Launch through completed propagation/arrival; counts serializing and propagating flits, across all lanes |
+| Serializer | One active serialization; configured launch spacing may add a finite cooldown |
+| Packet owner | HEAD reservation through TAIL launch; an idle partial packet remains pending even with all its current credits returned |
+
+Staging is a **subset** of occupied lane tokens, with an additional shared bound;
+its capacity does not add to B or create more lane credits. A ready flit awaits
+staging in its lane storage, so producer callback order cannot monopolize shared
+staging. The arbiter chooses ready lanes in round-robin order, bounded by the
+smaller of configured link quantum and current packet quantum. An empty lane
+releases unused quantum, and a new packet receives a fresh turn. Ownership never
+interleaves packets within one lane; ownership in one lane does not block others.
+
+The wire reserves staging before launch and waits only for its finite serialization
+and launch gap. Propagation is separately scheduled and never waits for receiver
+capacity: that storage was reserved before readiness. Receiver-held tokens continue
+to consume B until the caller releases them. Arrival, consumption, credit return
+and staging release are distinct boundaries. Serialization completion changes
+state before another launch, including when their timestamps coincide.
+
+At every observable boundary, `B = available + occupied + pending_returns`.
+`resources()` returns immutable lane counters, peaks and owners. `inspect()` adds
+individual token stages, shared staging occupancy/peak, serializer status, effective
+native/ACI timing, and actual launched bytes. Lane/token events record reservation,
+readiness, ownership, launch, serialization/propagation, arrival, take and return.
+Only `link_launch` charges physical/payload bytes. `is_drained` includes delayed
+credits, partial packet owners, wire work and cooldown, not just received bytes.
+
+The dependency audit for this part is limited to the link kernel: packet owners
+may wait for their lane budget; ready lane tokens may wait for shared staging and
+wire service. Once wire work starts it has destination capacity and finite service,
+so it cannot wait on another lane, owner or sink while holding the serializer.
+Eventually publishing each reserved flit and releasing consumer-held storage remain
+caller obligations. The full router/endpoint resource-order audit is still pending.
+
+Fourteen focused tests check accounting after every SimPy event, bounded shared
+staging, four-lane fairness with unequal quanta, idle/credit-starved lane bypass,
+FIFO packets longer than capacity, early delivery before TAIL launch, foreign or
+repeated tokens, exact payload/padded bytes, and idle-with-owner incompleteness.
+Independent three-flit timelines use a 32-byte physical flit and 500 MHz ACI clock:
+
+| Usable width / NoC clock / spacing / propagation | Launch times (ACI) | Arrival times (ACI) | Drain after 1 ACI sink service and 2 native credit cycles |
+| --- | --- | --- | --- |
+| 96 bits / 1 GHz / 4 native / 3 native | 0, 2, 4 | 3, 5, 7 | 9 |
+| 256 bits / 250 MHz / 2 native / 3 native | 0, 4, 8 | 8, 12, 16 | 21 |
+
+A separate capacity-one case launches at 0, 6, 12 ACI cycles where capacity three
+permits 0, 1, 2; no minimum window is imposed or enlarged. One shared staging slot
+also limits four ready lanes to one launch every 2.5 ACI cycles in its fixture.
+These values are analytical checks of explicit synthetic settings, not silicon
+measurements. The generic kernel reuses the existing integer flit-count helper;
+legacy `Link`, `Router`, flit serialization and timing helpers remain unchanged.
+
+Still pending: router transfer pipelines and multi-hop forwarding (part 4), causal
+response production and endpoint storage (part 5), directed failure timing (part 6),
+and version-2 CLI/result integration (part 7). Manually driving response-class lane
+fixtures tests class separation; it does not implement causal responses. The plan
+continues to report `can_execute: false` for complete replay, and no full-profile,
+NIU, memory, compute, detector or hardware timing support is implied.

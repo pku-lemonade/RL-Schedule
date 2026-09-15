@@ -30,7 +30,8 @@
     "torus_contract.py",
     "torus_records.py",
     "torus.py",
-    "torus_dependencies.py"
+    "torus_dependencies.py",
+    "virtual_channel.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
