@@ -28,7 +28,14 @@ from .configs.schemas.topology import (
 from .noc import FlitAction, Link, NoCTracer, Router
 from .routing import CompiledRoute, ExplicitRouting, channel_id
 from .topology import Topology, canonical_json, content_digest
-from .utils.definitions import BurstLenMode, Flit, FlitConfig, FlitType, NoCChannel
+from .utils.definitions import (
+    BurstLenMode,
+    Flit,
+    FlitConfig,
+    FlitType,
+    NoCChannel,
+    compute_flit_count,
+)
 
 ChannelKind = Literal["network", "inject", "eject"]
 
@@ -220,7 +227,7 @@ class ReplayRuntime:
         source = self.plan.routing.endpoint(traffic.source)
         destination = self.plan.routing.endpoint(traffic.destination)
         fmt = self.plan.routing.formats[traffic.fabric_id]
-        count = math.ceil(traffic.payload_bytes / fmt.payload_capacity_bytes)
+        count = compute_flit_count(traffic.payload_bytes, fmt.payload_capacity_bytes)
         assert source.inject_port is not None and destination.eject_port is not None
         return tuple(Flit(
             format=fmt, mesh_x=None, mesh_y=None, transport_id=self.plan.routing.plan_id,
@@ -249,7 +256,7 @@ class ReplayRuntime:
                 raise RuntimeError("flit delivered to the wrong terminal")
             received = self._received[traffic.transfer_id]
             fmt = self.plan.routing.formats[traffic.fabric_id]
-            count = math.ceil(traffic.payload_bytes / fmt.payload_capacity_bytes)
+            count = compute_flit_count(traffic.payload_bytes, fmt.payload_capacity_bytes)
             index = len(received)
             expected_bytes = min(fmt.payload_capacity_bytes, traffic.payload_bytes - index * fmt.payload_capacity_bytes)
             if index >= count or flit.flit_type != _flit_type(index, count) or flit.payload_bytes != expected_bytes:
@@ -322,7 +329,7 @@ class ReplayRuntime:
         for traffic in self.plan.config.traffic:
             received = self._received[traffic.transfer_id]
             fmt = self.plan.routing.formats[traffic.fabric_id]
-            count = math.ceil(traffic.payload_bytes / fmt.payload_capacity_bytes)
+            count = compute_flit_count(traffic.payload_bytes, fmt.payload_capacity_bytes)
             transfers.append(ReplayTransferResult(
                 transfer_id=traffic.transfer_id, fabric_id=traffic.fabric_id, source=traffic.source,
                 destination=traffic.destination, expected_payload_bytes=traffic.payload_bytes,

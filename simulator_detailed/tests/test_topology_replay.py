@@ -161,6 +161,17 @@ class TopologyReplayTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             changed.channels["new"] = None
 
+    def test_pending_large_transfer_preserves_integer_byte_accounting(self):
+        graph, replay = documents()
+        size = 12 * (2 ** 53) + 1
+        replay["traffic"] = [{**replay["traffic"][2], "payload_bytes": size, "start_aci_cycles": 2}]
+        replay["max_aci_cycles"] = 1
+        result = ReplayRuntime(plan_for(graph, replay)).run()
+        self.assertEqual(result.status, "incomplete")
+        self.assertEqual(result.expected_payload_bytes, size)
+        self.assertEqual(result.transfers[0].expected_flits, 2 ** 53 + 1)
+        self.assertEqual(result.packet_physical_bytes, (2 ** 53 + 1) * 16)
+
     def test_preconstruction_invalid_configuration(self):
         cases = [
             lambda g, r: r.update(schema_version=True),

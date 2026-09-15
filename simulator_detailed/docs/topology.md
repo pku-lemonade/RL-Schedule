@@ -223,3 +223,9 @@ Part-5 follow-up: the late strict-type run flagged a redundant `isinstance` unde
 a `Topology`-only annotation. The public guard now accepts `object`, narrows it
 explicitly, and tests rejection of raw result dictionaries. Four focused consumer
 tests, strict Pyright (zero errors/warnings) and applicable Ruff pass after the fix.
+
+Replay accounting follow-up: all packet counts now reuse integer
+`compute_flit_count()`. An incomplete transfer above the float exact-integer range
+retains its final partial flit in the result, without allocating that packet. Nine
+replay tests, strict Pyright and applicable Ruff pass. Example identities/timing
+remain unchanged; this does not claim that impractically large traffic was executed.
