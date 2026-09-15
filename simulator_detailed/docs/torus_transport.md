@@ -248,11 +248,10 @@ NIU, memory, compute, detector or hardware timing support is implied.
 ## Part 4: cut-through router and one-way replay
 
 `torus_transport.py` adds the first executing runtime around a compiled
-`TorusPlan`. It accepts finite `one_way` request-class traffic only. Every route
-hop is bound to one shared `VirtualChannelLink`; repeated route use therefore
-shares the physical serializer and lane credits. Response fixtures and directed
-slowdowns are rejected explicitly until parts 5 and 6 rather than being treated
-as one-way traffic.
+`TorusPlan`. Part 4 established finite `one_way` request-class traffic. Every
+route hop is bound to one shared `VirtualChannelLink`; repeated route use therefore
+shares the physical serializer and lane credits. Part 5 extends the same runtime
+with bounded causal responses, while directed slowdowns remain a later scope.
 
 Injection, forwarding and ejection are separate bounded processes. Injection
 packet slots use each admitted source endpoint's finite queue capacity. A
@@ -291,12 +290,41 @@ memory, compute and silicon timing support as unavailable/unvalidated.
 Focused transport checks cover same-router delivery, 10-flit packets longer than
 the configured lane capacity, shared-route packet contention, a direct two-output
 pipeline overlap, both fabrics on the assumed 10x12 profile, cycle-limit pending
-state, delayed final credits after payload delivery, and rejection of response or
+state, delayed final credits after payload delivery, and explicit rejection of
 slowdown modes. The profile run is an assumed inventory/transport fixture, not a
 hardware execution or timing calibration.
 
-Still pending: finite causal response descriptors and independent response sinks
-(part 5), directed slowdown snapshots and reconstructable failure traces (part 6),
-and CLI/examples/support-boundary integration (part 7). Full NIU packetization,
-memory service, compute/DFG execution, multicast and hardware VC/buddy/priority
-behavior remain outside this child.
+## Part 5: bounded causal request/response fixtures
+
+`TorusTransport` now admits the schema's finite `request_response` traffic. The
+compiled request route is consumed first; after the responder's request sink has
+received and serviced every flit, one bounded response descriptor is acquired and
+the declared response service time runs. Exactly one response packet is then
+created with the same transfer identity and `traffic_class="response"`, using the
+compiled reverse route on the same fabric. Independent request and response packet
+states preserve byte/flit accounting and causal identity without invoking DMA,
+memory or compute services.
+
+Each responder has a finite `response_descriptors` resource with an explicit
+capacity and active request owners. Response injection has its own endpoint queue
+ownership and uses the responder's injection channel/lane, while the originating
+request source's queue remains independent. Response forwarding and the terminal
+response sink are started as separate bounded processes, so request and response
+classes share physical serializers through their plan-bound channels while retaining
+separate lane ownership. A descriptor is released only after the response packet
+has been admitted to its local injection channel.
+
+Result accounting includes both request and response packets, actual launches on
+both directions, response-ready events, descriptor occupancy/peaks and pending
+owners. A request can be fully received while a slow responder service leaves its
+response descriptor active; the result stays `incomplete` until response injection,
+ejection, delayed credits, router stages and descriptors all drain. Descriptor
+capacity-one and multi-request tests establish exactly-once response generation,
+causal byte totals, same-fabric reverse paths and bounded endpoint storage. This is
+transport-only behavior: NIU packetization, memory transactions, compute execution,
+multicast and silicon timing remain outside the supported scope.
+
+Directed slowdown snapshots and reconstructable failure traces (part 6), and
+CLI/examples/support-boundary integration (part 7), remain pending. Full NIU
+packetization, memory service, compute/DFG execution, multicast and hardware
+VC/buddy/priority behavior remain outside this child.

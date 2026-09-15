@@ -1,4 +1,4 @@
-"""Cut-through torus transport checks; causal responses and slowdown are later parts."""
+"""Cut-through torus transport and bounded causal response checks."""
 
 import unittest
 
@@ -32,6 +32,31 @@ class TorusTransportTests(unittest.TestCase):
         else:
             graph = small_graph()
         return TorusPlan.compile(TorusReplay.model_validate(data), graph)
+
+    def response_plan(self, *, requests=1, response_service=3, sink_service=1):
+        config = small_replay((2, 1))
+        data = config.model_dump(mode="json")
+        data["slowdowns"] = []
+        data["binding"]["endpoints"][0].update(
+            roles=["request_source", "response_sink"],
+            injection_queue_capacity_packets=1,
+        )
+        data["binding"]["endpoints"][0]["sink_service"]["cycles"] = sink_service
+        data["binding"]["endpoints"][1].update(
+            roles=["responder"], inject_port="local", injection_queue_capacity_packets=1,
+            response_queue_capacity_packets=1,
+            response_service={"cycles": response_service, "timebase": "noc",
+                              "evidence": {"status": "assumed", "description": "test"}},
+        )
+        traffic = []
+        for index in range(requests):
+            traffic.append({"kind": "request_response", "transfer_id": f"read-{index}",
+                            "fabric_id": 0, "source": "src", "destination": "dst",
+                            "payload_bytes": 9, "start_aci_cycles": 0,
+                            "burst_quantum_flits": 1, "response_payload_bytes": 25,
+                            "response_burst_quantum_flits": 1})
+        data["traffic"] = traffic
+        return TorusPlan.compile(TorusReplay.model_validate(data), small_graph())
 
     def test_local_same_router_delivery_and_counts(self):
         result = TorusTransport(self.plan(same_router=True, size=9)).run()
@@ -110,18 +135,65 @@ class TorusTransportTests(unittest.TestCase):
         self.assertTrue(any(resource.pending_returns for resource in result.resources))
 
     def test_response_and_slowdown_modes_are_not_silently_reinterpreted(self):
-        response_data = small_replay((2, 1)).model_dump(mode="json")
-        response_data["slowdowns"] = []
-        response_data["traffic"][0]["kind"] = "request_response"
-        response_data["traffic"][0]["response_payload_bytes"] = 9
-        response_data["traffic"][0]["response_burst_quantum_flits"] = 1
-        with self.assertRaisesRegex(ValueError, "response"):
-            TorusTransport(TorusPlan.compile(TorusReplay.model_validate(response_data), small_graph()))
+        result = TorusTransport(self.response_plan()).run()
+        self.assertEqual(result.status, "complete")
+        self.assertEqual({packet.packet.traffic_class for packet in result.packets}, {"request", "response"})
         slowdown_data = small_replay((2, 1)).model_dump(mode="json")
         slowdown_data["slowdowns"] = [{"failure_id": "f", "fabric_id": 0, "link_id": "t0_0/x+",
                                         "start_aci_cycles": 0, "end_aci_cycles": 3, "factor": 2}]
         with self.assertRaisesRegex(ValueError, "slowdown"):
             TorusTransport(TorusPlan.compile(TorusReplay.model_validate(slowdown_data), small_graph()))
+
+    def test_causal_response_is_generated_once_after_request_service(self):
+        result = TorusTransport(self.response_plan()).run()
+        self.assertEqual(result.status, "complete")
+        self.assertEqual(len(result.packets), 2)
+        self.assertEqual(result.expected_payload_bytes, 34)
+        self.assertEqual(result.received_payload_bytes, 34)
+        self.assertEqual({packet.packet.traffic_class for packet in result.packets}, {"request", "response"})
+        ready = [event for event in result.trace if event.action == "response_ready"]
+        self.assertEqual(len(ready), 1)
+        descriptors = [resource for resource in result.resources if resource.kind == "response_descriptors"]
+        self.assertEqual(len(descriptors), 1)
+        self.assertEqual(descriptors[0].peak_occupied, 1)
+        self.assertTrue(descriptors[0].is_drained)
+
+    def test_descriptor_capacity_one_serializes_multiple_responses(self):
+        result = TorusTransport(self.response_plan(requests=2, response_service=5, sink_service=7)).run(max_aci_cycles=10_000)
+        self.assertEqual(result.status, "complete")
+        self.assertEqual(len(result.packets), 4)
+        responses = [packet for packet in result.packets if packet.packet.traffic_class == "response"]
+        self.assertEqual(len(responses), 2)
+        self.assertTrue(all(packet.received_payload_bytes == 25 for packet in responses))
+        self.assertEqual(len([event for event in result.trace if event.action == "response_ready"]), 2)
+        descriptor = next(resource for resource in result.resources if resource.kind == "response_descriptors")
+        self.assertEqual(descriptor.peak_occupied, 1)
+        self.assertTrue(descriptor.is_drained)
+
+    def test_response_service_pending_is_incomplete_with_descriptor_owner(self):
+        result = TorusTransport(self.response_plan(response_service=10_000)).run(max_aci_cycles=20)
+        self.assertEqual(result.status, "incomplete")
+        self.assertIn(result.reason, {"cycle_limit", "idle_with_pending"})
+        request = next(packet for packet in result.packets if packet.packet.traffic_class == "request")
+        response = next(packet for packet in result.packets if packet.packet.traffic_class == "response")
+        self.assertEqual(request.received_payload_bytes, 9)
+        self.assertIsNone(response.first_injection_aci_cycles)
+        descriptor = next(resource for resource in result.resources if resource.kind == "response_descriptors")
+        self.assertEqual(descriptor.occupied, 1)
+        self.assertFalse(descriptor.is_drained)
+
+    def test_request_response_drains_on_both_assumed_fabrics(self):
+        config, profile = profile_replay()
+        data = config.model_dump(mode="json")
+        data["slowdowns"] = []
+        plan = TorusPlan.compile(TorusReplay.model_validate(data), profile)
+        result = TorusTransport(plan).run(max_aci_cycles=100_000)
+        self.assertEqual(result.status, "complete")
+        self.assertEqual({packet.packet.traffic_class for packet in result.packets}, {"request", "response"})
+        self.assertEqual(result.received_payload_bytes, result.expected_payload_bytes)
+        self.assertEqual(len([event for event in result.trace if event.action == "response_ready"]), 2)
+        self.assertEqual({resource.fabric_id for resource in result.resources
+                          if resource.kind == "response_descriptors"}, {0, 1})
 
     def test_router_pipeline_overlaps_independent_outputs_with_finite_capacity(self):
         import simpy

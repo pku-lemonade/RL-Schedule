@@ -158,9 +158,9 @@ is bounded by the admitted channel inventory. Independent outputs can overlap
 when transfer capacity permits; each physical link still has exactly one
 serializer.
 
-One-way traffic is now executable in memory through `TorusTransport.run`, while
-response traffic and slowdown schedules fail explicitly with a scope error. The
-runtime uses the existing plan/profile quantities and endpoint service declarations;
+One-way traffic and bounded causal request/response traffic are now executable in
+memory through `TorusTransport.run`, while slowdown schedules still fail explicitly
+with a scope error. The runtime uses the existing plan/profile quantities and endpoint service declarations;
 no device-specific clock, width or buffer constant was introduced. The output
 record is not yet a CLI artifact and no top-level `simulate()` or full profile/DFG
 path is enabled.
@@ -189,3 +189,50 @@ credit fixture reaches the expected payload before returning all credits and sta
 incomplete. Transfer and sink events use canonical plan/lane identities. Causal
 responses, failure snapshots, CLI dispatch, NIU transactions, memory/compute
 service and hardware timing calibration remain pending or unsupported.
+
+## Part 5: bounded causal request/response fixtures
+
+Tasks 5.1–5.5 are delivered in the commit containing this section, titled
+`feat: add bounded causal request response transport`, based on the next checkpoint
+commit. Production changes are in `simulator_detailed/torus_transport.py`; focused
+coverage is in `simulator_detailed/tests/test_torus_transport.py`.
+
+| Requirement subset | Executable evidence |
+| --- | --- |
+| TR-D03 / D05 | Finite responder descriptor resources, active owners, response service delay and exactly one response packet per admitted request; response packet IDs retain the request transfer ID with a separate traffic class |
+| TR-D04 | Request and response injection slots are independent endpoint resources; response and request lanes share physical links through the existing bounded serializer without sharing packet ownership |
+| TR-D08 | Version-2 result records include both packet classes, reverse-route launches, `response_ready` events, descriptor occupancy/peaks and incomplete descriptor/service pending state |
+
+The causal resource order is: request ejection and sink service → responder
+descriptor → response service → response injection queue/local lane → reverse route
+forwarding/ejection. Request sink credits are released before descriptor waiting, so
+a full descriptor queue does not retain a request physical grant. A response
+descriptor is released only after all response flits have been admitted to the
+responder's local injection channel. Descriptor capacity is finite and its owners
+are reported as request packet identities. The static dependency audit already
+rejects response-to-request edges and the runtime result remains incomplete when a
+descriptor or response service is pending.
+
+Validation on 2026-09-15:
+
+```bash
+.venv/bin/python -m unittest simulator_detailed.tests.test_torus_transport
+# 12 tests pass
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+# 127 tests pass, including the legacy topology/link/runtime suite
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+# 0 errors, 0 warnings
+.venv/bin/ruff check simulator_detailed/torus_transport.py simulator_detailed/tests/test_torus_transport.py
+# All checks passed
+openspec validate wormhole-dual-noc-routing --strict --no-interactive
+# Valid
+git diff --check
+# Clean
+```
+
+The response tests use configurable synthetic service, flit and queue values;
+they do not claim Wormhole silicon service latency. Both request and response
+transport remain in-memory and transport-only. Directed slowdown execution,
+version-2 CLI dispatch, NIU transactions, memory/compute service and hardware
+timing calibration remain pending or unsupported; no parent specs were synced,
+no archive was created and no push was performed.

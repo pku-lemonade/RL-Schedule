@@ -32,11 +32,11 @@
 
 ## 5. Bounded causal request/response fixtures (TR-D03, D05, D08)
 
-- [ ] 5.1 Add finite responder descriptors, active service registers and exactly-one response generation after request consumption/service; verify byte counts, causal IDs, same-fabric response routes and role restrictions without invoking DMA or memory services.
-- [ ] 5.2 Add independent request/response injection ownership and sink drain over shared local physical links; verify full request/descriptor queues cannot retain response resources or shared physical grants, and all endpoint storage stays within its declared bound.
-- [ ] 5.3 Stress simultaneous request/response traffic with descriptor capacity one, slow sinks, small lane buffers, unequal quanta and both wraps/fabrics; verify exactly-once responses, causal timing, credit conservation and complete resource drain.
-- [ ] 5.4 Extend the dependency audit and result pending-state reports through request ejection, descriptors, response injection and terminal sinks; verify a response-to-request dependency is rejected and a deliberately non-draining fixture reports incomplete instead of passing.
-- [ ] 5.5 Run focused response/endpoint/transport regressions and strict type/lint; document the finite-service/fairness/drain assumptions and transport-only scope, then commit this part before part 6.
+- [x] 5.1 Add finite responder descriptors, active service registers and exactly-one response generation after request consumption/service; verify byte counts, causal IDs, same-fabric response routes and role restrictions without invoking DMA or memory services.
+- [x] 5.2 Add independent request/response injection ownership and sink drain over shared local physical links; verify full request/descriptor queues cannot retain response resources or shared physical grants, and all endpoint storage stays within its declared bound.
+- [x] 5.3 Stress simultaneous request/response traffic with descriptor capacity one, slow sinks, small lane buffers, unequal quanta and both wraps/fabrics; verify exactly-once responses, causal timing, credit conservation and complete resource drain.
+- [x] 5.4 Extend the dependency audit and result pending-state reports through request ejection, descriptors, response injection and terminal sinks; verify a response-to-request dependency is rejected and a deliberately non-draining fixture reports incomplete instead of passing.
+- [x] 5.5 Run focused response/endpoint/transport regressions and strict type/lint; document the finite-service/fairness/drain assumptions and transport-only scope, then commit this part before part 6.
 
 ## 6. Directed slowdown and reconstructable timing traces (TR-D06..08)
 
