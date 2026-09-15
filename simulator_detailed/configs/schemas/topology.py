@@ -141,6 +141,13 @@ class TopologyOrigin(GraphRecord):
     document_json: str | None = None
 
 
+class ExplicitRoute(GraphRecord):
+    fabric_id: Index
+    source: Identifier
+    destination: Identifier
+    link_ids: tuple[Identifier, ...]
+
+
 class CanonicalTopology(GraphRecord):
     kind: Literal["canonical_topology"]
     schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]

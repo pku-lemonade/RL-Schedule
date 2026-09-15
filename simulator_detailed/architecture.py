@@ -99,7 +99,7 @@ class Arch:
                     link_name=f"R{id}->PE{id}",
                     noc_cycles_per_aci_cycle=noc_config.noc_cycles_per_aci_cycle,
                 )
-                router = noc.routers[id]
+                router = noc.routers[address.router_id]
                 binding = PEChannelBinding(
                     address=address,
                     tx_link=tx_link,

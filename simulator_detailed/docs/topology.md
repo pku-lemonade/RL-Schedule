@@ -1,9 +1,9 @@
 # Canonical topology and transport evidence
 
 This document tracks the incremental `generic-heterogeneous-topology` delivery.
-The first two parts add an immutable graph contract, deterministic inventory export,
-profile/mesh adapters and explicit legacy endpoint bindings. Directed graph runtime
-construction and explicit-graph replay are not implemented at this point.
+The first three parts add an immutable graph contract, deterministic inventory export,
+profile/mesh adapters, directed runtime bindings and validated routing policies.
+The standalone explicit-graph replay runner is the next implementation part.
 Hardware-profile execution and silicon timing remain unsupported/unvalidated.
 
 ## Baseline (2026-09-15)
@@ -67,7 +67,8 @@ return is accounted for as sync-plane timing.
 `topology_from_legacy()` generates explicit directed mesh records and old numeric
 indices. `Arch` shares the resulting graph with its registry and NoCs. The
 registry constructs only declared legacy PE/DMA bindings, never endpoints inferred
-from router presence. The old NoC edge builder is replaced in the next part.
+from router presence. NoC constructs directed links from this graph and binds each input/output half independently.
+Legacy XY uses canonical coordinates and output ports; it no longer regenerates edges.
 
 `topology_from_profile()` preserves the normalized profile and evidence as
 immutable canonical JSON with its source hash. The Wormhole example projects to
@@ -91,3 +92,32 @@ changed existing modules pass. Profile projection is checked against the existin
 validated profile inventory; custom mesh timing and paired failure behavior match
 the pre-change fixture. Graph ownership is shared; directed construction remains
 the next implementation part.
+
+## Directed transport and route safety
+
+`routing.py` separates next-hop selection from router arbitration. Explicit replay
+routes resolve fabric-qualified endpoint/port identities, visit each router at most
+once, and require enabled contiguous directed edges. A reverse path is never inferred.
+Graph flits carry the compiled plan identity and no mesh dimensions. Link admission
+checks plan, fabric, format and admitted channel before allocating credits; router
+admission checks the resolved input before creating reservations. Legacy FIXPATH
+remains unsupported. Local endpoints have explicit resolved transport records.
+
+The route compiler checks the union of channel dependencies across **all admitted
+routes**, including injection and ejection channels. A physical ring is allowed only
+when the admitted subset is acyclic. A finite packet may hold a switch grant while
+waiting for downstream credit; this follows the same input-to-output dependency.
+The input credit is returned at switch traversal, reservations do not themselves
+block other packets, and output arbitration is round-robin at finite burst boundaries.
+The replay runner must serialize whole packets on each source injection channel,
+use consistent per-fabric burst resolution, and drain sinks independently in finite
+time. These assumptions prevent an additional endpoint or burst-production wait
+cycle; this is a restricted model progress argument, not a general torus proof.
+
+Part 3: 70 detailed tests pass, including all-pairs independent XY checks on
+1x1/3x2/4x4 meshes, explicit/local paths, cyclic route unions, unchanged state on
+invalid admission and atomic/one-sided bindings. All saved legacy routes, completion
+times, burst/backpressure behavior and paired slowdown/recovery regressions pass.
+Strict Pyright reports zero errors/warnings; applicable new-file Ruff and changed-file
+correctness checks pass. The NMC contention benchmark now rejects geometry-free
+routers explicitly; its legacy calculations and behavior are unchanged.

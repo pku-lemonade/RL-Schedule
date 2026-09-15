@@ -17,6 +17,7 @@
     "pe_channel.py",
     "predictor/topology.py",
     "run.py",
+    "routing.py",
     "tracing.py",
     "topology.py",
     "utils/definitions.py",

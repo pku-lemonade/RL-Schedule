@@ -8,6 +8,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 
 from .configs.schemas.arch_config import LinkConfig, NoCConfig, RouterConfig
+from .routing import LegacyXYRouting, RoutingPolicy
 from .topology import Topology, topology_from_legacy
 from .utils.definitions import (
     DIR_EAST,
@@ -20,9 +21,9 @@ from .utils.definitions import (
     Flit,
     FlitConfig,
     FlitTrafficType,
+    FlitTransportContext,
     NoCChannel,
     NoCPlane,
-    direction_to_port,
 )
 
 TraceMessageKey = tuple[NoCChannel, int]
@@ -342,12 +343,18 @@ class Link:
         link_id: int | None = None,
         src_router: int | None = None,
         dst_router: int | None = None,
+        transport_context: FlitTransportContext | None = None,
+        graph_channel_id: str | None = None,
     ):
         if tracer.fabric_id is not fabric_id:
             raise ValueError(
                 f"{fabric_id.name} link cannot use {tracer.fabric_id.name} tracer"
             )
         self.env = env
+        if (transport_context is None) != (graph_channel_id is None):
+            raise ValueError("graph link requires both transport context and channel identity")
+        self.transport_context = transport_context
+        self.graph_channel_id = graph_channel_id
         self.config = config
         self.fabric_id = fabric_id
         self.tracer = tracer
@@ -408,6 +415,10 @@ class Link:
         if flit.format != self.flit_format:
             raise ValueError("flit and link formats do not match")
         flit.validate_transport()
+        if self.transport_context is not None and self.graph_channel_id is not None:
+            self.transport_context.validate_channel(flit, self.graph_channel_id)
+        elif flit.transport_id is not None:
+            raise ValueError("graph-context flit cannot enter a legacy link")
         return self.env.process(self._send_flit(flit))
 
     def recv_flit(self) -> Process:
@@ -539,15 +550,18 @@ class Router:
         env: simpy.Environment,
         config: RouterConfig,
         router_id: int,
-        x_dim: int,
-        y_dim: int,
+        x_dim: int | None,
+        y_dim: int | None,
         fabric_id: NoCChannel,
         tracer: NoCTracer,
+        *,
+        routing: RoutingPolicy | None = None,
+        transport_context: FlitTransportContext | None = None,
     ):
         self.id = router_id
         self.fabric_id = fabric_id
         self.name = f"{fabric_id.name}:R{router_id}"
-        if config.type != "XY":
+        if config.type != "XY" and routing is None:
             raise ValueError(
                 f"{self.name} supports only deterministic XY routing"
             )
@@ -567,15 +581,22 @@ class Router:
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.tracer = tracer
-
-        rx, ry = self.to_xy(router_id)
-        self.is_edge: dict[Direction, bool] = {
-            Direction.NORTH: ry == y_dim - 1,
-            Direction.SOUTH: ry == 0,
-            Direction.EAST: rx == x_dim - 1,
-            Direction.WEST: rx == 0,
-        }
-        direction_ports = (DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_WEST)
+        if routing is None:
+            if x_dim is None or y_dim is None:
+                raise ValueError("legacy router requires mesh dimensions")
+            routing = LegacyXYRouting(topology_from_legacy(NoCConfig(
+                x=x_dim, y=y_dim, fabric_ids=(fabric_id,), router=config
+            )), int(fabric_id))
+        self.routing = routing
+        self.transport_context = transport_context
+        self.is_edge: dict[Direction, bool] = {}
+        if x_dim is not None and y_dim is not None:
+            rx, ry = self.to_xy(router_id)
+            self.is_edge = {
+                Direction.NORTH: ry == y_dim - 1, Direction.SOUTH: ry == 0,
+                Direction.EAST: rx == x_dim - 1, Direction.WEST: rx == 0,
+            }
+        direction_ports = (DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_WEST) if x_dim is not None else ()
         self.port_in: dict[int, Link | None] = {
             port: None for port in direction_ports
         }
@@ -588,31 +609,37 @@ class Router:
         self._forwarder_started: dict[int, bool] = {}
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
-        for link in (link_in, link_out):
-            if link.fabric_id is not self.fabric_id:
-                raise ValueError(
-                    f"{self.name} cannot bind {link.link_name} from another fabric"
-                )
-            if link.tracer is not self.tracer:
-                raise ValueError(
-                    f"{self.name} cannot bind {link.link_name} with a different tracer"
-                )
-        if self.port_in.get(port) is not None or self.port_out.get(port) is not None:
+        self._validate_binding(port, link_in, incoming=True)
+        self._validate_binding(port, link_out, incoming=False)
+        self.bind_input(port, link_in)
+        self.bind_output(port, link_out)
+
+    def _validate_binding(self, port: int, link: Link, *, incoming: bool) -> None:
+        if link.env is not self.env or link.fabric_id is not self.fabric_id or link.tracer is not self.tracer:
+            raise ValueError(f"{self.name} cannot bind {link.link_name} from another environment/fabric/tracer")
+        if link.transport_context is not self.transport_context:
+            raise ValueError("router/link transport contexts must match")
+        ports = self.port_in if incoming else self.port_out
+        if ports.get(port) is not None:
             raise ValueError(f"{self.name} port {port} is already bound")
-        self.port_in[port] = link_in
-        self.port_out[port] = link_out
-        self.output_arbiters[port] = RoundRobinArbiter(self.env)
+        if any(value is link for value in ports.values()):
+            raise ValueError("link is already bound to another port on this router")
+
+    def bind_input(self, port: int, link: Link) -> None:
+        self._validate_binding(port, link, incoming=True)
+        self.port_in[port] = link
         self._forwarder_started[port] = True
         self.env.process(self._port_forwarder(port))
 
+    def bind_output(self, port: int, link: Link) -> None:
+        self._validate_binding(port, link, incoming=False)
+        self.port_out[port] = link
+        self.output_arbiters[port] = RoundRobinArbiter(self.env)
+
     def scale_link_delay(self, factor: float):
-        for port in self.port_in:
-            link_in = self.port_in[port]
-            link_out = self.port_out[port]
-            if link_in is not None:
-                link_in.scale_link_delay(factor)
-            if link_out is not None:
-                link_out.scale_link_delay(factor)
+        for link in set(self.port_in.values()) | set(self.port_out.values()):
+            if link is not None:
+                link.scale_link_delay(factor)
 
     def _port_forwarder(self, in_port: int) -> ProcessGenerator:
         in_link = self.port_in[in_port]
@@ -701,6 +728,8 @@ class Router:
 
     def _rc_compute(self, in_port: int, flit: Flit) -> PacketRouteState:
         flit.validate_transport()
+        self._validate_flit_fabric(flit)
+        self.routing.validate_router(flit, self.id, in_port)
         route_key = (in_port, flit.msg_id)
         if not flit.is_head:
             route_state = self.reservation.get(route_key)
@@ -720,18 +749,7 @@ class Router:
                 f"{self.name} received duplicate HEAD for message {flit.msg_id}"
             )
 
-        if not 0 <= flit.dst_router < self.x_dim * self.y_dim:
-            raise ValueError(f"destination router {flit.dst_router} is out of range")
-        rx, ry = self.to_xy(self.id)
-        tx, ty = self.to_xy(flit.dst_router)
-        if tx != rx:
-            direction = Direction.EAST if tx > rx else Direction.WEST
-            out_port = direction_to_port(direction)
-        elif ty != ry:
-            direction = Direction.NORTH if ty > ry else Direction.SOUTH
-            out_port = direction_to_port(direction)
-        else:
-            out_port = flit.dst_local_port
+        out_port = self.routing.next_port(self.id, flit)
         route_state = PacketRouteState(
             msg_id=flit.msg_id,
             out_port=out_port,
@@ -829,10 +847,12 @@ class Router:
             del self.reservation[route_key]
 
     def to_id(self, x: int, y: int) -> int:
+        if self.x_dim is None:
+            raise ValueError("explicit graph coordinates require a canonical lookup")
         return y * self.x_dim + x
 
-    def to_xy(self, router_id: int):
-        return router_id % self.x_dim, router_id // self.x_dim
+    def to_xy(self, router_id: int) -> tuple[int, int]:
+        return self.routing.coordinate(router_id)
 
     def _validate_flit_fabric(self, flit: Flit) -> None:
         if flit.fabric_id is not self.fabric_id:
@@ -873,7 +893,16 @@ class NoC:
     def build_connection_mesh(self):
         if self.routers:
             raise RuntimeError("NoC mesh has already been built")
-        for router_id in range(self.x * self.y):
+        graph = self.topology.graph
+        if graph.origin.kind != "legacy_mesh" or graph.connectivity_state != "complete":
+            raise ValueError("legacy NoC construction requires a complete legacy mesh graph")
+        routing = LegacyXYRouting(self.topology, int(self.fabric_id))
+        records = sorted((r for r in graph.routers if r.fabric_id == self.fabric_id),
+                         key=lambda r: self.topology.router_indices[r.key])
+        for record in records:
+            if record.enabled is not True:
+                raise ValueError("legacy mesh router is unavailable")
+            router_id = self.topology.router_indices[record.key]
             self.routers.append(
                 Router(
                     env=self.env,
@@ -883,64 +912,26 @@ class NoC:
                     y_dim=self.y,
                     fabric_id=self.fabric_id,
                     tracer=self.tracer,
+                    routing=routing,
                 )
             )
 
-        for y in range(self.y):
-            for x in range(self.x):
-                router_id = y * self.x + x
-                if x < self.x - 1:
-                    self._connect(
-                        router_id,
-                        Direction.EAST,
-                        router_id + 1,
-                        Direction.WEST,
-                    )
-                if y < self.y - 1:
-                    self._connect(
-                        router_id,
-                        Direction.NORTH,
-                        router_id + self.x,
-                        Direction.SOUTH,
-                    )
+        for edge in sorted((l for l in graph.links if l.fabric_id == self.fabric_id),
+                           key=lambda l: self.topology.link_indices[l.key]):
+            if edge.enabled is not True:
+                raise ValueError("legacy mesh link is unavailable")
+            src = self.topology.router_indices[(edge.fabric_id, edge.src_router)]
+            dst = self.topology.router_indices[(edge.fabric_id, edge.dst_router)]
+            link = Link(
+                env=self.env, config=self.config.link, flit_format=self.config.router.flit,
+                fabric_id=self.fabric_id, tracer=self.tracer, link_name=edge.link_id,
+                noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
+                link_id=self.topology.link_indices[edge.key], src_router=src, dst_router=dst,
+            )
+            self.routers[src].bind_output(self.topology.port_indices[(edge.fabric_id, edge.src_router, edge.src_port)], link)
+            self.routers[dst].bind_input(self.topology.port_indices[(edge.fabric_id, edge.dst_router, edge.dst_port)], link)
+            self.r2r_links.append(link)
         return self
-
-    def _connect(
-        self,
-        router_a: int,
-        direction_a: Direction,
-        router_b: int,
-        direction_b: Direction,
-    ):
-        port_a = direction_to_port(direction_a)
-        port_b = direction_to_port(direction_b)
-        link_ab = Link(
-            env=self.env,
-            config=self.config.link,
-            flit_format=self.config.router.flit,
-            fabric_id=self.fabric_id,
-            tracer=self.tracer,
-            link_name=f"R{router_a}_{direction_a.name}->R{router_b}_{direction_b.name}",
-            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
-            link_id=len(self.r2r_links),
-            src_router=router_a,
-            dst_router=router_b,
-        )
-        link_ba = Link(
-            env=self.env,
-            config=self.config.link,
-            flit_format=self.config.router.flit,
-            fabric_id=self.fabric_id,
-            tracer=self.tracer,
-            link_name=f"R{router_b}_{direction_b.name}->R{router_a}_{direction_a.name}",
-            noc_cycles_per_aci_cycle=self.config.noc_cycles_per_aci_cycle,
-            link_id=len(self.r2r_links) + 1,
-            src_router=router_b,
-            dst_router=router_a,
-        )
-        self.routers[router_a].bind_link(port_a, link_ba, link_ab)
-        self.routers[router_b].bind_link(port_b, link_ab, link_ba)
-        self.r2r_links.extend((link_ab, link_ba))
 
 
 __all__ = [

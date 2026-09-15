@@ -448,6 +448,8 @@ def _validate_shared_link_contention(
 
     first_router = first.source.binding.router
     second_router = second.source.binding.router
+    if first_router.x_dim is None or first_router.y_dim is None:
+        raise ValueError("shared-link NMC benchmark requires legacy mesh geometry")
     if (
         first_router.x_dim != second_router.x_dim
         or first_router.y_dim != second_router.y_dim

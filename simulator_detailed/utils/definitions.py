@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum, IntEnum, auto
 from itertools import pairwise
-from typing import Annotated, Final
+from typing import Annotated, Final, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -304,8 +304,9 @@ class Flit(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     format: FlitConfig = Field(default_factory=FlitConfig)
-    mesh_x: int = Field(default=3, gt=0)
-    mesh_y: int = Field(default=2, gt=0)
+    mesh_x: int | None = Field(default=3, gt=0)
+    mesh_y: int | None = Field(default=2, gt=0)
+    transport_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$", exclude=True)
     flit_type: FlitType  # HEAD/BODY/TAIL
     payload_bytes: int = Field(ge=0)  # B, actual payload carried
     msg_id: int  # message index for reordering/correlation
@@ -332,6 +333,19 @@ class Flit(BaseModel):
             raise ValueError("flit payload exceeds configured capacity")
         if self.dma_header_bytes > self.format.physical_flit_bytes:
             raise ValueError("flit header exceeds configured size")
+        self._validate_context()
+        return self
+
+    def _validate_context(self) -> None:
+        if self.transport_id is not None:
+            if self.mesh_x is not None or self.mesh_y is not None:
+                raise ValueError("graph flits must not contain mesh geometry")
+            if self.fixed_path is not None:
+                raise NotImplementedError("graph flits do not implement FIXPATH")
+            _require_singlecast(self.trans_type)
+            return
+        if self.mesh_x is None or self.mesh_y is None:
+            raise ValueError("legacy flits require mesh geometry")
         _validate_fixed_path(
             self.trans_type,
             self.fixed_path,
@@ -340,18 +354,10 @@ class Flit(BaseModel):
             self.mesh_x,
             self.mesh_y,
         )
-        return self
 
     def validate_transport(self) -> None:
         """Reject unsupported routing before a link or router acquires resources."""
-        _validate_fixed_path(
-            self.trans_type,
-            self.fixed_path,
-            self.src_router,
-            self.dst_router,
-            self.mesh_x,
-            self.mesh_y,
-        )
+        self._validate_context()
         _require_singlecast(self.trans_type)
 
     @property
@@ -366,6 +372,10 @@ class Flit(BaseModel):
     def transfer_bytes(self) -> int:
         """Configured physical transfer cost, including padding of partial flits."""
         return self.format.physical_flit_bytes
+
+
+class FlitTransportContext(Protocol):
+    def validate_channel(self, flit: Flit, channel: str) -> None: ...
 
 
 class EndpointAddress(BaseModel):
