@@ -1,9 +1,8 @@
 # Canonical topology and transport evidence
 
 This document tracks the incremental `generic-heterogeneous-topology` delivery.
-The first three parts add an immutable graph contract, deterministic inventory export,
-profile/mesh adapters, directed runtime bindings and validated routing policies.
-The standalone explicit-graph replay runner is the next implementation part.
+The implementation now includes immutable topology records, profile/mesh adapters,
+directed runtime bindings, validated routing policies and standalone synthetic replay.
 Hardware-profile execution and silicon timing remain unsupported/unvalidated.
 
 ## Baseline (2026-09-15)
@@ -121,3 +120,61 @@ times, burst/backpressure behavior and paired slowdown/recovery regressions pass
 Strict Pyright reports zero errors/warnings; applicable new-file Ruff and changed-file
 correctness checks pass. The NMC contention benchmark now rejects geometry-free
 routers explicitly; its legacy calculations and behavior are unchanged.
+
+## Executable synthetic replay
+
+`replay_topology.py --inspect PATH` accepts canonical topology, legacy architecture,
+or hardware-profile inventory. `--replay PATH` accepts only version-one
+`topology_replay` input. Its `graph_path` resolves relative to the replay document;
+the path is excluded from plan identity. Graph/config/routes and all overrides are
+validated before constructing SimPy resources. Unknown fields and unsupported
+policies are rejected. Explicit per-fabric settings declare clocks in MHz, physical
+flit size/payload/header in bytes, wire/payload width in bits per NoC cycle, router
+stages and link/service times in ACI cycles, buffer/window sizes in flits, and burst
+quanta in flits. No Wormhole timing constants are embedded. Named network/local
+channel overrides replace full link settings, with serialization/window validation.
+
+The runner constructs only enabled routers/edges and explicitly replay-enabled
+terminals. Memory/transit routers forward packets; worker eligibility does not
+instantiate a core. Sources serialize whole packets; every sink drains independently
+with its configured finite service time. Completion requires every transfer, queue,
+credit and router grant/reservation to drain. A cycle limit or empty event queue with
+pending work yields `incomplete` and pending identities; the deadline is diagnostic,
+not a deadlock-avoidance mechanism. A runtime can run only once.
+
+Version-one `topology_replay_result` exports normalized graph/maps, graph and plan
+hashes, effective configuration, instantiated identities, byte totals, completions,
+and canonical fabric-qualified trace events. Network channels and attachment
+injection/ejection channels remain distinct. `packet_physical_bytes` counts padded
+flits once per packet; `transmitted_channel_bytes` counts each actual LINK_SEND,
+including local channels. Each trace event's physical bytes describes its flit and
+must not be summed across different actions. Completion times include sink service;
+router INJECT/EJECT events retain the legacy boundary meaning. Memory resources
+remain inventory: no memory service or numerical data is executed.
+
+```bash
+.venv/bin/python -m simulator_detailed.replay_topology --inspect simulator_detailed/configs/topologies/heterogeneous_example.json
+.venv/bin/python -m simulator_detailed.replay_topology --inspect simulator_detailed/configs/profiles/wormhole_b0_n150_assumed.json
+.venv/bin/python -m simulator_detailed.replay_topology --replay simulator_detailed/configs/replays/heterogeneous_unicast.json
+```
+
+All commands emit JSON on stdout. `--output PATH` also writes the result after
+admission and execution; invalid admission creates no result file. Exit status is
+0 for inspection/complete replay, 1 for invalid input, 2 for incomplete replay.
+
+Part 4: all 78 detailed tests pass; strict Pyright has zero errors/warnings and
+applicable/correctness Ruff passes. The example has five physical tiles, ten routers,
+eight network links, six attachments and two physical memory resources (1088 bytes).
+It sends 29/25 bytes along the independent a→ram→off→hop→z route on fabrics 0/7,
+plus five bytes locally: 59 payload bytes, seven flits, 112 packet physical bytes,
+608 channel bytes, and complete drain at cycle 44. Tests check every trace identity,
+parallel/disabled edges, 240-byte competing flows with unequal burst quanta and slow
+sinks, conserved credits, clock/width serialization and packet boundaries against
+analytical expectations, and timeout/premature-idle diagnostics. Profile inspection
+and all three published commands pass; generated traces stay outside the repository.
+
+Example graph SHA-256:
+`5ef712709c1afbfda6f795e119a4e4f2ce0f0437d7431f2a7be6285ffb15a6cc`.
+Example plan SHA-256:
+`1a59e3e5b7ed7c6155fe618ca13b025a9908959093d174eb89d9f1e3c8e09fba`.
+These identify synthetic test inputs, not hardware validation.

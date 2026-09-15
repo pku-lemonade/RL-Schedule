@@ -1,0 +1,393 @@
+{
+  "kind": "canonical_topology",
+  "schema_version": 1,
+  "topology_id": "heterogeneous-example",
+  "asic_id": "synthetic-0",
+  "origin": {
+    "kind": "synthetic"
+  },
+  "connectivity_state": "complete",
+  "tiles": [
+    {
+      "tile_id": "a",
+      "x": 0,
+      "y": 0,
+      "role": "worker"
+    },
+    {
+      "tile_id": "z",
+      "x": 4,
+      "y": 0,
+      "role": "worker"
+    },
+    {
+      "tile_id": "ram",
+      "x": 2,
+      "y": 0,
+      "role": "memory"
+    },
+    {
+      "tile_id": "off",
+      "x": 1,
+      "y": 0,
+      "role": "worker"
+    },
+    {
+      "tile_id": "hop",
+      "x": 3,
+      "y": 0,
+      "role": "transit"
+    }
+  ],
+  "fabrics": [
+    {
+      "fabric_id": 0,
+      "topology_policy": "explicit",
+      "routing_policy": "explicit_unicast"
+    },
+    {
+      "fabric_id": 7,
+      "topology_policy": "explicit",
+      "routing_policy": "explicit_unicast"
+    }
+  ],
+  "routers": [
+    {
+      "router_id": "a",
+      "fabric_id": 0,
+      "tile_id": "a",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "next",
+          "kind": "network"
+        },
+        {
+          "port_id": "terminal",
+          "kind": "local"
+        }
+      ]
+    },
+    {
+      "router_id": "z",
+      "fabric_id": 0,
+      "tile_id": "z",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "terminal",
+          "kind": "local"
+        }
+      ]
+    },
+    {
+      "router_id": "ram",
+      "fabric_id": 0,
+      "tile_id": "ram",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    },
+    {
+      "router_id": "off",
+      "fabric_id": 0,
+      "tile_id": "off",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    },
+    {
+      "router_id": "hop",
+      "fabric_id": 0,
+      "tile_id": "hop",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    },
+    {
+      "router_id": "a",
+      "fabric_id": 7,
+      "tile_id": "a",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "next",
+          "kind": "network"
+        },
+        {
+          "port_id": "terminal",
+          "kind": "local"
+        }
+      ]
+    },
+    {
+      "router_id": "z",
+      "fabric_id": 7,
+      "tile_id": "z",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "terminal",
+          "kind": "local"
+        }
+      ]
+    },
+    {
+      "router_id": "ram",
+      "fabric_id": 7,
+      "tile_id": "ram",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    },
+    {
+      "router_id": "off",
+      "fabric_id": 7,
+      "tile_id": "off",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    },
+    {
+      "router_id": "hop",
+      "fabric_id": 7,
+      "tile_id": "hop",
+      "enabled": true,
+      "ports": [
+        {
+          "port_id": "prev",
+          "kind": "network"
+        },
+        {
+          "port_id": "next",
+          "kind": "network"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "link_id": "a-ram",
+      "fabric_id": 0,
+      "src_router": "a",
+      "src_port": "next",
+      "dst_router": "ram",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "ram-off",
+      "fabric_id": 0,
+      "src_router": "ram",
+      "src_port": "next",
+      "dst_router": "off",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "off-hop",
+      "fabric_id": 0,
+      "src_router": "off",
+      "src_port": "next",
+      "dst_router": "hop",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "hop-z",
+      "fabric_id": 0,
+      "src_router": "hop",
+      "src_port": "next",
+      "dst_router": "z",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "a-ram",
+      "fabric_id": 7,
+      "src_router": "a",
+      "src_port": "next",
+      "dst_router": "ram",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "ram-off",
+      "fabric_id": 7,
+      "src_router": "ram",
+      "src_port": "next",
+      "dst_router": "off",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "off-hop",
+      "fabric_id": 7,
+      "src_router": "off",
+      "src_port": "next",
+      "dst_router": "hop",
+      "dst_port": "prev",
+      "enabled": true
+    },
+    {
+      "link_id": "hop-z",
+      "fabric_id": 7,
+      "src_router": "hop",
+      "src_port": "next",
+      "dst_router": "z",
+      "dst_port": "prev",
+      "enabled": true
+    }
+  ],
+  "attachments": [
+    {
+      "endpoint_id": "source",
+      "fabric_id": 0,
+      "router_id": "a",
+      "role": "compute",
+      "enabled": true,
+      "inject_port": "terminal",
+      "eject_port": "terminal",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "l1-a"
+      ]
+    },
+    {
+      "endpoint_id": "sink",
+      "fabric_id": 0,
+      "router_id": "z",
+      "role": "compute",
+      "enabled": true,
+      "inject_port": "terminal",
+      "eject_port": "terminal",
+      "permissions_resolved": true,
+      "replay_enabled": true
+    },
+    {
+      "endpoint_id": "ram-noc0",
+      "fabric_id": 0,
+      "router_id": "ram",
+      "role": "network",
+      "enabled": null,
+      "resource_ids": [
+        "dram"
+      ]
+    },
+    {
+      "endpoint_id": "ram-noc7",
+      "fabric_id": 7,
+      "router_id": "ram",
+      "role": "network",
+      "enabled": null,
+      "resource_ids": [
+        "dram"
+      ]
+    },
+    {
+      "endpoint_id": "source-7",
+      "fabric_id": 7,
+      "router_id": "a",
+      "role": "compute",
+      "enabled": true,
+      "inject_port": "terminal",
+      "eject_port": "terminal",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "l1-a"
+      ]
+    },
+    {
+      "endpoint_id": "sink-7",
+      "fabric_id": 7,
+      "router_id": "z",
+      "role": "compute",
+      "enabled": true,
+      "inject_port": "terminal",
+      "eject_port": "terminal",
+      "permissions_resolved": true,
+      "replay_enabled": true
+    }
+  ],
+  "enabled_worker_ids": [
+    "a",
+    "z"
+  ],
+  "logical_workers": [
+    {
+      "worker_index": 0,
+      "logical_x": 0,
+      "logical_y": 0,
+      "tile_id": "a"
+    },
+    {
+      "worker_index": 1,
+      "logical_x": 1,
+      "logical_y": 0,
+      "tile_id": "z"
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "dram",
+      "kind": "dram",
+      "capacity_bytes": 1024
+    },
+    {
+      "resource_id": "l1-a",
+      "kind": "local_sram",
+      "capacity_bytes": 64,
+      "owner_tile_id": "a"
+    }
+  ]
+}

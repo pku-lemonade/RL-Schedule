@@ -1,0 +1,131 @@
+{
+  "kind": "topology_replay",
+  "schema_version": 1,
+  "graph_path": "../topologies/heterogeneous_example.json",
+  "aci_clock_mhz": 1000,
+  "fabrics": [
+    {
+      "fabric_id": 0,
+      "noc_clock_mhz": 1000,
+      "flit": {
+        "physical_flit_bytes": 16,
+        "payload_capacity_bytes": 12,
+        "header_bytes": 4
+      },
+      "effective_rc_aci_cycles": 1,
+      "effective_sa_aci_cycles": 1,
+      "effective_st_aci_cycles": 1,
+      "burst_quantum_flits": 2,
+      "network_link": {
+        "wire_bits_per_noc_cycle": 64,
+        "payload_bits_per_noc_cycle": 64,
+        "launch_interval_aci_cycles": 2,
+        "effective_link_stage_aci_cycles": 1,
+        "sync_credit_return_aci_cycles": 1,
+        "input_buffer_depth_flits": 1,
+        "effective_in_flight_window_flits": 2
+      },
+      "local_link": {
+        "wire_bits_per_noc_cycle": 64,
+        "payload_bits_per_noc_cycle": 64,
+        "launch_interval_aci_cycles": 2,
+        "effective_link_stage_aci_cycles": 1,
+        "sync_credit_return_aci_cycles": 1,
+        "input_buffer_depth_flits": 1,
+        "effective_in_flight_window_flits": 2
+      }
+    },
+    {
+      "fabric_id": 7,
+      "noc_clock_mhz": 1000,
+      "flit": {
+        "physical_flit_bytes": 16,
+        "payload_capacity_bytes": 12,
+        "header_bytes": 4
+      },
+      "effective_rc_aci_cycles": 1,
+      "effective_sa_aci_cycles": 1,
+      "effective_st_aci_cycles": 1,
+      "burst_quantum_flits": 2,
+      "network_link": {
+        "wire_bits_per_noc_cycle": 64,
+        "payload_bits_per_noc_cycle": 64,
+        "launch_interval_aci_cycles": 2,
+        "effective_link_stage_aci_cycles": 1,
+        "sync_credit_return_aci_cycles": 1,
+        "input_buffer_depth_flits": 1,
+        "effective_in_flight_window_flits": 2
+      },
+      "local_link": {
+        "wire_bits_per_noc_cycle": 64,
+        "payload_bits_per_noc_cycle": 64,
+        "launch_interval_aci_cycles": 2,
+        "effective_link_stage_aci_cycles": 1,
+        "sync_credit_return_aci_cycles": 1,
+        "input_buffer_depth_flits": 1,
+        "effective_in_flight_window_flits": 2
+      }
+    }
+  ],
+  "routes": [
+    {
+      "fabric_id": 0,
+      "source": "source",
+      "destination": "sink",
+      "link_ids": [
+        "a-ram",
+        "ram-off",
+        "off-hop",
+        "hop-z"
+      ]
+    },
+    {
+      "fabric_id": 7,
+      "source": "source-7",
+      "destination": "sink-7",
+      "link_ids": [
+        "a-ram",
+        "ram-off",
+        "off-hop",
+        "hop-z"
+      ]
+    },
+    {
+      "fabric_id": 0,
+      "source": "source",
+      "destination": "source",
+      "link_ids": []
+    }
+  ],
+  "traffic": [
+    {
+      "transfer_id": "forward",
+      "fabric_id": 0,
+      "source": "source",
+      "destination": "sink",
+      "payload_bytes": 29,
+      "start_aci_cycles": 0,
+      "burst_quantum_flits": 2
+    },
+    {
+      "transfer_id": "other-fabric",
+      "fabric_id": 7,
+      "source": "source-7",
+      "destination": "sink-7",
+      "payload_bytes": 25,
+      "start_aci_cycles": 0,
+      "burst_quantum_flits": 2
+    },
+    {
+      "transfer_id": "local",
+      "fabric_id": 0,
+      "source": "source",
+      "destination": "source",
+      "payload_bytes": 5,
+      "start_aci_cycles": 0,
+      "burst_quantum_flits": 2
+    }
+  ],
+  "sink_service_aci_cycles_per_flit": 3,
+  "max_aci_cycles": 1000
+}

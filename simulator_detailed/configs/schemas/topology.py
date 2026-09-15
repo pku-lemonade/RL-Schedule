@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StrictBool,
+    model_validator,
+)
 
 Identifier = Annotated[str, Field(min_length=1, pattern=r"^\S+$")]
 Index = Annotated[int, Field(strict=True, ge=0)]
@@ -268,3 +275,144 @@ class CanonicalTopology(GraphRecord):
     def _indices(indices: tuple[int | None, ...], label: str) -> None:
         if any(i is not None for i in indices) and set(indices) != set(range(len(indices))):
             raise ValueError(f"{label} compatibility indices must be a complete dense bijection")
+
+
+# Replay parameters are required explicitly; none inherit device-specific defaults.
+PositiveInt = Annotated[int, Field(strict=True, gt=0)]
+Cycles = Annotated[float, Field(strict=True, ge=0)]
+PositiveTime = Annotated[float, Field(strict=True, gt=0)]
+
+
+class ReplayFlitFormat(GraphRecord):
+    physical_flit_bytes: PositiveInt
+    payload_capacity_bytes: PositiveInt
+    header_bytes: Index
+
+    @model_validator(mode="after")
+    def capacity(self) -> Self:
+        if max(self.payload_capacity_bytes, self.header_bytes) > self.physical_flit_bytes:
+            raise ValueError("flit payload/header exceeds physical size")
+        return self
+
+
+class ReplayLinkSettings(GraphRecord):
+    wire_bits_per_noc_cycle: PositiveInt
+    payload_bits_per_noc_cycle: PositiveInt
+    launch_interval_aci_cycles: PositiveTime
+    effective_link_stage_aci_cycles: Cycles
+    sync_credit_return_aci_cycles: Cycles
+    input_buffer_depth_flits: PositiveInt
+    effective_in_flight_window_flits: PositiveInt
+
+
+class ReplayFabricSettings(GraphRecord):
+    fabric_id: Index
+    noc_clock_mhz: PositiveTime
+    flit: ReplayFlitFormat
+    effective_rc_aci_cycles: Cycles
+    effective_sa_aci_cycles: Cycles
+    effective_st_aci_cycles: Cycles
+    burst_quantum_flits: PositiveInt
+    network_link: ReplayLinkSettings
+    local_link: ReplayLinkSettings
+
+
+class ReplayNetworkOverride(GraphRecord):
+    fabric_id: Index
+    link_id: Identifier
+    settings: ReplayLinkSettings
+
+
+class ReplayLocalOverride(GraphRecord):
+    endpoint_id: Identifier
+    direction: Literal["inject", "eject"]
+    settings: ReplayLinkSettings
+
+
+class ReplayTraffic(GraphRecord):
+    transfer_id: Identifier
+    fabric_id: Index
+    source: Identifier
+    destination: Identifier
+    payload_bytes: PositiveInt
+    start_aci_cycles: Cycles
+    burst_quantum_flits: PositiveInt
+
+
+class TopologyReplay(GraphRecord):
+    kind: Literal["topology_replay"]
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
+    graph_path: Annotated[str, Field(min_length=1)]
+    aci_clock_mhz: PositiveTime
+    fabrics: tuple[ReplayFabricSettings, ...]
+    network_overrides: tuple[ReplayNetworkOverride, ...] = ()
+    local_overrides: tuple[ReplayLocalOverride, ...] = ()
+    routes: tuple[ExplicitRoute, ...]
+    traffic: tuple[ReplayTraffic, ...]
+    sink_service_aci_cycles_per_flit: PositiveTime
+    max_aci_cycles: PositiveTime
+
+    @model_validator(mode="after")
+    def identities(self) -> Self:
+        unique(tuple(f.fabric_id for f in self.fabrics), "replay fabric")
+        unique(tuple((o.fabric_id, o.link_id) for o in self.network_overrides), "network override")
+        unique(tuple((o.endpoint_id, o.direction) for o in self.local_overrides), "local override")
+        unique(tuple(t.transfer_id for t in self.traffic), "transfer ID")
+        if not self.routes or not self.traffic:
+            raise ValueError("replay requires admitted routes and finite traffic")
+        return self
+
+
+class ReplayTransferResult(GraphRecord):
+    transfer_id: Identifier
+    fabric_id: Index
+    source: Identifier
+    destination: Identifier
+    expected_payload_bytes: Index
+    received_payload_bytes: Index
+    expected_flits: Index
+    received_flits: Index
+    physical_bytes: Index
+    completion_aci_cycles: Cycles | None
+
+
+class ReplayTraceEvent(GraphRecord):
+    time_aci_cycles: Cycles
+    action: Identifier
+    fabric_id: Index
+    plane: Identifier
+    transfer_id: Identifier | None
+    router_id: Identifier | None
+    port_id: Identifier | None
+    out_port_id: Identifier | None
+    channel_id: str | None
+    channel_kind: Literal["network", "inject", "eject"] | None
+    link_id: Identifier | None
+    endpoint_id: Identifier | None
+    payload_bytes: Index
+    physical_bytes: Index
+    is_tail: bool
+    grant_flits: Index
+
+
+class ReplayResult(GraphRecord):
+    kind: Literal["topology_replay_result"] = "topology_replay_result"
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)] = 1
+    status: Literal["complete", "incomplete"]
+    reason: Literal["drained", "cycle_limit", "idle_with_pending"]
+    graph_sha256: Digest
+    plan_sha256: Digest
+    elapsed_aci_cycles: Cycles
+    expected_payload_bytes: Index
+    received_payload_bytes: Index
+    packet_physical_bytes: Index
+    transmitted_channel_bytes: Index
+    graph: dict[str, JsonValue]
+    effective_plan: dict[str, JsonValue]
+    instantiated: dict[str, JsonValue]
+    pending: tuple[str, ...]
+    transfers: tuple[ReplayTransferResult, ...]
+    trace: tuple[ReplayTraceEvent, ...]
+    execution: Literal["synthetic_unicast_byte_transport"] = "synthetic_unicast_byte_transport"
+    memory_service: Literal["unsupported"] = "unsupported"
+    silicon_timing: Literal["unvalidated"] = "unvalidated"

@@ -439,6 +439,10 @@ class Link:
         """Return flits holding effective pipeline/window capacity."""
         return int(self.in_flight_credits.capacity - self.in_flight_credits.level)
 
+    @property
+    def is_drained(self) -> bool:
+        return not (self.in_flight_flits or self.flit_buffer.items or self._out_queue.items)
+
     def utilization_events(self) -> list[Event]:
         """Build non-duplicated link occupancy intervals from tracer events."""
         pending: dict[int, deque[FlitEvent]] = defaultdict(deque)
@@ -607,6 +611,12 @@ class Router:
         self.reservation: dict[PacketRouteKey, PacketRouteState] = {}
         self._switch_grants: dict[int, SwitchGrantState] = {}
         self._forwarder_started: dict[int, bool] = {}
+
+    @property
+    def is_drained(self) -> bool:
+        return not (self.reservation or self._switch_grants or any(
+            a.owner is not None or a.pending_ports for a in self.output_arbiters.values()
+        ))
 
     def bind_link(self, port: int, link_in: Link, link_out: Link):
         self._validate_binding(port, link_in, incoming=True)

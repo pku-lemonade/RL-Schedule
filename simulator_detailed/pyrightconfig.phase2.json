@@ -22,7 +22,9 @@
     "topology.py",
     "utils/definitions.py",
     "utils/dfg.py",
-    "utils/task.py"
+    "utils/task.py",
+    "transport.py",
+    "replay_topology.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
