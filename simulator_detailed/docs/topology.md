@@ -218,3 +218,8 @@ unavailable: **tensor execution, checkpoint loading and model accuracy were not
 validated**. No fake-package tests substitute for those checks. Separate top-level
 simulator/predictor/embedding/RL code, model files, observations/actions, rewards and
 failure/workload datasets are unchanged.
+
+Part-5 follow-up: the late strict-type run flagged a redundant `isinstance` under
+a `Topology`-only annotation. The public guard now accepts `object`, narrows it
+explicitly, and tests rejection of raw result dictionaries. Four focused consumer
+tests, strict Pyright (zero errors/warnings) and applicable Ruff pass after the fix.

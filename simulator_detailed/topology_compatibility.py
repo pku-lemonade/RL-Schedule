@@ -11,7 +11,7 @@ from .topology import Topology, content_digest, topology_from_legacy
 CONSUMERS = frozenset({"detailed_predictor", "detailed_encoder"})
 
 
-def require_legacy_topology(topology: Topology, consumer: str,
+def require_legacy_topology(topology: object, consumer: str,
                             event_format: str = "legacy_events") -> NoCConfig:
     if consumer not in CONSUMERS:
         raise ValueError(f"unknown topology consumer {consumer!r}")

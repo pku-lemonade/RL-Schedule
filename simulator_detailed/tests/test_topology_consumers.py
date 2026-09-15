@@ -61,6 +61,8 @@ class TopologyConsumerTests(unittest.TestCase):
                 require_legacy_topology(ReplayPlan.load(EXAMPLE).topology, consumer)
         with self.assertRaisesRegex(ValueError, "unknown topology consumer"):
             require_legacy_topology(topology, "unknown")
+        with self.assertRaisesRegex(TypeError, "compiled canonical"):
+            require_legacy_topology({"kind": "topology_replay_result"}, "detailed_predictor")
         with self.assertRaisesRegex(ValueError, "unsupported format"):
             require_legacy_topology(topology, "detailed_predictor", "topology_replay_result")
         document = topology.graph.model_dump(mode="json")
