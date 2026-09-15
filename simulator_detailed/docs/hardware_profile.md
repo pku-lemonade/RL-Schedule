@@ -244,6 +244,12 @@ All following tests are in `simulator_detailed/tests/test_hardware_profile.py`:
 
 ## Handoff to heterogeneous topology exploration
 
+Child 2 has since delivered [canonical topology and synthetic replay](topology.md).
+It projects this profile's inventory without inventing ports, availability or torus
+edges. Its generic runtime does not change this profile's `can_execute: false`
+gate; Wormhole routing, scheduling and memory services remain pending. The following
+handoff records the child-1 boundary and inputs.
+
 The next child is `generic-heterogeneous-topology`. Its inputs are validated
 physical tile IDs, roles, explicit enabled/logical worker mappings, fabric
 coordinates, endpoint records and unique memory identities. It must decide how

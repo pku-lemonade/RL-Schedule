@@ -231,7 +231,78 @@ replay tests, strict Pyright and applicable Ruff pass. Example identities/timing
 remain unchanged; this does not claim that impractically large traffic was executed.
 
 Encoder admission follow-up: the tensor entry point delegates runtime input checks
-to `require_legacy_nocs()`. This dependency-free-of-ML guard rejects raw replay
+to `require_legacy_nocs()`. This guard without ML dependencies rejects raw replay
 documents, missing/mismatched fabrics and runtime router/link ordering inconsistent
 with the graph. Five real offline consumer tests pass, including actual NoC objects;
 strict Pyright and scoped Ruff pass. Tensor execution remains unavailable.
+
+## Integrated delivery evidence and next-child boundary
+
+The implemented child is `generic-heterogeneous-topology`. Code is delivered through
+`07246a3` (graph), `f2ca6d3` (adapters), `ffc7344` (directed routing), `6f6ab12`
+(replay), `1865c82` (consumers), and the documented corrective commits. Final evidence
+and the disabled-wrap export assertion belong to the commit containing this section.
+The retained regression baseline is `0cb748d`; none of these revisions is a hardware
+measurement reference.
+
+| Requirement | Actual evidence in `simulator_detailed/tests` |
+| --- | --- |
+| TR-G01 | `test_topology.py`: strict versions, identities, references, immutable normalization/maps, port halves and parallel edges; independent `topology_reference.json` |
+| TR-G02 | `test_topology_replay.py`: real a→ram→off→hop→z deliveries with no off-tile compute endpoint; aliases and exact 1088-byte unique capacity |
+| TR-G03 | `test_topology_adapters.py`: validated profile counts, raw coordinates, source identity and unknown permissions/connectivity; replay rejection and existing profile execution gates |
+| TR-G04 | `test_topology_baseline.py`: independent custom mesh traces/timing and paired slowdown/recovery; adapter edge oracle and all prior NoC/DMA/NMC tests |
+| TR-G05 | `test_topology_replay.py`: two-fabric/non-grid/local delivery, exact byte totals, timeout and idle-with-pending status |
+| TR-G06 | `test_topology_transport.py`: path continuity/availability, local paths, simple-route union cycle, safe subsets on a physical ring, cross-plan rejection with no credit/reservation changes |
+| TR-G07 | Replay tests: competing burst quanta with 1-flit buffers/slow sinks, per-channel send/credit conservation, analytical serialization at two widths/clocks, packet boundaries and integer accounting |
+| TR-G08 | Replay tests: every event resolves to instantiated canonical identities; fabric-local index collisions stay distinct; disabled/wrap/parallel metadata survives export; legacy trace baseline |
+| TR-G09 | `test_topology_consumers.py`: full structural/endpoint/event guards, independent flattened edge/path order and real NoC object admission; optional tensor/checkpoint execution unavailable |
+| TR-G10 | This report, all published CLI commands, full detailed suite, strict project coverage of all six new production modules, scoped Ruff and OpenSpec strict validation |
+
+Final validation on 2026-09-15: **84 detailed tests pass**. Strict Pyright reports
+**0 errors / 0 warnings**. Ruff correctness rules pass on all 23 changed Python files;
+all applicable rules pass on the 12 new Python files. The four changed optional-ML
+modules pass syntax and correctness lint checks; they are not claimed as strictly
+typed or tensor-tested. OpenSpec strict validation and `git diff --check` pass.
+The three published inspect/replay commands emit parseable JSON matching their
+optional output files. The example remains complete at cycle 44 with the graph/plan
+hashes above; the Wormhole profile still reports `can_execute: false`.
+
+Exact final lint commands use the committed child baseline to select scoped files:
+
+```bash
+.venv/bin/python - <<'PYCODE'
+import subprocess
+changed = subprocess.check_output(['git', 'diff', '--name-only', '0cb748d', '--', '*.py'], text=True).splitlines()
+new = subprocess.check_output(['git', 'diff', '--name-only', '--diff-filter=A', '0cb748d', '--', '*.py'], text=True).splitlines()
+subprocess.run(['.venv/bin/python', '-m', 'ruff', 'check', '--select', 'E9,F63,F7,F82', *changed], check=True)
+subprocess.run(['.venv/bin/python', '-m', 'ruff', 'check', *new], check=True)
+PYCODE
+openspec validate generic-heterogeneous-topology --strict --no-interactive
+git diff --check
+```
+
+| Artifact bytes | SHA-256 |
+| --- | --- |
+| `configs/topologies/heterogeneous_example.json` | `0e4ff7ebd31feb8458b75d827a62794df1c0a72793f529a79d8f9b6741a1bc97` |
+| `configs/replays/heterogeneous_unicast.json` | `5c2b11861fb41f8d112909e197d7d63770ff2b430225fa56c18f3f52f6e44c8a` |
+| `tests/fixtures/topology_reference.json` | `1bd5a32fb7fcbfad0d47eabc568afb3fde8b59f8d5f84dcf4e9436534cb4bfe7` |
+| `tests/fixtures/topology_baseline.json` | `c572fe5b906d1ef3c7f4e961dde840cffc75e3d5bad2d14a510f4ff6ebab2ad7` |
+
+Umbrella coverage is bounded as follows. **TR-01 is delivered** for canonical graph,
+synthetic transport, export and supported detailed consumer views/guards. **HP-03**
+gains executable graph transit through a disabled worker and explicit attachment
+construction; heterogeneous workload scheduling remains pending. **HP-04** gains
+legacy runtime parity, separate replay admission and consumer rejection; the Wormhole
+profile's runtime adapter remains unsupported. Profile source conformance is inherited
+from child 1's pinned fixtures; this child adds synthetic runtime and analytical model
+evidence. No new hardware measurement, ttsim comparison, silicon timing accuracy or
+model accuracy is established. Parent pending specs have not been synced as delivered.
+
+Next explore: `wormhole-dual-noc-routing` owns Wormhole XY/YX torus edge generation,
+coordinate translation, a justified wrap/request-response resource policy, and directed
+failure handling (TR-02..04). The current explicit-route DAG validator must not be
+relabeled as general torus deadlock prevention. TR-05 multicast/synchronization,
+memory transactions/services, compute/dataflow, heterogeneous DFG scheduling and
+validation-harness/timing requirements remain with later children. No top-level
+simulator/predictor/embedding/RL code, models or failure/workload datasets changed.
+Push, specification synchronization and archival remain separate requested actions.

@@ -106,6 +106,7 @@ class TopologyReplayTests(unittest.TestCase):
                 {"port_id": "parallel", "kind": "network"})
         graph["links"].append({**graph["links"][0], "link_id": "parallel", "src_port": "parallel", "dst_port": "parallel"})
         graph["links"][0]["enabled"] = False
+        graph["links"][0]["wrap"] = True
         replay["routes"][0]["link_ids"][0] = "parallel"
         runtime = ReplayRuntime(plan_for(graph, replay))
         result = runtime.run()
@@ -113,6 +114,9 @@ class TopologyReplayTests(unittest.TestCase):
         self.assertFalse(any(e.link_id == "a-ram" and e.fabric_id == 0 for e in result.trace))
         self.assertTrue(any(e.link_id == "parallel" and e.fabric_id == 0 for e in result.trace))
         self.assertEqual(len(result.graph["graph"]["links"]), 9)
+        disabled = next(e for e in result.graph["graph"]["links"] if e["fabric_id"] == 0 and e["link_id"] == "a-ram")
+        self.assertTrue(disabled["wrap"])
+        self.assertFalse(disabled["enabled"])
         self.assertEqual(sum(c.kind == "network" for c in runtime.plan.channels.values()), 8)
 
     def test_same_router_packet_boundaries_and_analytical_clocks_widths(self):

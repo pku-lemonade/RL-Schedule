@@ -6,6 +6,14 @@ Single-ASIC hardware descriptions use a separate versioned document with
 Wormhole B0 example, inspection command, parameter provenance and execution
 gate. Hardware profiles do not populate these synthetic runtime defaults.
 
+`kind: "canonical_topology"` describes explicit physical/router/link/attachment
+identity. `kind: "topology_replay"` configures the separate synthetic byte replay
+runner, including required clocks, flit/link/router settings, routes and finite
+traffic/sink limits. These documents are not accepted by the legacy `Arch` entry
+point. See [topology replay](topology.md) for examples, units, overrides, inspection
+and versioned result semantics. A Wormhole profile can be projected for inventory
+inspection, but still cannot execute through either runtime entry point.
+
 `NoCConfig` selects mesh dimensions, enabled `fabric_ids`, PE local port,
 simulation and network clocks, links, routers, and DMA attachments. Fabric IDs
 are nonnegative integers. Each selected fabric owns an independent mesh.
