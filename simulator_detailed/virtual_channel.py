@@ -260,16 +260,22 @@ class VirtualChannelLink:
     def events(self) -> tuple[TransportTraceEvent, ...]:
         return tuple(self._events)
 
+    def log_event(self, action: str, token: CreditToken, *, duration: float | None = None,
+                  router_id: str | None = None) -> None:
+        """Record an endpoint/router boundary against this channel's token."""
+        self._log(action, token, duration=duration, router_id=router_id)
+
     def _notify(self) -> None:
         self._changed.succeed()
         self._changed = self.env.event()
 
-    def _log(self, action: str, token: CreditToken, *, duration: float | None = None) -> None:
+    def _log(self, action: str, token: CreditToken, *, duration: float | None = None,
+             router_id: str | None = None) -> None:
         flit = token.envelope
         launched = action == "link_launch"
         self._events.append(TransportTraceEvent.model_validate({
             "action": action, "time_aci_cycles": self.env.now, "fabric_id": flit.fabric_id,
-            "router_id": None, "port_id": None, "channel": flit.lane.channel, "lane": flit.lane,
+            "router_id": router_id, "port_id": None, "channel": flit.lane.channel, "lane": flit.lane,
             "packet": flit.packet, "flit_index": flit.flit_index, "token_id": token.token_id,
             "failure_id": None, "physical_bytes": flit.physical_bytes if launched else 0,
             "payload_bytes": flit.payload_bytes if launched else 0,

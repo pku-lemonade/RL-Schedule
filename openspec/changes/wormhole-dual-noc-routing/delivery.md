@@ -132,3 +132,60 @@ response generation. Configured slowdowns explicitly fail kernel admission pendi
 part 6. Full torus replay, router pipelines, endpoint service, result/CLI integration
 and silicon accuracy remain unsupported/pending parts 4–7; no parent specs were
 synced, no archive was created and no push was performed.
+
+## Part 4: cut-through torus router and one-way replay
+
+Tasks 4.1–4.5 are delivered in the commit containing this section, titled
+`feat: add cut-through torus one-way transport`, based on `76d4d66`.
+Production runtime is `simulator_detailed/torus_transport.py`; its focused tests
+are in `simulator_detailed/tests/test_torus_transport.py`.
+
+| Requirement subset | Executable evidence |
+| --- | --- |
+| TR-D02 | Runtime consumes the immutable compiled route hop sequence, including local/same-router and modular wrap paths; it never recomputes or detours routes |
+| TR-D03 / TR-D04 | Per-hop plan-bound envelopes, input-lane take, downstream reserve-before-stage, HEAD/BODY/TAIL ordering, finite router transfer stage, shared physical serializers and credit release after downstream acceptance |
+| TR-D06 | Router transfer latency/initiation and endpoint sink service use explicit native/ACI conversion; link serialization/propagation/credit boundaries remain separate |
+| TR-D08 | In-memory version-2 result records packet payload/flit/physical totals, transfer/sink trace events, lane and pipeline occupancy, delayed credits, owners and completion/incomplete reasons |
+
+The runtime's resource order is: input lane receive/held token → downstream lane
+reservation → router transfer stage → downstream lane readiness → input credit
+release. The downstream physical serializer is acquired only after this sequence
+reaches a ready token, so a blocked downstream capacity or pipeline stage cannot
+retain an unrelated physical grant. A blocked input token is counted by the
+upstream lane budget. Router-stage requests are finite because each waiting
+request already owns a downstream lane token; the stage's output identity queue
+is bounded by the admitted channel inventory. Independent outputs can overlap
+when transfer capacity permits; each physical link still has exactly one
+serializer.
+
+One-way traffic is now executable in memory through `TorusTransport.run`, while
+response traffic and slowdown schedules fail explicitly with a scope error. The
+runtime uses the existing plan/profile quantities and endpoint service declarations;
+no device-specific clock, width or buffer constant was introduced. The output
+record is not yet a CLI artifact and no top-level `simulate()` or full profile/DFG
+path is enabled.
+
+Validation on 2026-09-15:
+
+```bash
+.venv/bin/python -m unittest simulator_detailed.tests.test_torus_transport
+# 8 tests pass
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+# 123 tests pass, including the legacy topology/link/runtime suite
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+# 0 errors, 0 warnings
+.venv/bin/ruff check simulator_detailed/torus_transport.py simulator_detailed/virtual_channel.py simulator_detailed/tests/test_torus_transport.py
+# All checks passed
+openspec validate wormhole-dual-noc-routing --strict --no-interactive
+# Valid
+.venv/bin/python -m py_compile simulator_detailed/torus_transport.py
+git diff --check
+# Clean
+```
+
+The profile replay test uses the assumed Wormhole inventory and checks both fabric
+IDs; it is a bounded transport invariant, not a silicon comparison. The delayed
+credit fixture reaches the expected payload before returning all credits and stays
+incomplete. Transfer and sink events use canonical plan/lane identities. Causal
+responses, failure snapshots, CLI dispatch, NIU transactions, memory/compute
+service and hardware timing calibration remain pending or unsupported.

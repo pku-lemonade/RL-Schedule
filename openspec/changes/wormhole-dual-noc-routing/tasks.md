@@ -24,11 +24,11 @@
 
 ## 4. Cut-through torus router and one-way replay (TR-D02..04, D08)
 
-- [ ] 4.1 Implement plan-bound routing reservations and per-input-lane forwarding with HEAD/BODY/TAIL validation; verify local delivery, same-VC packet contention, turns/wraps, cut-through packets longer than buffers and rejection before resource changes for invalid envelopes.
-- [ ] 4.2 Add bounded router transfer pipelines with separate latency/initiation settings and fair output selection; verify downstream capacity is acquired without retaining a blocked physical grant, independent outputs overlap, and pipeline occupancy/throughput match configured limits.
-- [ ] 4.3 Add `simulator_detailed/torus_transport.py` plan/runtime construction for admitted one-way byte traffic with class-separated bounded local channels; verify two-fabric contention and small-grid wrap stress drain without modifying the existing one-VC runtime.
-- [ ] 4.4 Implement resource-complete termination and version-2 accounting for payload, padded packet bytes, actual channel launches, pending owners/credits/pipeline work and deterministic paths; verify timeout/idle-with-pending remain incomplete and delayed final credits postpone completion.
-- [ ] 4.5 Run router/replay stress, analytical multi-hop and relevant legacy tests with strict type/lint; reconcile actual wait/ownership resources to the dependency proof and commit this part before part 5.
+- [x] 4.1 Implement plan-bound routing reservations and per-input-lane forwarding with HEAD/BODY/TAIL validation; verify local delivery, same-VC packet contention, turns/wraps, cut-through packets longer than buffers and rejection before resource changes for invalid envelopes.
+- [x] 4.2 Add bounded router transfer pipelines with separate latency/initiation settings and fair output selection; verify downstream capacity is acquired without retaining a blocked physical grant, independent outputs overlap, and pipeline occupancy/throughput match configured limits.
+- [x] 4.3 Add `simulator_detailed/torus_transport.py` plan/runtime construction for admitted one-way byte traffic with class-separated bounded local channels; verify two-fabric contention and small-grid wrap stress drain without modifying the existing one-VC runtime.
+- [x] 4.4 Implement resource-complete termination and version-2 accounting for payload, padded packet bytes, actual channel launches, pending owners/credits/pipeline work and deterministic paths; verify timeout/idle-with-pending remain incomplete and delayed final credits postpone completion.
+- [x] 4.5 Run router/replay stress, analytical multi-hop and relevant legacy tests with strict type/lint; reconcile actual wait/ownership resources to the dependency proof and commit this part before part 5.
 
 ## 5. Bounded causal request/response fixtures (TR-D03, D05, D08)
 

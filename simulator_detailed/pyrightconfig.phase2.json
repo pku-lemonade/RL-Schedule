@@ -31,7 +31,8 @@
     "torus_records.py",
     "torus.py",
     "torus_dependencies.py",
-    "virtual_channel.py"
+    "virtual_channel.py",
+    "torus_transport.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

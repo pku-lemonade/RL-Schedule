@@ -244,3 +244,59 @@ and version-2 CLI/result integration (part 7). Manually driving response-class l
 fixtures tests class separation; it does not implement causal responses. The plan
 continues to report `can_execute: false` for complete replay, and no full-profile,
 NIU, memory, compute, detector or hardware timing support is implied.
+
+## Part 4: cut-through router and one-way replay
+
+`torus_transport.py` adds the first executing runtime around a compiled
+`TorusPlan`. It accepts finite `one_way` request-class traffic only. Every route
+hop is bound to one shared `VirtualChannelLink`; repeated route use therefore
+shares the physical serializer and lane credits. Response fixtures and directed
+slowdowns are rejected explicitly until parts 5 and 6 rather than being treated
+as one-way traffic.
+
+Injection, forwarding and ejection are separate bounded processes. Injection
+packet slots use each admitted source endpoint's finite queue capacity. A
+forwarder takes a received token from its input lane, validates the next hop
+through the next link's plan-bound envelope, reserves downstream lane capacity,
+then waits for a finite router transfer stage. It publishes the downstream token
+and releases the input credit only after that transfer. A blocked downstream
+reservation therefore holds a charged input token but no physical serializer or
+router grant. HEAD/BODY/TAIL sequence and packet ownership checks remain in the
+link kernel; every hop uses the same packet identity and flit index.
+
+`RouterPipeline` is shared by all outputs of one fabric-qualified router. It has
+explicit transfer latency, initiation spacing and finite capacity. Waiting output
+identities are served FIFO, and downstream link arbitration remains round-robin
+and quantum-bounded. With capacity greater than one, independent outputs overlap;
+the transfer stage does not turn router latency into a serialized wire cost.
+Transfer start/end events carry the canonical router and output channel. Pipeline
+resources report active owners, occupancy peaks and pending output requests.
+
+The runtime creates no alternate routes and does not infer missing links. Local
+same-router paths still pass through their admitted local injection/ejection
+channels and a finite router stage. Ejection applies the configured sink service
+in its declared ACI or native timebase, records receipt byte counts, and releases
+credits only after consumption. Completion requires every packet sink to finish,
+all lane credits and packet owners to drain, all transfer stages to drain, and no
+scheduled work to remain. A cycle limit or a SimPy idle state with held resources
+returns `incomplete`; receiving all payload bytes alone is insufficient.
+
+`TorusReplayResult` is produced in memory for this runtime with plan identity,
+packet counts/timestamps, physical launch bytes, lane/pipeline resources and
+transport trace events. The existing CLI still does not dispatch this result;
+`can_execute` remains false in the compiled-plan export until part 7 supplies
+versioned command admission and output handling. The result explicitly marks NIU,
+memory, compute and silicon timing support as unavailable/unvalidated.
+
+Focused transport checks cover same-router delivery, 10-flit packets longer than
+the configured lane capacity, shared-route packet contention, a direct two-output
+pipeline overlap, both fabrics on the assumed 10x12 profile, cycle-limit pending
+state, delayed final credits after payload delivery, and rejection of response or
+slowdown modes. The profile run is an assumed inventory/transport fixture, not a
+hardware execution or timing calibration.
+
+Still pending: finite causal response descriptors and independent response sinks
+(part 5), directed slowdown snapshots and reconstructable failure traces (part 6),
+and CLI/examples/support-boundary integration (part 7). Full NIU packetization,
+memory service, compute/DFG execution, multicast and hardware VC/buddy/priority
+behavior remain outside this child.
