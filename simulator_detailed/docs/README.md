@@ -4,6 +4,7 @@ arbitration, credit flow and fault timing. Shipped defaults and examples are
 synthetic.
 
 - [Configuration](config.md)
+- [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
 - [Topology and endpoint mapping](topology.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)

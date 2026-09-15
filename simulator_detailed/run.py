@@ -17,6 +17,7 @@ if __name__ == '__main__' and __package__ is None:
 from .architecture import Arch, NoCFabrics
 from .configs.schemas.arch_config import ArchConfig
 from .configs.schemas.failure_configs import FailSlow
+from .hardware_profile import load_architecture_document, require_executable_architecture
 from .noc import NoCLinkIdentity
 from .tracing import (
     DMAServiceStreams,
@@ -67,14 +68,12 @@ def fail_analyzer(filename: str) -> FailSlow:
 
 
 def arch_analyzer(filename: str) -> ArchConfig:
-    """Load and validate architecture configuration."""
-    with open(filename, 'r') as file:
-        data = json.load(file)
-        try:
-            return ArchConfig.model_validate(data)
-        except ValidationError as e:
-            print(e.json())
-            raise
+    """Load an executable configuration; profiles require a future runtime adapter."""
+    try:
+        return require_executable_architecture(load_architecture_document(filename))
+    except ValidationError as e:
+        print(e.json())
+        raise
 
 
 def setup_logging(filename: str, level: int):
@@ -249,11 +248,15 @@ def simulate(
     mapper: NetworkMapper,
     verbose: bool = False,
 ) -> tuple[float, Trace, NoCFabrics]:
+    # Reject unsupported profiles before mapper access, failure loading or output.
+    simulate_started = time.perf_counter()
+    load_started = time.perf_counter()
+    arch_config = arch_analyzer(arch_path)
+    architecture_load_seconds = time.perf_counter() - load_started
     # === Step 0: Parameter definition ===
     log_path = "logs/simulation.log"
     level = "debug"
     slice_num = 11
-    simulate_started = time.perf_counter()
     load_duration_ms = 0.0
     init_duration_ms = 0.0
     execute_duration_ms = 0.0
@@ -277,9 +280,8 @@ def simulate(
     # === Step 1: Load configuration files ===
     if verbose: print("Step 1: Load configuration files...")
     load_started = time.perf_counter()
-    arch_config = arch_analyzer(arch_path)
     failure = fail_analyzer(failure_path)
-    load_duration_ms = round((time.perf_counter() - load_started) * 1000, 3)
+    load_duration_ms = round((architecture_load_seconds + time.perf_counter() - load_started) * 1000, 3)
 
     # === Step 2: Setup logging ===
     if verbose: print("Step 2: Setup logging...")

@@ -1,6 +1,11 @@
 # Configuration
 All defaults describe a small synthetic device. They are not a hardware profile.
 
+Single-ASIC hardware descriptions use a separate versioned document with
+`kind: "hardware_profile"`. See [hardware profiles](hardware_profile.md) for the
+Wormhole B0 example, inspection command, parameter provenance and execution
+gate. Hardware profiles do not populate these synthetic runtime defaults.
+
 `NoCConfig` selects mesh dimensions, enabled `fabric_ids`, PE local port,
 simulation and network clocks, links, routers, and DMA attachments. Fabric IDs
 are nonnegative integers. Each selected fabric owns an independent mesh.

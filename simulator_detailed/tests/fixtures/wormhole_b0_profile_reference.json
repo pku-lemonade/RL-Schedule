@@ -1,0 +1,68 @@
+{
+  "extraction": "Independent transcription of pinned descriptor tables and ISA documentation; not generated from the production profile.",
+  "accessed_on": "2026-09-15",
+  "sources": {
+    "D1": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-metal/558637320489ee8ccccea5f2b3a5fcd1e1cfd58f/tt_metal/soc_descriptors/wormhole_b0_80_arch.yaml",
+      "revision": "558637320489ee8ccccea5f2b3a5fcd1e1cfd58f",
+      "sha256": "24fd3dfae80435a7d9113e255d6d6af9cdf83f6ae3b1c385e1d48a24795ccf49"
+    },
+    "D2": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/README.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "9fadd2d7173c5a9e83495ccc08f0342b325ff674cfa51d12833ddcf94b2efe9b"
+    },
+    "D3": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/TensixTile/L1.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "276d09a25442beba658a81ff19a5b82462c20b744ddf582130c69680c4257335"
+    },
+    "D4": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/Coordinates.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "328f014798fe3cec46ec2c9555a8d843074b7eb62eb4de996e6d85a0f7ec9174"
+    },
+    "D5": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/README.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "3e273cd45beb4ff1e589c676a0a41d3eb0746d6f83ac2d7cc3e4bc8925201c0c"
+    },
+    "D6": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/RoutingPaths.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": null
+    }
+  },
+  "extent": [10, 12],
+  "role_counts": {"worker": 80, "memory": 18, "ethernet": 16, "pcie": 1, "management": 1, "transit": 4},
+  "worker_columns": [1, 2, 3, 4, 6, 7, 8, 9],
+  "worker_rows": [1, 2, 3, 4, 5, 7, 8, 9, 10, 11],
+  "ethernet_rows": [0, 6],
+  "pcie": [0, 3],
+  "management": [0, 10],
+  "transit": [[0, 2], [0, 4], [0, 8], [0, 9]],
+  "dram_alias_groups": [
+    [[0, 0], [0, 1], [0, 11]],
+    [[0, 5], [0, 6], [0, 7]],
+    [[5, 0], [5, 1], [5, 11]],
+    [[5, 2], [5, 9], [5, 10]],
+    [[5, 3], [5, 4], [5, 8]],
+    [[5, 5], [5, 6], [5, 7]]
+  ],
+  "dram_group_bytes": 2147483648,
+  "dram_total_bytes": 12884901888,
+  "worker_l1_bytes": 1499136,
+  "physical_worker_l1_bytes": 119930880,
+  "enabled_worker_l1_bytes": 107937792,
+  "fabric_ids": [0, 1],
+  "routing_policies": ["dimension_order_xy", "dimension_order_yx"],
+  "noc0_mapping": "(x, y)",
+  "noc1_mapping": "(9-x, 11-y)",
+  "endpoint_count": 240,
+  "mask": {"status": "assumed", "disabled_worker_row": 11, "enabled_workers": 72, "logical_extent": [8, 9]},
+  "flit_bytes": 32,
+  "interface_bytes_per_cycle": 32,
+  "max_data_flits": 256,
+  "header_flits": 1,
+  "max_payload_bytes": 8192
+}

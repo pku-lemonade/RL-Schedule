@@ -10,9 +10,11 @@ from .configs.schemas.failure_configs import (
     RouterFail,
     TpuFail,
 )
+from .configs.schemas.hardware_profile import HardwareProfileConfig
 from .core import Core
 from .dma_endpoint import DMAChannelBinding, DMAEndpoint, DMAEndpoints
 from .endpoint_registry import EndpointRegistry, dma_node_type
+from .hardware_profile import require_executable_architecture
 from .noc import Link, NoC, NoCTracer
 from .pe_channel import NMCChannel, PEChannelBinding
 from .utils.definitions import NoCChannel, NodeType, direction_to_port
@@ -23,7 +25,8 @@ NoCFabrics = dict[NoCChannel, NoC]
 
 
 class Arch:
-    def __init__(self, arch: ArchConfig, mapper: NetworkMapper, failures: FailSlow):
+    def __init__(self, arch: ArchConfig | HardwareProfileConfig, mapper: NetworkMapper, failures: FailSlow):
+        arch = require_executable_architecture(arch)
         # basic parameters
         self.env = simpy.Environment()
         self.config = arch
