@@ -214,7 +214,7 @@ class CanonicalTopology(GraphRecord):
                 raise ValueError(f"invalid {kind} port {router.key}:{port_id}")
             key = (fabric, router_id, port_id, half)
             if key in occupied:
-                raise ValueError(f"port occupancy collision {key}")
+                raise ValueError(f"port occupancy collision: shared port {key}")
             occupied.add(key)
 
         for link in self.links:

@@ -17,6 +17,7 @@ from .endpoint_registry import EndpointRegistry, dma_node_type
 from .hardware_profile import require_executable_architecture
 from .noc import Link, NoC, NoCTracer
 from .pe_channel import NMCChannel, PEChannelBinding
+from .topology import Topology, topology_from_legacy
 from .utils.definitions import NoCChannel, NodeType, direction_to_port
 from .utils.dfg import DFGNode
 from .utils.mapper import NetworkMapper
@@ -34,11 +35,12 @@ class Arch:
         self.y_size = arch.noc.y
         self.mapper = mapper
         self.fail_slow = failures
-        self.endpoint_registry = EndpointRegistry(arch.noc)
+        self.topology = topology_from_legacy(arch.noc)
+        self.endpoint_registry = EndpointRegistry(arch.noc, self.topology)
         self.dma_commands = DMACommandCoordinator(self.env)
         
         # construction
-        self.nocs = self.build_nocs(env=self.env, config=self.config.noc)
+        self.nocs = self.build_nocs(env=self.env, config=self.config.noc, topology=self.topology)
         self.dma_endpoints = self.build_dma_endpoints(
             env=self.env,
             noc_config=self.config.noc,
@@ -206,13 +208,16 @@ class Arch:
     def build_nocs(
         env: simpy.Environment,
         config: NoCConfig,
+        topology: Topology | None = None,
     ) -> NoCFabrics:
+        topology = topology if topology is not None else topology_from_legacy(config)
         return {
             fabric_id: NoC(
                 env=env,
                 config=config,
                 fabric_id=fabric_id,
                 tracer=NoCTracer(fabric_id),
+                topology=topology,
             ).build_connection_mesh()
             for fabric_id in config.fabric_ids
         }

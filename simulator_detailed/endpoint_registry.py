@@ -1,6 +1,7 @@
 """Resolution and validation of logical endpoints to physical NoC attachments."""
 
-from .configs.schemas.arch_config import DMAEngineConfig, DMAType, NoCConfig
+from .configs.schemas.arch_config import DMAType, NoCConfig
+from .topology import Topology, topology_from_legacy
 from .utils.definitions import (
     DMAAttachmentMode,
     EndpointAddress,
@@ -27,33 +28,34 @@ def dma_node_type(dma_type: DMAType) -> NodeType:
 class EndpointRegistry:
     """Architecture-owned map from endpoint identity to NoC attachment."""
 
-    def __init__(self, noc_config: NoCConfig):
+    def __init__(self, noc_config: NoCConfig, topology: Topology | None = None):
         self.config = noc_config
-        router_count = noc_config.x * noc_config.y
+        self.topology = topology if topology is not None else topology_from_legacy(noc_config)
 
         self._addresses: dict[EndpointKey, tuple[EndpointAddress, ...]] = {}
         self._physical_ports: dict[PhysicalPort, EndpointKey] = {}
 
-        for pe_id in range(router_count):
-            self._register(
-                (NodeType.PE, pe_id),
-                tuple(
-                    EndpointAddress(
-                        node_type=NodeType.PE,
-                        node_id=pe_id,
-                        fabric_id=fabric_id,
-                        router_id=pe_id,
-                        local_port=noc_config.pe_local_port,
-                        format=noc_config.router.flit,
-                        mesh_x=noc_config.x,
-                        mesh_y=noc_config.y,
-                    )
-                    for fabric_id in noc_config.fabric_ids
-                ),
+        grouped: dict[EndpointKey, list[EndpointAddress]] = {}
+        for endpoint in self.topology.graph.attachments:
+            binding = endpoint.legacy_binding
+            if binding is None:
+                continue
+            if endpoint.enabled is not True or not endpoint.permissions_resolved:
+                raise ValueError("legacy endpoint binding must be available and resolved")
+            if endpoint.inject_port is None or endpoint.inject_port != endpoint.eject_port:
+                raise ValueError("legacy endpoint requires a paired local port")
+            node_type = NodeType[binding.node_type]
+            address = EndpointAddress(
+                node_type=node_type, node_id=binding.node_id,
+                fabric_id=NoCChannel(endpoint.fabric_id),
+                router_id=self.topology.router_indices[(endpoint.fabric_id, endpoint.router_id)],
+                local_port=self.topology.port_indices[(endpoint.fabric_id, endpoint.router_id, endpoint.inject_port)],
+                attachment_mode=(None if binding.attachment_mode is None else DMAAttachmentMode(binding.attachment_mode)),
+                format=noc_config.router.flit, mesh_x=noc_config.x, mesh_y=noc_config.y,
             )
-
-        for dma_config in noc_config.dma_engines:
-            self._register_dma(dma_config)
+            grouped.setdefault((node_type, binding.node_id), []).append(address)
+        for key, addresses in grouped.items():
+            self._register(key, tuple(sorted(addresses, key=lambda a: noc_config.fabric_ids.index(a.fabric_id))))
 
     def resolve(
         self,
@@ -103,26 +105,6 @@ class EndpointRegistry:
             raise KeyError(
                 f"endpoint {node_type.name}[{node_id}] is not configured"
             ) from exc
-
-    def _register_dma(self, config: DMAEngineConfig) -> None:
-        node_type = dma_node_type(config.dma_type)
-        addresses = tuple(
-            EndpointAddress(
-                node_type=node_type,
-                node_id=config.instance_id,
-                fabric_id=fabric_id,
-                router_id=config.router_id,
-                local_port=config.local_ports[
-                    0 if len(config.local_ports) == 1 else index
-                ],
-                attachment_mode=config.attachment_mode,
-                format=self.config.router.flit,
-                mesh_x=self.config.x,
-                mesh_y=self.config.y,
-            )
-            for index, fabric_id in enumerate(config.fabric_ids)
-        )
-        self._register((node_type, config.instance_id), addresses)
 
     def _register(
         self,

@@ -8,6 +8,7 @@ from simpy.events import Event as SimpyEvent
 from simpy.events import Process, ProcessGenerator
 
 from .configs.schemas.arch_config import LinkConfig, NoCConfig, RouterConfig
+from .topology import Topology, topology_from_legacy
 from .utils.definitions import (
     DIR_EAST,
     DIR_NORTH,
@@ -849,10 +850,13 @@ class NoC:
         config: NoCConfig,
         fabric_id: NoCChannel,
         tracer: NoCTracer,
+        *,
+        topology: Topology | None = None,
     ):
         if config.type != "Mesh":
             raise ValueError("Phase 2 supports only the Mesh topology")
         self.env = env
+        self.topology = topology if topology is not None else topology_from_legacy(config)
         self.config = config
         self.fabric_id = fabric_id
         self.name = fabric_id.name

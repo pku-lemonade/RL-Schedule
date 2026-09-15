@@ -390,6 +390,8 @@ def load_architecture_document(path: str | Path) -> ArchConfig | HardwareProfile
     data: object = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict):
         keys = cast(dict[str, object], data)
+        if keys.get("kind") in {"canonical_topology", "topology_replay", "topology_replay_result"}:
+            raise ValueError("topology documents require the topology inspection/replay entry point")
         if "kind" in keys or "schema_version" in keys:
             return HardwareProfileConfig.model_validate(data)
     return ArchConfig.model_validate(data)
@@ -418,5 +420,5 @@ def require_executable_architecture(document: object) -> ArchConfig:
         ]
         raise UnsupportedHardwareProfileError(profile.profile_id, blockers)
     if not isinstance(document, ArchConfig):
-        raise TypeError("expected ArchConfig or HardwareProfileConfig")
+        raise TypeError("expected ArchConfig or HardwareProfileConfig; topology replay uses a separate entry point")
     return document

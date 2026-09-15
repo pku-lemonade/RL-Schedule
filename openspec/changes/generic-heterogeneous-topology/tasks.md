@@ -7,11 +7,11 @@
 
 ## 2. Profile and legacy adapters
 
-- [ ] 2.1 Implement profile inventory projection in `simulator_detailed/topology.py` using child-1 normalized data and provenance; verify the real Wormhole example's 120 tiles, 240 fabric routers, 240 physical attachments, 72 selected workers and 86 unique resources against the independent child-1 fixture, with unresolved links/undeclared attachment permissions, no invented local ports or availability, and no new execution capability.
-- [ ] 2.2 Implement the legacy mesh adapter with current row-major router IDs, per-fabric directed link order, physical coordinates, PE bindings and typed DMA bindings; verify 1x1, 3x2, 4x4 and custom-fabric/local-port cases against the retained independent baseline, including 48 directed links per 4x4 fabric.
-- [ ] 2.3 Make `simulator_detailed/endpoint_registry.py` consume explicit graph endpoint bindings while retaining its legacy constructor; verify memory/transit/disabled-compute inventory creates no implicit PE or DMA endpoint, and existing DMA mode, fabric and local-port collision tests still pass.
-- [ ] 2.4 Introduce shared graph ownership in `simulator_detailed/architecture.py` without accepting heterogeneous DFG/profile execution; verify legacy core/mapper identities and all child-1 early profile gates remain intact, and graph/replay documents are rejected clearly by legacy architecture entry points.
-- [ ] 2.5 Run focused graph/profile/registry tests plus the existing NoC/DMA suites, relevant strict types and lint; record adapter parity and remaining representation-only limits, then commit this completed adapter part before section 3.
+- [x] 2.1 Implement profile inventory projection in `simulator_detailed/topology.py` using child-1 normalized data and provenance; verify the real Wormhole example's 120 tiles, 240 fabric routers, 240 physical attachments, 72 selected workers and 86 unique resources against the independent child-1 fixture, with unresolved links/undeclared attachment permissions, no invented local ports or availability, and no new execution capability.
+- [x] 2.2 Implement the legacy mesh adapter with current row-major router IDs, per-fabric directed link order, physical coordinates, PE bindings and typed DMA bindings; verify 1x1, 3x2, 4x4 and custom-fabric/local-port cases against the retained independent baseline, including 48 directed links per 4x4 fabric.
+- [x] 2.3 Make `simulator_detailed/endpoint_registry.py` consume explicit graph endpoint bindings while retaining its legacy constructor; verify memory/transit/disabled-compute inventory creates no implicit PE or DMA endpoint, and existing DMA mode, fabric and local-port collision tests still pass.
+- [x] 2.4 Introduce shared graph ownership in `simulator_detailed/architecture.py` without accepting heterogeneous DFG/profile execution; verify legacy core/mapper identities and all child-1 early profile gates remain intact, and graph/replay documents are rejected clearly by legacy architecture entry points.
+- [x] 2.5 Run focused graph/profile/registry tests plus the existing NoC/DMA suites, relevant strict types and lint; record adapter parity and remaining representation-only limits, then commit this completed adapter part before section 3.
 
 ## 3. Directed bindings and validated routing policies
 
