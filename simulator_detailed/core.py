@@ -43,12 +43,54 @@ class ScratchpadMemory:
         self.env = env
         self.delay = config.delay
         self.container = simpy.Container(self.env, init=config.size, capacity=config.size)
+        self._capacity_owner: object | None = None
+        self._pending_capacity_operations = 0
 
     @property
     def used_bytes(self) -> float:
         return float(self.container.capacity - self.container.level)
 
-    def allocate(self, size: int, task_index: int) -> ProcessGenerator:
+    @property
+    def pending_capacity_operations(self) -> int:
+        return self._pending_capacity_operations
+
+    def bind_capacity_owner(self, owner: object) -> None:
+        """Opt-in exclusive ownership; a scheduled legacy call is already busy."""
+        if owner is None or self._capacity_owner is not None:
+            raise ValueError("scratchpad capacity already bound or invalid owner")
+        self._require_empty_idle()
+        self._capacity_owner = owner
+
+    def unbind_capacity_owner(self, owner: object) -> None:
+        if owner is None or self._capacity_owner is not owner:
+            raise ValueError("foreign or detached scratchpad capacity owner")
+        self._require_empty_idle()
+        self._capacity_owner = None
+
+    def _require_empty_idle(self) -> None:
+        if (self.used_bytes or self._pending_capacity_operations
+                or any(getattr(self.container, name) for name in ("get_queue", "put_queue"))):
+            raise ValueError("scratchpad capacity must be empty and idle")
+
+    def _track_capacity(self, operation: ProcessGenerator, owner: object | None) -> ProcessGenerator:
+        if owner is not self._capacity_owner:
+            raise ValueError("scratchpad capacity is exclusively managed; unmanaged call rejected")
+        self._pending_capacity_operations += 1
+        return self._run_capacity(operation)
+
+    def _run_capacity(self, operation: ProcessGenerator) -> ProcessGenerator:
+        try:
+            yield from operation
+        finally:
+            self._pending_capacity_operations -= 1
+
+    def allocate(self, size: int, task_index: int, *, owner: object | None = None) -> ProcessGenerator:
+        return self._track_capacity(self._allocate(size, task_index), owner)
+
+    def release(self, size: int, task_index: int, *, owner: object | None = None) -> ProcessGenerator:
+        return self._track_capacity(self._release(size, task_index), owner)
+
+    def _allocate(self, size: int, task_index: int) -> ProcessGenerator:
         logger.debug(f"Core #{self.id}: allocate {size} for Task {task_index}")
         logger.debug(
             "before allocating space for Task %s: %s/%s",
@@ -72,7 +114,7 @@ class ScratchpadMemory:
             self.container.capacity,
         )
 
-    def release(self, size: int, task_index: int) -> ProcessGenerator:
+    def _release(self, size: int, task_index: int) -> ProcessGenerator:
         logger.debug(f"Core #{self.id}: release {size} for Task {task_index}")
         logger.debug(
             "before releasing space for Task %s: %s/%s",

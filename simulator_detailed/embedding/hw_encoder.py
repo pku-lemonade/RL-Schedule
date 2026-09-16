@@ -1,13 +1,31 @@
-from collections.abc import Mapping
+"""Validate legacy graph inputs before loading optional tensor dependencies."""
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from ..noc import NoC
 from ..topology_compatibility import legacy_coordinates, require_legacy_nocs
 from ..utils.definitions import NoCChannel
+
+if TYPE_CHECKING:
+    import torch
+
+    from ._hardware_embedding import HardwareEmbedding
+
+__all__ = ["HardwareEmbedding", "build_hardware_graph"]
+
+
+def __getattr__(name: str):
+    if name != "HardwareEmbedding":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from ._hardware_embedding import HardwareEmbedding
+
+    # Keep the public import/pickle location and cache the same class object.
+    HardwareEmbedding.__module__ = __name__
+    globals()[name] = HardwareEmbedding
+    return HardwareEmbedding
 
 
 def build_hardware_graph(
@@ -19,6 +37,8 @@ def build_hardware_graph(
         edge_feature: (2, num_edges)
     """
     noc_instances, topology = require_legacy_nocs(noc_instances)
+    import torch
+
     coordinates = legacy_coordinates(topology)
 
     routers = [
@@ -71,28 +91,3 @@ def build_hardware_graph(
     edge_index = torch.tensor([source_nodes, target_nodes], dtype=torch.long)
     
     return x, edge_index
-
-
-class HardwareEmbedding(nn.Module):
-    def __init__(self, num_nodes, input_dim=4, hidden_dim=16, output_dim=1):
-        super(HardwareEmbedding, self).__init__()
-        
-        self.conv1 = GCNConv(input_dim, hidden_dim)
-        self.conv2 = GCNConv(hidden_dim, hidden_dim)
-        
-        self.lin = nn.Linear(hidden_dim, output_dim)
-        
-
-    def forward(self, x, edge_index):
-        # [N_c + N_l, feature_dim]
-        x = self.conv1(x, edge_index)
-        x = F.relu(x)
-        x = F.dropout(x, p=0.1, training=self.training)
-        
-        # [N_c + N_l, hidden_dim]
-        x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        
-        # [N_c + N_l, 1]
-        x = self.lin(x)
-        return x

@@ -1,14 +1,11 @@
 import time
 from typing import Dict, List, Tuple, cast
 
-from .predictor import FailurePredictor
 from ..configs.schemas.arch_config import ArchConfig
 from ..topology import Topology, topology_from_legacy
 from ..topology_compatibility import legacy_event_rows, require_legacy_topology
-from .data_loader import ManycoreDatasetBuilder, TimeWindowConfig
-from ..utils.timing_logger import log_timing
 from ..utils.definitions import NoCChannel
-
+from ..utils.timing_logger import log_timing
 
 model_path = "models/best_model.pth"
 overlap_size = 0
@@ -27,6 +24,8 @@ def _get_predictor(mesh_x: int, mesh_y: int, fabric_ids: tuple[NoCChannel, ...],
     predictor = _PREDICTOR_CACHE.get(cache_key)
     cache_hit = predictor is not None
     if predictor is None:
+        from .predictor import FailurePredictor
+
         predictor = FailurePredictor(
             model_path=model_path,
             mesh_x=mesh_x,
@@ -51,11 +50,13 @@ def detect(
     link_events_json: List[JsonEvent],
 ) -> Tuple[DetectionScores, DetectionScores]:
     if not isinstance(arch_config, ArchConfig):
-        raise TypeError("detailed detection requires legacy ArchConfig; topology replay is unsupported")
+        raise TypeError("detailed detection requires legacy ArchConfig; topology/memory replay is unsupported")
     topology = topology_from_legacy(arch_config.noc)
     require_legacy_topology(topology, "detailed_predictor")
     core_events_json = legacy_event_rows(core_events_json, "compute")
     link_events_json = legacy_event_rows(link_events_json, "communication")
+    from .data_loader import ManycoreDatasetBuilder, TimeWindowConfig
+
     detect_started = time.perf_counter()
     log_timing(
         "detect.start",

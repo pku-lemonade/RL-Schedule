@@ -45,7 +45,8 @@
     "memory_resources.py",
     "memory_execution.py",
     "memory_ordering.py",
-    "memory_runtime.py"
+    "memory_runtime.py",
+    "memory_adapters.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

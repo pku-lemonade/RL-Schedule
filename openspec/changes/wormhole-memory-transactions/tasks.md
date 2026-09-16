@@ -48,11 +48,11 @@
 
 ## 7. Legacy DMA and scratchpad adapters (MT-D04, D09)
 
-- [ ] 7.1 Add an explicit legacy DMA lifecycle wrapper in `memory_adapters.py` that delegates existing endpoint/channel/coordinator work; verify `legacy_dma` labeling, unchanged result semantics, absent remote-memory visibility and no extra descriptors, packetization or service charges.
-- [ ] 7.2 Compare direct and adapted GM/DDR reads/writes in single-side/dual-side modes across fabrics, descriptor-sharing policies, finite outstanding limits, custom packet sizes and fault recovery; verify exact timing/service traces, rendezvous, drain and existing FIXPATH/local-memory DMA rejection.
-- [ ] 7.3 Add an exclusive capacity adapter for an empty, idle `core.ScratchpadMemory` in the same environment; verify its original container/delay is used exactly once, duplicate binding/release and unmanaged concurrent operations are rejected, and detach requires drained ownership.
-- [ ] 7.4 Verify unbound scratchpad calls and legacy detailed examples remain compatible, and memory replay/result inputs are rejected before detailed detector/encoder tensor work; record unchanged 7-D/4-D/checkpoint/RL assumptions and any unavailable Torch/PyG checks accurately.
-- [ ] 7.5 Run adapter/DMA/scratchpad and affected compatibility regressions, strict type/lint and `git diff --check`; review the boundary that legacy transport and DFG have not migrated, then commit this part before CLI delivery.
+- [x] 7.1 Add an explicit legacy DMA lifecycle wrapper in `memory_adapters.py` that delegates existing endpoint/channel/coordinator work; verify `legacy_dma` labeling, unchanged result semantics, absent remote-memory visibility and no extra descriptors, packetization or service charges.
+- [x] 7.2 Compare direct and adapted GM/DDR reads/writes in single-side/dual-side modes across fabrics, descriptor-sharing policies, finite outstanding limits, custom packet sizes and fault recovery; verify exact timing/service traces, rendezvous, drain and existing FIXPATH/local-memory DMA rejection.
+- [x] 7.3 Add an exclusive capacity adapter for an empty, idle `core.ScratchpadMemory` in the same environment; verify its original container/delay is used exactly once, duplicate binding/release and unmanaged concurrent operations are rejected, and detach requires drained ownership.
+- [x] 7.4 Verify unbound scratchpad calls and legacy detailed examples remain compatible, and memory replay/result inputs are rejected before detailed detector/encoder tensor work; record unchanged 7-D/4-D/checkpoint/RL assumptions and any unavailable Torch/PyG checks accurately.
+- [x] 7.5 Run adapter/DMA/scratchpad and affected compatibility regressions, strict type/lint and `git diff --check`; review the boundary that legacy transport and DFG have not migrated, then commit this part before CLI delivery.
 
 ## 8. CLI, examples, evidence and compute-child handoff (MT-D01..10)
 
