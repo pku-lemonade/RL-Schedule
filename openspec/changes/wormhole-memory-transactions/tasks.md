@@ -8,11 +8,11 @@
 
 ## 2. Wire packetization and route compilation (MT-D02, D03, D10)
 
-- [ ] 2.1 Add pure packet layout/segmentation code in `memory_packets.py` with stable operation/segment/purpose identities, header-only read requests/acks, normal write/read-data packets and exact partial data flits; verify independent boundary tables for 1, 15, 16, 31, 32, 33, 8191, 8192, 8193 bytes and a second generic width/alignment configuration.
-- [ ] 2.2 Reuse/extract pure torus binding/routing helpers to compile each request/response route without fabricating v2 traffic or granting DRAM initiation; verify both fabrics, wraps, same-router routes, canonical aliases and unchanged existing route oracles.
-- [ ] 2.3 Add immutable memory wire envelope/layout validation with zero-useful-byte headers and plan-bound channel/lane paths while retaining v2 positive-payload envelopes; verify malformed layout, identity collisions, wrong class/path and cross-plan inputs fail before mutation.
-- [ ] 2.4 Add source-pinned packet/address fixtures and separate logical/header/padding/packet/channel expected accounting; verify the 8,193-byte reference totals (8,288 posted, 8,352 read/acknowledged) independently of production helpers and preserve legacy packet serialization.
-- [ ] 2.5 Run packet/admission/route tests, applicable strict type/lint and `git diff --check`; review explicit software segmentation and unsupported NIU modes, then commit this part with evidence before part 3.
+- [x] 2.1 Add pure packet layout/segmentation code in `memory_packets.py` with stable operation/segment/purpose identities, header-only read requests/acks, normal write/read-data packets and exact partial data flits; verify independent boundary tables for 1, 15, 16, 31, 32, 33, 8191, 8192, 8193 bytes and a second generic width/alignment configuration.
+- [x] 2.2 Reuse/extract pure torus binding/routing helpers to compile each request/response route without fabricating v2 traffic or granting DRAM initiation; verify both fabrics, wraps, same-router routes, canonical aliases and unchanged existing route oracles.
+- [x] 2.3 Add immutable memory wire envelope/layout validation with zero-useful-byte headers and plan-bound channel/lane paths while retaining v2 positive-payload envelopes; verify malformed layout, identity collisions, wrong class/path and cross-plan inputs fail before mutation.
+- [x] 2.4 Add source-pinned packet/address fixtures and separate logical/header/padding/packet/channel expected accounting; verify the 8,193-byte reference totals (8,288 posted, 8,352 read/acknowledged) independently of production helpers and preserve legacy packet serialization.
+- [x] 2.5 Run packet/admission/route tests, applicable strict type/lint and `git diff --check`; review explicit software segmentation and unsupported NIU modes, then commit this part with evidence before part 3.
 
 ## 3. Reusable bounded transport with real headers (MT-D03, D08, D09)
 

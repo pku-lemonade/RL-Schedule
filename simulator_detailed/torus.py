@@ -73,10 +73,10 @@ def _availability(original: bool | None, default: AvailabilitySetting,
     return default.enabled if original is None else original
 
 
-def _raw_maps(graph: CanonicalTopology, binding: TorusBinding) -> dict[tuple[int, int, int], TopologyRouter]:
-    if {f.fabric_id for f in graph.fabrics} != {f.fabric_id for f in binding.fabrics}:
+def _raw_maps(graph: CanonicalTopology, fabric_bindings: tuple[TorusFabricBinding, ...]) -> dict[tuple[int, int, int], TopologyRouter]:
+    if {f.fabric_id for f in graph.fabrics} != {f.fabric_id for f in fabric_bindings}:
         raise ValueError("binding must select exactly the source fabrics")
-    bindings = {f.fabric_id: f for f in binding.fabrics}
+    bindings = {f.fabric_id: f for f in fabric_bindings}
     coordinates: dict[tuple[int, int, int], TopologyRouter] = {}
     for fabric in graph.fabrics:
         selected = bindings[fabric.fabric_id]
@@ -131,7 +131,7 @@ def _physical_directions(graph: CanonicalTopology, coordinates: Mapping[tuple[in
 
 def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_links: bool) -> CanonicalTopology:
     graph = normalize_topology(graph)
-    coordinates = _raw_maps(graph, binding)
+    coordinates = _raw_maps(graph, binding.fabrics)
     bindings = {f.fabric_id: f for f in binding.fabrics}
     router_overrides = {(r.fabric_id, r.router_id): r for r in binding.router_overrides}
     link_overrides = {(e.fabric_id, e.link_id): e for e in binding.link_overrides}
@@ -226,28 +226,33 @@ def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_lin
 
 
 @dataclass(frozen=True)
-class BoundTorus:
-    contract: PreparedTorusContract
+class TorusRouting:
+    """Pure graph/path compiler. Callers separately admit endpoint roles."""
+
     topology: Topology
     fabrics: Mapping[int, TopologyFabric]
     bindings: Mapping[int, TorusFabricBinding]
     routers: Mapping[RouterKey, TopologyRouter]
     axis_links: Mapping[tuple[int, str, Axis], TopologyLink]
     endpoints: Mapping[str, TopologyAttachment]
-    endpoint_roles: Mapping[str, TorusEndpointBinding]
 
     @classmethod
-    def bind(cls, config: TorusReplay, source_document: object) -> BoundTorus:
-        prepared = PreparedTorusContract.prepare(config, source_document)
-        profile_source = isinstance(prepared.config.source, ProfileSource)
-        inventory = (
-            topology_from_profile(HardwareProfileConfig.model_validate_json(prepared.source_json)).graph
-            if profile_source else CanonicalTopology.model_validate_json(prepared.source_json)
-        )
-        graph = _bind_graph(inventory, prepared.config.binding, generate_links=profile_source)
+    def from_graph(cls, graph: CanonicalTopology,
+                   fabric_bindings: tuple[TorusFabricBinding, ...]) -> TorusRouting:
+        graph = normalize_topology(graph)
+        _raw_maps(graph, fabric_bindings)
+        defaults = {f.fabric_id: f for f in fabric_bindings}
+        graph = graph.model_copy(update={
+            "routers": tuple(r.model_copy(update={"enabled": _availability(
+                r.enabled, defaults[r.fabric_id].router_default, None, f"router {r.key}"
+            )}) for r in graph.routers),
+            "links": tuple(e.model_copy(update={"enabled": _availability(
+                e.enabled, defaults[e.fabric_id].link_default, None, f"link {e.key}"
+            )}) for e in graph.links),
+        })
         topology = Topology.compile(graph)
         fabrics = {f.fabric_id: f for f in graph.fabrics}
-        bindings = {f.fabric_id: f for f in prepared.config.binding.fabrics}
+        bindings = {f.fabric_id: f for f in fabric_bindings}
         routers = {r.key: r for r in graph.routers}
         axis_links: dict[tuple[int, str, Axis], TopologyLink] = {}
         for link in graph.links:
@@ -266,13 +271,9 @@ class BoundTorus:
             axis_links[key] = link
         if len(axis_links) != 2 * len(routers):
             raise ValueError("torus requires exactly one positive edge per router and axis")
-        for override in prepared.config.network_overrides:
-            if (override.fabric_id, override.link_id) not in topology.link_indices:
-                raise ValueError("network settings override has no canonical torus link")
-        return cls(prepared, topology, MappingProxyType(fabrics), MappingProxyType(bindings),
-                   MappingProxyType(routers), MappingProxyType(axis_links),
-                   MappingProxyType({e.endpoint_id: e for e in graph.attachments}),
-                   MappingProxyType({e.endpoint_id: e for e in prepared.config.binding.endpoints}))
+        return TorusRouting(topology, MappingProxyType(fabrics), MappingProxyType(bindings),
+                            MappingProxyType(routers), MappingProxyType(axis_links),
+                            MappingProxyType({e.endpoint_id: e for e in graph.attachments}))
 
     def class_base(self, fabric_id: int, traffic_class: TrafficClass) -> int:
         if traffic_class not in {"request", "response"}:
@@ -323,15 +324,14 @@ class BoundTorus:
             raise ValueError("compiled torus route violates destination/resource order")
         return tuple(hops)
 
-    def route(self, fabric_id: int, source: str, destination: str, traffic_class: TrafficClass) -> RouteRecord:
-        if source not in self.endpoint_roles or destination not in self.endpoint_roles:
-            raise ValueError("route endpoint is not in the transport allowlist")
+    def endpoint_path(self, fabric_id: int, source: str, destination: str,
+                      traffic_class: TrafficClass) -> RouteRecord:
+        """Build a permitted physical path; this does not authorize initiation."""
+        if source not in self.endpoints or destination not in self.endpoints:
+            raise ValueError("unknown route endpoint")
         src, dst = self.endpoints[source], self.endpoints[destination]
-        src_roles, dst_roles = self.endpoint_roles[source].roles, self.endpoint_roles[destination].roles
-        required_source = "request_source" if traffic_class == "request" else "responder"
-        required_sinks = {"request_sink", "responder"} if traffic_class == "request" else {"response_sink"}
-        if required_source not in src_roles or not required_sinks.intersection(dst_roles):
-            raise ValueError("route endpoint roles do not admit this class")
+        if any(e.enabled is not True or not e.replay_enabled or not e.permissions_resolved for e in (src, dst)):
+            raise ValueError("route endpoint is unavailable or unresolved")
         if src.fabric_id != fabric_id or dst.fabric_id != fabric_id or src.inject_port is None or dst.eject_port is None:
             raise ValueError("route requires same-fabric injection/ejection permissions")
 
@@ -349,6 +349,43 @@ class BoundTorus:
             *self.network_path(fabric_id, src.router_id, dst.router_id, traffic_class),
             local("eject", dst, dst.eject_port, self.ejection_rank(fabric_id, traffic_class)),
         ))
+
+
+@dataclass(frozen=True)
+class BoundTorus(TorusRouting):
+    contract: PreparedTorusContract
+    endpoint_roles: Mapping[str, TorusEndpointBinding]
+
+    @classmethod
+    def bind(cls, config: TorusReplay, source_document: object) -> BoundTorus:
+        prepared = PreparedTorusContract.prepare(config, source_document)
+        profile_source = isinstance(prepared.config.source, ProfileSource)
+        inventory = (
+            topology_from_profile(HardwareProfileConfig.model_validate_json(prepared.source_json)).graph
+            if profile_source else CanonicalTopology.model_validate_json(prepared.source_json)
+        )
+        graph = _bind_graph(inventory, prepared.config.binding, generate_links=profile_source)
+        routing = TorusRouting.from_graph(graph, prepared.config.binding.fabrics)
+        for override in prepared.config.network_overrides:
+            if (override.fabric_id, override.link_id) not in routing.topology.link_indices:
+                raise ValueError("network settings override has no canonical torus link")
+        return cls(routing.topology, routing.fabrics, routing.bindings, routing.routers,
+                   routing.axis_links, routing.endpoints, prepared,
+                   MappingProxyType({e.endpoint_id: e for e in prepared.config.binding.endpoints}))
+
+    def route(self, fabric_id: int, source: str, destination: str, traffic_class: TrafficClass) -> RouteRecord:
+        if source not in self.endpoint_roles or destination not in self.endpoint_roles:
+            raise ValueError("route endpoint is not in the transport allowlist")
+        src, dst = self.endpoints[source], self.endpoints[destination]
+        src_roles, dst_roles = self.endpoint_roles[source].roles, self.endpoint_roles[destination].roles
+        required_source = "request_source" if traffic_class == "request" else "responder"
+        required_sinks = {"request_sink", "responder"} if traffic_class == "request" else {"response_sink"}
+        if required_source not in src_roles or not required_sinks.intersection(dst_roles):
+            raise ValueError("route endpoint roles do not admit this class")
+        if src.fabric_id != fabric_id or dst.fabric_id != fabric_id or src.inject_port is None or dst.eject_port is None:
+            raise ValueError("route requires same-fabric injection/ejection permissions")
+
+        return self.endpoint_path(fabric_id, source, destination, traffic_class)
 
     def validate_route(self, route: RouteRecord) -> None:
         route = RouteRecord.model_validate(route.model_dump(mode="json"))

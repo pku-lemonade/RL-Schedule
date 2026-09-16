@@ -1,0 +1,52 @@
+{
+  "extraction": "Independent arithmetic from pinned packet forms; software segmentation and six/four-channel synthetic routes are simulator assumptions, not measured silicon behavior.",
+  "sources": {
+    "overview": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/README.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "3e273cd45beb4ff1e589c676a0a41d3eb0746d6f83ac2d7cc3e4bc8925201c0c"
+    },
+    "packet_forms": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/MemoryMap.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "bd48815f846f85d4cf72dab43323206306b7ab32a5033338bf06146e7648a9a2"
+    },
+    "alignment": {
+      "url": "https://raw.githubusercontent.com/tenstorrent/tt-isa-documentation/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0/NoC/Alignment.md",
+      "revision": "acaf010519f4fdd323df5077e45b8695f70e4279",
+      "sha256": "7b898f80a5e6df75046c53ad22bba3283e67ec56e390b13644f650b5e6a43875"
+    }
+  },
+  "packet_config": {
+    "physical_flit_bytes": 32,
+    "data_capacity_bytes": 32,
+    "header_flits": 1,
+    "max_segment_payload_bytes": 8192,
+    "address_alignment_bytes": 32
+  },
+  "cases": [
+    {"logical": 1, "segments": 1, "data_flits": 1, "padding": 31, "posted_headers": 32, "paired_headers": 64, "posted_packet": 64, "paired_packet": 96},
+    {"logical": 15, "segments": 1, "data_flits": 1, "padding": 17, "posted_headers": 32, "paired_headers": 64, "posted_packet": 64, "paired_packet": 96},
+    {"logical": 16, "segments": 1, "data_flits": 1, "padding": 16, "posted_headers": 32, "paired_headers": 64, "posted_packet": 64, "paired_packet": 96},
+    {"logical": 31, "segments": 1, "data_flits": 1, "padding": 1, "posted_headers": 32, "paired_headers": 64, "posted_packet": 64, "paired_packet": 96},
+    {"logical": 32, "segments": 1, "data_flits": 1, "padding": 0, "posted_headers": 32, "paired_headers": 64, "posted_packet": 64, "paired_packet": 96},
+    {"logical": 33, "segments": 1, "data_flits": 2, "padding": 31, "posted_headers": 32, "paired_headers": 64, "posted_packet": 96, "paired_packet": 128},
+    {"logical": 8191, "segments": 1, "data_flits": 256, "padding": 1, "posted_headers": 32, "paired_headers": 64, "posted_packet": 8224, "paired_packet": 8256},
+    {"logical": 8192, "segments": 1, "data_flits": 256, "padding": 0, "posted_headers": 32, "paired_headers": 64, "posted_packet": 8224, "paired_packet": 8256},
+    {"logical": 8193, "segments": 2, "data_flits": 257, "padding": 31, "posted_headers": 64, "paired_headers": 128, "posted_packet": 8288, "paired_packet": 8352}
+  ],
+  "address_case": {
+    "size": 8193,
+    "source_base": 64,
+    "source_offset": 32,
+    "destination_base": 128,
+    "destination_offset": 64,
+    "segment_sources": [96, 8288],
+    "segment_destinations": [192, 8384],
+    "segment_lengths": [8192, 1]
+  },
+  "channel_cases": [
+    {"fabric": 0, "size": 8193, "request_hops": 6, "response_hops": 4, "write_posted": 49728, "write_acknowledged": 49984, "read": 33536},
+    {"fabric": 1, "size": 8193, "request_hops": 4, "response_hops": 6, "write_posted": 33152, "write_acknowledged": 33536, "read": 49984}
+  ]
+}

@@ -11,7 +11,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, StrictBool, model_validator
 
 from .topology import GraphRecord, Identifier, Index, PositiveInt, unique
-from .torus_replay import EvidenceSource, TransportEvidence
+from .torus_replay import EvidenceSource, TorusFabricBinding, TransportEvidence
 
 NonNegative = Annotated[float, Field(strict=True, ge=0)]
 Positive = Annotated[float, Field(strict=True, gt=0)]
@@ -172,6 +172,8 @@ class MemoryReplay(GraphRecord):
     source: MemorySource
     aci_clock_hz: Positive
     fabrics: tuple[Index, ...] = Field(min_length=1)
+    # Empty means admission records only; wire compilation requires explicit routing.
+    routing: tuple[TorusFabricBinding, ...] = ()
     packet: MemoryPacketConfig
     issue_latency_aci_cycles: NonNegative
     max_outstanding_segments: PositiveInt
@@ -187,6 +189,7 @@ class MemoryReplay(GraphRecord):
     @model_validator(mode="after")
     def identities_and_modes(self) -> Self:
         unique(self.fabrics, "memory fabric")
+        unique(tuple(f.fabric_id for f in self.routing), "memory routing fabric")
         unique(tuple(r.resource_id for r in self.resources), "memory resource")
         unique(tuple(e.endpoint_id for e in self.endpoints), "memory endpoint")
         unique(tuple(b.buffer_id for b in self.buffers), "memory buffer")

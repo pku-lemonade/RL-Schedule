@@ -35,7 +35,9 @@
     "virtual_channel.py",
     "torus_transport.py",
     "memory_records.py",
-    "memory_plan.py"
+    "memory_plan.py",
+    "memory_routes.py",
+    "memory_packets.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
