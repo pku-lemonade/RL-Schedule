@@ -1,0 +1,248 @@
+{
+  "kind": "topology_replay",
+  "schema_version": 2,
+  "policy": "dimension_dateline_v1",
+  "source": {
+    "kind": "canonical_graph",
+    "graph_path": "../topologies/torus_small_v2.json"
+  },
+  "aci_clock": {
+    "kind": "literal",
+    "value": 500000000,
+    "unit": "Hz",
+    "evidence": {
+      "status": "assumed",
+      "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+      "sources": []
+    }
+  },
+  "binding": {
+    "fabrics": [
+      {
+        "fabric_id": 0,
+        "topology_policy": "torus_2d_positive",
+        "routing_policy": "dimension_order_xy",
+        "dateline": {
+          "x": 0,
+          "y": 0
+        },
+        "router_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "link_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      }
+    ],
+    "endpoints": [
+      {
+        "endpoint_id": "src",
+        "fabric_id": 0,
+        "roles": [
+          "request_source",
+          "request_sink"
+        ],
+        "inject_port": "local",
+        "eject_port": "local",
+        "injection_queue_capacity_packets": 1,
+        "sink_service": {
+          "cycles": 1.0,
+          "timebase": "noc",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        },
+        "response_queue_capacity_packets": null,
+        "response_service": null
+      },
+      {
+        "endpoint_id": "dst",
+        "fabric_id": 0,
+        "roles": [
+          "request_sink"
+        ],
+        "eject_port": "local",
+        "sink_service": {
+          "cycles": 1.0,
+          "timebase": "noc",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        },
+        "inject_port": null,
+        "injection_queue_capacity_packets": null,
+        "response_queue_capacity_packets": null,
+        "response_service": null
+      }
+    ],
+    "router_overrides": [],
+    "link_overrides": []
+  },
+  "fabrics": [
+    {
+      "fabric_id": 0,
+      "noc_clock": {
+        "kind": "literal",
+        "value": 1000000000,
+        "unit": "Hz",
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      },
+      "flit": {
+        "physical_flit_bytes": {
+          "kind": "literal",
+          "value": 32,
+          "unit": "bytes",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "payload_capacity_bytes": 24,
+        "header_bytes": 8,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      },
+      "router": {
+        "rc_noc_cycles": 1.0,
+        "sa_noc_cycles": 1.0,
+        "transfer_noc_cycles": 2.0,
+        "transfer_initiation_interval_noc_cycles": 1.0,
+        "transfer_capacity_flits": 2,
+        "arbitration_quantum_flits": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      },
+      "network_link": {
+        "wire_bits_per_noc_cycle": {
+          "kind": "literal",
+          "value": 128,
+          "unit": "bits_per_cycle",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "payload_bits_per_noc_cycle": {
+          "kind": "literal",
+          "value": 128,
+          "unit": "bits_per_cycle",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "launch_interval_noc_cycles": 2.0,
+        "propagation_noc_cycles": 1.0,
+        "credit_return_noc_cycles": 1.0,
+        "lane_capacity_flits": 1,
+        "staging_capacity_flits": 1,
+        "arbitration_quantum_flits": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      },
+      "local_link": {
+        "wire_bits_per_noc_cycle": {
+          "kind": "literal",
+          "value": 128,
+          "unit": "bits_per_cycle",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "payload_bits_per_noc_cycle": {
+          "kind": "literal",
+          "value": 128,
+          "unit": "bits_per_cycle",
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "launch_interval_noc_cycles": 2.0,
+        "propagation_noc_cycles": 1.0,
+        "credit_return_noc_cycles": 1.0,
+        "lane_capacity_flits": 1,
+        "staging_capacity_flits": 1,
+        "arbitration_quantum_flits": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic example assumption: healthy availability, explicit fixture permissions or model timing/capacity; not a silicon measurement.",
+          "sources": []
+        }
+      }
+    }
+  ],
+  "network_overrides": [],
+  "local_overrides": [],
+  "traffic": [
+    {
+      "transfer_id": "small",
+      "fabric_id": 0,
+      "source": "src",
+      "destination": "dst",
+      "payload_bytes": 241,
+      "start_aci_cycles": 0.0,
+      "burst_quantum_flits": 1,
+      "kind": "one_way"
+    }
+  ],
+  "slowdowns": [
+    {
+      "failure_id": "slow-wrap",
+      "fabric_id": 0,
+      "link_id": "t2_1/x+",
+      "start_aci_cycles": 5,
+      "end_aci_cycles": 20,
+      "factor": 2
+    }
+  ],
+  "max_aci_cycles": 1000.0
+}

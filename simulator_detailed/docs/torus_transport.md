@@ -1,10 +1,49 @@
-# Version-2 torus transport: incremental delivery
+# Version-2 torus transport
 
-The configuration/record contracts, topology/route compiler and isolated lane/link
-kernel are implemented (parts 1–3 of `wormhole-dual-noc-routing`). The kernel executes
-bounded single-channel fixtures; it does **not** yet execute complete torus replays.
-The existing CLI still accepts only version-1 replay. Profile inspection remains
-inventory-only and full profile/DFG execution remains gated.
+Version-2 replay executes configurable directed torus unicast, bounded causal
+request/response fixtures and directed-link slowdowns. It supports canonical graph
+input and an explicit transport binding over the Wormhole profile. This completes
+the transport scope of `wormhole-dual-noc-routing`; full profile/DFG execution,
+NIU transactions, memory/compute service and silicon timing calibration remain
+unsupported. Profile inspection alone does not admit transport.
+
+## Run the examples
+
+From the repository root:
+
+```bash
+.venv/bin/python -m simulator_detailed.replay_topology --replay simulator_detailed/configs/replays/torus_small_v2.json
+.venv/bin/python -m simulator_detailed.replay_topology --replay simulator_detailed/configs/replays/wormhole_transport_v2.json
+```
+
+Add `--output /tmp/torus-result.json` to either command to write the same JSON that
+appears on stdout. Source paths resolve relative to the replay file. Dispatch
+requires exactly `kind: topology_replay` and integer `schema_version: 1` or `2`;
+result schemas retain the corresponding version. Boolean, floating-point, string,
+missing or unknown versions are rejected. Results are output documents, not replay
+inputs. Exit codes are **0** for complete, **1** for invalid, **2** for incomplete.
+Invalid admission occurs before environment construction and leaves output files
+untouched; incomplete runs still export their pending packets and resources.
+
+| Example | Executing scope | Deterministic result |
+| --- | --- | --- |
+| `torus_small_v2.json` | 3x2 synthetic graph, shifted datelines, both axis wraps, 11-flit packet with one-flit lanes, directed wrap-link slowdown | 241 payload bytes, 352 packet bytes, 1760 channel bytes, drain at 57 ACI cycles |
+| `wormhole_transport_v2.json` | Profile graph with 240 routers/480 network links, two selected endpoints per fabric, one request and one causal response per fabric | 148 payload bytes, 320 packet bytes, 4160 channel bytes, drain at 63.5 ACI cycles |
+
+The Wormhole example inherits the profile's illustrative 72-worker mask (worker
+row y=11 disabled), raw coordinate maps, physical memory inventory and source
+evidence. Router/link health and endpoint fixture permissions are explicit
+assumptions. Native clock, physical flit size and interface width reference profile
+parameters. The ACI clock, payload/header approximation, stage decomposition,
+capacity, arbitration and endpoint service are synthetic model settings. These
+numbers demonstrate model execution; they are not device measurements. The full
+grid remains transit-capable even at harvested workers, whose worker initiation
+permissions remain restricted. Graph counts describe inventory; the runtime builds
+only channels and router pipelines used by the admitted routes.
+
+The sections below describe the seven implementation parts. Validation and
+requirement mappings are recorded in
+[the child delivery report](../../openspec/changes/wormhole-dual-noc-routing/delivery.md).
 
 ## What part 1 implements
 
@@ -27,8 +66,8 @@ device-specific clock, width, geometry, capacity or service defaults.
 For receiving endpoints, sink service is positive and explicitly names the ACI or
 NoC timebase. A responder requires bounded descriptor storage and a declared response
 service delay; zero response delay is permitted. An endpoint's injection capacity
-will apply independently to each admitted traffic class. These declarations do not
-allocate queues or generate responses yet.
+applies independently to each admitted traffic class. Parsing these declarations
+alone does not allocate queues or generate responses; the runtime does that.
 
 Hardware quantities are either evidence-bearing literals or profile-parameter
 references. A reference can carry an explicit override with value, reason and evidence.
@@ -115,8 +154,8 @@ slowdown constraints, relative loading, evidence/override resolution, clock extr
 normalization/hash changes, exact large integer byte metadata, route/envelope/trace
 shape, result totals and credit-drain constraints. A deliberately non-torus graph
 can pass configuration preparation, demonstrating that this stage does not claim
-topology admission. The existing CLI rejects version-2 input without creating an
-output artifact. The full suite retains profile gates, version-1 replay and the
+topology admission. At the part-1 checkpoint the CLI rejected version-2 input;
+part 7 now dispatches admitted version-2 replay. The full suite retains profile gates, version-1 replay and the
 legacy mesh timing/failure tests.
 
 Tests use synthetic timings/capacities and the existing assumed Wormhole profile.
@@ -154,8 +193,7 @@ request dependency. The resulting graph is checked with a topological sort and
 declared ranks. This is a static policy check, not proof of runtime scheduling or
 silicon VC behavior.
 
-Still pending after part 2: the runtime work described in the following section
-and the remaining router/endpoint/replay integration. Hardware
+Binding and compilation alone do not run the router/endpoint runtime below. Hardware
 VC encoding/buddy/priority modes, NIU packetization/transactions, memory/compute
 execution, multicast/synchronization, tensor/checkpoint execution and hardware
 calibration are not provided by these records.
@@ -169,8 +207,8 @@ resolves network/local overrides and profile quantities through the existing
 prepared contract. `envelope(packet, index)` produces metadata for the admitted
 channel hop. Reservation revalidates every field against that template, including
 plan hash, payload/padding, sequence bounds, endpoints, class, dateline, hop and
-burst quantum, before changing any resource or trace. Configured slowdowns are
-explicitly rejected until part 6 implements them.
+burst quantum, before changing any resource or trace. Directed slowdown timing is
+described in part 6 below.
 
 Network channels have four modeled lanes; local channels have two class lanes.
 `VirtualChannelLink` exposes nonblocking operations: `try_reserve` returns a token
@@ -218,7 +256,8 @@ may wait for their lane budget; ready lane tokens may wait for shared staging an
 wire service. Once wire work starts it has destination capacity and finite service,
 so it cannot wait on another lane, owner or sink while holding the serializer.
 Eventually publishing each reserved flit and releasing consumer-held storage remain
-caller obligations. The full router/endpoint resource-order audit is still pending.
+caller obligations. The router/endpoint resource order is described below and in
+the child delivery report.
 
 Fourteen focused tests check accounting after every SimPy event, bounded shared
 staging, four-lane fairness with unequal quanta, idle/credit-starved lane bypass,
@@ -238,11 +277,11 @@ These values are analytical checks of explicit synthetic settings, not silicon
 measurements. The generic kernel reuses the existing integer flit-count helper;
 legacy `Link`, `Router`, flit serialization and timing helpers remain unchanged.
 
-Still pending: router transfer pipelines and multi-hop forwarding (part 4), causal
-response production and endpoint storage (part 5), directed failure timing (part 6),
-and version-2 CLI/result integration (part 7). Manually driving response-class lane
-fixtures tests class separation; it does not implement causal responses. The plan
-continues to report `can_execute: false` for complete replay, and no full-profile,
+Router transfer pipelines and multi-hop forwarding (part 4), causal response
+production (part 5), and directed failure timing (part 6) build on this kernel.
+Manually driving response-class lanes alone tests class separation. A compiled
+plan still reports `can_execute: false` with pending slowdown/runtime admission;
+only an admitted runtime produces a transport execution result. No full-profile,
 NIU, memory, compute, detector or hardware timing support is implied.
 
 ## Part 4: cut-through router and one-way replay
@@ -251,7 +290,7 @@ NIU, memory, compute, detector or hardware timing support is implied.
 `TorusPlan`. Part 4 established finite `one_way` request-class traffic. Every
 route hop is bound to one shared `VirtualChannelLink`; repeated route use therefore
 shares the physical serializer and lane credits. Part 5 extends the same runtime
-with bounded causal responses, while directed slowdowns remain a later scope.
+with bounded causal responses, and part 6 adds directed slowdowns.
 
 Injection, forwarding and ejection are separate bounded processes. Injection
 packet slots use each admitted source endpoint's finite queue capacity. A
@@ -282,9 +321,9 @@ returns `incomplete`; receiving all payload bytes alone is insufficient.
 
 `TorusReplayResult` is produced in memory for this runtime with plan identity,
 packet counts/timestamps, physical launch bytes, lane/pipeline resources and
-transport trace events. The existing CLI still does not dispatch this result;
-`can_execute` remains false in the compiled-plan export until part 7 supplies
-versioned command admission and output handling. The result explicitly marks NIU,
+transport trace events. The CLI dispatches this result after runtime admission;
+the compiled-plan export alone still has pending slowdown/runtime checks and
+does not establish execution. The result explicitly marks NIU,
 memory, compute and silicon timing support as unavailable/unvalidated.
 
 Focused transport checks cover same-router delivery, 10-flit packets longer than
@@ -355,5 +394,19 @@ waiting, both assumed fabrics, and the unchanged legacy slowdown fixture. Factor
 intervals, clocks, widths and capacities remain configurable synthetic values; this
 is a timing model and analytical invariant check, not silicon calibration. Full NIU
 packetization, memory service, compute/DFG execution, multicast and hardware
-VC/buddy/priority behavior remain outside this child. CLI integration (part 7)
-remains pending.
+VC/buddy/priority behavior remain outside this child.
+
+## Part 7: admission and consumer boundaries
+
+`replay_topology.run_replay` dispatches exact versions to the existing version-1
+runtime or the version-2 compiler/runtime. Plain profile inspection retains
+unresolved connectivity and permissions. The hardware support manifest separately
+reports the available version-2 binder and modeled transport; its full-workload
+`can_execute` gate remains false. Memory capacities remain inventory.
+
+Existing detailed predictor/encoder guards accept verified legacy mesh objects
+and reject version-2 configurations, results and trace rows before feature
+construction. The predictor's 7-D features, encoder's 4-D features, row ordering,
+checkpoints and separate top-level RL contracts are unchanged. Dependency-free
+boundary tests run here; Torch/PyG tensor and checkpoint execution is unvalidated
+when those optional dependencies are unavailable.

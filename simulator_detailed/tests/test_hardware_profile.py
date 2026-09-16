@@ -460,6 +460,13 @@ class ProfileInspectionTests(unittest.TestCase):
         states = {feature.feature_id: feature.state for feature in report.features}
         self.assertEqual(states["profile_inspection"], "executable")
         self.assertEqual(states["physical_layout"], "represented_only")
+        self.assertEqual(states["torus_transport_binding"], "executable")
+        self.assertEqual(states["torus_unicast_transport"], "abstract")
+        self.assertEqual(states["niu_transactions"], "unsupported")
+        transport = [feature for feature in report.features if feature.scope == "opt-in version-2 transport"]
+        self.assertTrue(transport)
+        self.assertTrue(all(not feature.required_for_execution for feature in transport))
+        self.assertEqual(report.manifest_version, "hardware-profile-2")
         ids = [blocker.feature_id for blocker in report.blockers]
         self.assertEqual(ids, sorted(ids))
         self.assertIn("shared_memory_service", ids)

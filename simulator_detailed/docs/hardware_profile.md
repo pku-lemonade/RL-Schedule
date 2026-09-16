@@ -30,7 +30,7 @@ The checked-in example describes:
 | Enabled workers | 72; physical worker row **y=11 is assumed disabled** |
 | Logical workers | Explicit row-major 8 × 9 simulator mapping |
 | Fabric maps | Raw NoC0 `(x,y)` and NoC1 `(9-x,11-y)` |
-| Unicast policy metadata | NoC0 X then Y; NoC1 Y then X; neither executes yet |
+| Unicast policy metadata | NoC0 X then Y; NoC1 Y then X; execution requires an explicit version-2 transport binding |
 | Attachments | 240 descriptive tile/fabric records, including disabled workers |
 | Worker L1 | 1,499,136 bytes each (1464 KiB) |
 | Worker L1 inventory | 119,930,880 physical bytes; 107,937,792 bytes associated with enabled workers |
@@ -141,10 +141,17 @@ boundaries revalidate models, including nested data modified by Python callers.
 
 | Capability state | Meaning in this implementation |
 | --- | --- |
-| `executable` | Profile validation and inspection execute |
-| `abstract` | Reserved for an actually executing abstraction; none is claimed for this profile |
+| `executable` | Profile validation/inspection and the separately scoped transport binder are implemented |
+| `abstract` | Opt-in version-2 unicast, causal response fixtures and directed slowdowns execute with disclosed model assumptions |
 | `represented_only` | Physical layout, coordinate mappings and memory inventory are descriptive data |
-| `unsupported` | Profile runtime adapter, heterogeneous construction, mask scheduling, transport/routing, memory service, compute/dataflow and hardware timing |
+| `unsupported` | Full-workload profile adapter, heterogeneous workload construction, mask scheduling, NIU transactions, memory service, compute/dataflow and calibrated hardware timing |
+
+Manifest `hardware-profile-2` distinguishes `profile data`, `opt-in version-2
+transport` and `profile execution` scopes. Available compiler/transport features
+are implementation capabilities, not admission of the inspected profile. Only a
+version-2 replay with explicit availability, endpoint permissions and timing can
+pass transport compilation and runtime admission; see [the transport examples](torus_transport.md).
+`can_execute: false` and `blockers` still describe full-workload execution.
 
 The manifest belongs to the implementation. Unknown feature/policy names are
 retained as unsupported requirements, never executed. Every profile requires
@@ -163,7 +170,9 @@ The gate applies to `run.arch_analyzer`, direct `Arch(...)`, `simulate`, and
 `simulate` validates architecture before mapper access, failure-file loading
 and timing logs. It loads the architecture only once. Existing synthetic
 execution remains owned by `ArchConfig`, `NoC`, `Core`, DMA and their existing
-validation paths. No hardware-profile runtime adapter exists.
+validation paths. No full-workload hardware-profile adapter exists. The separate
+torus runtime creates transport routers/links/endpoints without Core, DMA, memory
+service or DFG execution.
 
 Runtime traces, workload/failure JSON, detector checkpoints and RL
 observation/action shapes retain their existing contracts. Inspection JSON is

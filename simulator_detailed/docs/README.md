@@ -5,13 +5,15 @@ synthetic.
 
 The separate [canonical topology and replay entry point](topology.md) also executes
 finite synthetic unicast traffic on heterogeneous directed graphs. It supports
-profile inventory inspection; Wormhole torus execution and silicon timing remain
-unavailable. See that page for commands, byte/trace semantics and validation evidence.
+profile inventory inspection. [Version-2 torus replay](torus_transport.md) adds
+bounded unicast, causal response fixtures and directed slowdowns over an explicit
+Wormhole transport binding. Full Wormhole workloads and silicon timing calibration
+remain unavailable.
 
 - [Configuration](config.md)
 - [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
 - [Topology and endpoint mapping](topology.md)
-- [Version-2 torus contracts and incremental implementation](torus_transport.md)
+- [Version-2 torus transport, examples and limitations](torus_transport.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

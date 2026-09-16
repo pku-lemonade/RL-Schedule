@@ -3,7 +3,9 @@
 This document tracks the incremental `generic-heterogeneous-topology` delivery.
 The implementation now includes immutable topology records, profile/mesh adapters,
 directed runtime bindings, validated routing policies and standalone synthetic replay.
-Hardware-profile execution and silicon timing remain unsupported/unvalidated.
+Full hardware-profile workload execution and silicon timing remain unsupported/unvalidated.
+The subsequent [version-2 torus transport child](torus_transport.md) adds opt-in
+Wormhole transport; the version-1 contracts and historical evidence below remain valid.
 
 ## Baseline (2026-09-15)
 
@@ -298,7 +300,7 @@ from child 1's pinned fixtures; this child adds synthetic runtime and analytical
 evidence. No new hardware measurement, ttsim comparison, silicon timing accuracy or
 model accuracy is established. Parent pending specs have not been synced as delivered.
 
-Next explore: `wormhole-dual-noc-routing` owns Wormhole XY/YX torus edge generation,
+Subsequent child `wormhole-dual-noc-routing` owns Wormhole XY/YX torus edge generation,
 coordinate translation, a justified wrap/request-response resource policy, and directed
 failure handling (TR-02..04). The current explicit-route DAG validator must not be
 relabeled as general torus deadlock prevention. TR-05 multicast/synchronization,

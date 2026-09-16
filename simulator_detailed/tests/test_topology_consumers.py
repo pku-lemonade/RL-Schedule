@@ -6,9 +6,11 @@ import unittest
 from simulator_detailed.configs.schemas.arch_config import NoCConfig
 from simulator_detailed.configs.schemas.topology import CanonicalTopology
 from simulator_detailed.predictor.topology import Mesh
+from simulator_detailed.replay_topology import run_replay
 from simulator_detailed.tests.test_phase2_noc import build_runtime
 from simulator_detailed.tests.test_topology import REFERENCE_PATH
 from simulator_detailed.tests.test_topology_replay import EXAMPLE
+from simulator_detailed.tests.test_torus_cli import GENERIC
 from simulator_detailed.topology import Topology, topology_from_legacy
 from simulator_detailed.topology_compatibility import (
     legacy_coordinates,
@@ -21,6 +23,19 @@ from simulator_detailed.utils.definitions import NoCChannel
 
 
 class TopologyConsumerTests(unittest.TestCase):
+    def test_version_two_results_rejected_by_legacy_consumers(self):
+        result = run_replay(GENERIC)
+        document = result.model_dump(mode="json")
+        for value in (result, document, json.loads(GENERIC.read_text())):
+            with self.assertRaises(TypeError):
+                require_legacy_nocs(value)
+            for consumer in ("detailed_predictor", "detailed_encoder"):
+                with self.assertRaises(TypeError):
+                    require_legacy_topology(value, consumer)
+        for value in (document, document["trace"], {"trace": document["trace"]}):
+            with self.assertRaises(ValueError):
+                legacy_event_rows(value, "communication")
+
     def test_encoder_runtime_guard_rejects_documents_and_changed_objects(self):
         _, arch, _ = build_runtime(NoCConfig(x=3, y=2))
         nocs, topology = require_legacy_nocs(arch.nocs)

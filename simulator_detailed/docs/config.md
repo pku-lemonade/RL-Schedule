@@ -11,8 +11,10 @@ identity. `kind: "topology_replay"` configures the separate synthetic byte repla
 runner, including required clocks, flit/link/router settings, routes and finite
 traffic/sink limits. These documents are not accepted by the legacy `Arch` entry
 point. See [topology replay](topology.md) for examples, units, overrides, inspection
-and versioned result semantics. A Wormhole profile can be projected for inventory
-inspection, but still cannot execute through either runtime entry point.
+and version-1 result semantics. Version 2 adds [torus transport](torus_transport.md)
+with a tagged graph/profile source, explicit binding, bounded request/response
+fixtures and directed slowdowns. A Wormhole profile requires that opt-in binding
+to run byte transport; plain inspection and full workload execution remain gated.
 
 `NoCConfig` selects mesh dimensions, enabled `fabric_ids`, PE local port,
 simulation and network clocks, links, routers, and DMA attachments. Fabric IDs

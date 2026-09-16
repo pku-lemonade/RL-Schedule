@@ -21,7 +21,7 @@ from .configs.schemas.hardware_profile import (
 )
 
 SupportState = Literal["executable", "abstract", "represented_only", "unsupported"]
-MANIFEST_VERSION = "hardware-profile-1"
+MANIFEST_VERSION = "hardware-profile-2"
 
 # Implementation-owned: neither profile declarations nor policy names enable code.
 _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
@@ -48,12 +48,12 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "profile_runtime_adapter": (
         "unsupported",
         "profile execution",
-        "No hardware-profile-to-runtime adapter exists.",
+        "No hardware-profile-to-full-workload adapter exists; version-2 transport is a separate scope.",
     ),
     "heterogeneous_topology": (
         "unsupported",
         "profile execution",
-        "Runtime router and compute construction are not separated yet.",
+        "Heterogeneous full-workload construction is unsupported; transport constructs routers without compute services.",
     ),
     "worker_selection": (
         "unsupported",
@@ -63,7 +63,7 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "multiple_fabrics": (
         "unsupported",
         "profile execution",
-        "Profile fabric identities are not wired to runtime networks.",
+        "Profile fabrics execute only through an explicit version-2 transport binding, not the full-workload path.",
     ),
     "memory_service": (
         "unsupported",
@@ -88,17 +88,42 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "topology:torus_2d": (
         "unsupported",
         "profile execution",
-        "No torus transport for hardware profiles exists.",
+        "Full-workload torus execution is unsupported; opt-in transport requires a validated version-2 binding.",
     ),
     "routing:dimension_order_xy": (
         "unsupported",
         "profile execution",
-        "Profile routing policy is descriptive only.",
+        "Profile inspection is descriptive; XY transport requires a validated version-2 binding.",
     ),
     "routing:dimension_order_yx": (
         "unsupported",
         "profile execution",
-        "Profile routing policy is descriptive only.",
+        "Profile inspection is descriptive; YX transport requires a validated version-2 binding.",
+    ),
+    "torus_transport_binding": (
+        "executable",
+        "opt-in version-2 transport",
+        "Compiler available; this inspection does not establish graph, endpoint, route or runtime admission.",
+    ),
+    "torus_unicast_transport": (
+        "abstract",
+        "opt-in version-2 transport",
+        "Admitted replay executes bounded class/dateline lanes over shared links with explicit assumed timing.",
+    ),
+    "causal_response_fixtures": (
+        "abstract",
+        "opt-in version-2 transport",
+        "Finite byte requests produce bounded causal responses; these are not NIU or memory transactions.",
+    ),
+    "directed_link_slowdown": (
+        "abstract",
+        "opt-in version-2 transport",
+        "Admitted directed-link schedules scale launch-time serialization, spacing and propagation.",
+    ),
+    "niu_transactions": (
+        "unsupported",
+        "profile execution",
+        "NIU commands, hardware packetization, ordering, acknowledgements and barriers are not implemented.",
     ),
 }
 

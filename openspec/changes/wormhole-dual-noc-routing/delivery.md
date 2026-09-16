@@ -1,5 +1,9 @@
 # Incremental delivery
 
+All seven parts are implemented. Part 7 below records the final 134-test validation,
+CLI examples, requirement coverage and bounded handoff to memory transactions.
+Earlier sections retain their checkpoint-specific status and evidence.
+
 ## Part 1: versioned transport contracts and admission
 
 Tasks 1.1–1.5 are delivered in the commit containing this section, titled
@@ -289,3 +293,180 @@ transport scope. CLI dispatch, NIU transactions, memory/compute service,
 multicast, hardware VC/buddy/priority behavior and silicon timing calibration
 remain pending or unsupported; no parent specs were synced, no archive was
 created and no push was performed.
+
+## Part 7: CLI, support boundaries and final handoff
+
+Tasks 7.1–7.5 complete this child. This part is based on `c08de14` and is delivered
+in the commit containing this section, titled `feat: expose versioned torus replay CLI`.
+The preceding implementation checkpoints are `0150500` (contracts), `9b6224f`
+(binding/routes), `76d4d66` (lane kernel), `1e1f6ec` (one-way runtime), `29f33f7`
+(causal responses), and `c08de14` (directed slowdown).
+
+`replay_topology.run_replay` now dispatches exact input kind and integer version.
+Version 1 retains its existing plan/runtime/result; version 2 reads its graph or
+profile relative to the replay file and passes through contract, graph, route,
+dependency and slowdown admission before constructing the environment. Output is
+JSON on stdout with optional identical file output. Invalid input returns 1 and
+leaves output files untouched; complete/incomplete runs return 0/2 respectively.
+Result documents are not accepted as replay configurations.
+
+Manifest `hardware-profile-2` reports the available opt-in compiler and executing
+transport abstractions separately from profile inventory and full-workload
+execution. The latter still has `can_execute: false`; the transport manifest does
+not establish admission of a specific inspected profile. The compiled-plan export
+also retains its pending runtime/slowdown checks. A runtime result reports what
+actually executed. The profile graph has 240 routers and 480 network links; runtime
+channels and router pipelines are instantiated only for admitted routes, with no
+Core, DMA, NIU, memory service or DFG executor.
+
+### Final requirement-to-test mapping
+
+All test paths below are under `simulator_detailed/tests/`.
+
+| Requirement | Executable evidence |
+| --- | --- |
+| TR-D01 | `test_torus_contract.py` strict source/binding/permissions/units; `test_torus.py` profile inventory, disabled-worker initiation rejection and transit preservation; `test_torus_cli.py` public profile example |
+| TR-D02 | `test_torus.py` all 28,800 router pairs against the independent physical-coordinate oracle, pinned 4/18-hop paths, shifted datelines, disabled-edge rejection; transport local/two-fabric delivery |
+| TR-D03 | `test_torus.py` wrong-phase/reset/class/cycle mutations and dependency ranks; `test_virtual_channel.py` packet ownership, FIFO, independent lanes and no foreign token acceptance |
+| TR-D04 | `test_virtual_channel.py` event-by-event conservation, blocked-lane bypass, shared serializer capacity, unequal quantum fairness, bounded staging and small-capacity throughput; `test_torus_transport.py` long-packet cut-through, contention and concurrent router outputs |
+| TR-D05 | `test_torus_transport.py` exactly-once causal responses, service timing, capacity-one descriptors, both fabrics and pending response-owner reporting |
+| TR-D06 | `test_torus_contract.py` clocks/units/serialization admission and retained profile override evidence; `test_virtual_channel.py` independently calculated two-clock/width launch/arrival/drain timelines |
+| TR-D07 | `test_torus_transport.py` directed wrap slowdown, half-open launch snapshots, recovery ordering and invalid targets; CLI invalid slowdown causes no environment or output artifact; retained legacy paired-link failure fixture |
+| TR-D08 | Contract record validation plus transport launch-byte reconciliation, packet/class/fabric identities, delayed final credit and descriptor pending state, actual resource drain; CLI JSON round trips preserve the version-2 result schema |
+| TR-D09 | `test_torus_cli.py` exact headers, relative sources, success/invalid/incomplete and untouched output files; `test_topology_replay.py` retained cycle-44 graph/plan hashes; `test_topology_baseline.py` unchanged custom mesh/failure observations; `test_topology_consumers.py` actual version-2 configuration/result/trace rejection and real legacy object acceptance; profile execution gates |
+| TR-D10 | Pinned source/route fixtures, full suite, analytical kernel checks, published example commands and this report; external simulator and silicon comparisons remain unavailable |
+
+### Validation on 2026-09-16
+
+Python remains the existing `.venv` Python 3.12.12 environment. No dependency was
+added. The focused CLI/consumer/replay/profile run passed **41 tests**. Final checks:
+
+```bash
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+# 134 tests pass
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+# 0 errors, 0 warnings
+.venv/bin/ruff check simulator_detailed/configs/schemas/torus_replay.py simulator_detailed/torus_contract.py simulator_detailed/torus_records.py simulator_detailed/torus.py simulator_detailed/torus_dependencies.py simulator_detailed/virtual_channel.py simulator_detailed/torus_transport.py simulator_detailed/replay_topology.py simulator_detailed/hardware_profile.py simulator_detailed/tests/test_torus*.py simulator_detailed/tests/test_virtual_channel.py simulator_detailed/tests/test_topology_consumers.py simulator_detailed/tests/test_topology_replay.py simulator_detailed/tests/test_hardware_profile.py
+# All checks passed
+openspec validate wormhole-dual-noc-routing --strict --no-interactive
+# Valid
+git diff --check
+# Clean
+```
+
+An initial Ruff run requested `TypeError` for non-object replay input; that was
+corrected before final validation. No type/lint rule was disabled. Torch and
+`torch_geometric` are absent (`importlib.util.find_spec` returned `None` for both).
+Consumer guards run without those dependencies. Source inspection confirms guard
+calls precede tensor construction/checkpoint loading and the existing 7-D predictor
+and 4-D encoder features remain unchanged. Tensor execution and checkpoint loading
+were **not** tested; no stand-ins, model changes or RL shape changes were introduced.
+
+The following executable command batch was run with temporary outputs, validating
+parseable JSON, matching stdout/file contents, zero stderr and zero return status:
+
+```python
+import json, subprocess, tempfile
+from pathlib import Path
+
+base = Path('simulator_detailed')
+with tempfile.TemporaryDirectory() as directory:
+    output = Path(directory) / 'result.json'
+    for mode, name in (
+        ('--inspect', 'configs/topologies/heterogeneous_example.json'),
+        ('--inspect', 'configs/profiles/wormhole_b0_n150_assumed.json'),
+        ('--inspect', 'configs/instances/mesh_example.json'),
+        ('--replay', 'configs/replays/heterogeneous_unicast.json'),
+        ('--replay', 'configs/replays/torus_small_v2.json'),
+        ('--replay', 'configs/replays/wormhole_transport_v2.json'),
+    ):
+        run = subprocess.run([
+            '.venv/bin/python', '-m', 'simulator_detailed.replay_topology',
+            mode, str(base / name), '--output', str(output),
+        ], capture_output=True, text=True, check=True)
+        assert json.loads(run.stdout) == json.loads(output.read_text())
+        assert not run.stderr
+```
+
+The separate `inspect_profile` command also passes and reports manifest version 2
+with `can_execute: false`. Invalid and incomplete CLI cases are subprocess-tested
+in `test_torus_cli.py`; a failed run also preserves a pre-existing output file.
+
+| Replay | Payload / packet / channel bytes | Drain (ACI cycles) | Plan SHA-256 |
+| --- | --- | --- | --- |
+| Version-1 heterogeneous | 59 / 112 / 608 | 44 | `1a59e3e5b7ed7c6155fe618ca13b025a9908959093d174eb89d9f1e3c8e09fba` |
+| Version-2 small torus | 241 / 352 / 1760 | 57 | `1a178e789e37287ba3c872ed4b346a7963674a0c1d5edbd967bb367a6091bf4c` |
+| Version-2 Wormhole fixture | 148 / 320 / 4160 | 63.5 | `92d234b5806f7831c768fd199c8da56d4cb51b35d850c3f1bf260dbda1be7702` |
+
+Version-1 graph identity remains
+`5ef712709c1afbfda6f795e119a4e4f2ce0f0437d7431f2a7be6285ffb15a6cc`.
+The full suite also matches the saved custom-mesh trace/timing/paired-failure
+fixture exactly. New replay timings are synthetic model results, not silicon data.
+
+### Source and artifact identity
+
+Architecture evidence is inherited from the pinned route/profile fixtures and
+earlier source retrievals, not freshly fetched or independently remeasured in this
+part. ISA documentation revision is `acaf010519f4fdd323df5077e45b8695f70e4279`;
+the profile descriptor revision is `558637320489ee8ccccea5f2b3a5fcd1e1cfd58f`.
+Coordinates raw-byte SHA-256 is
+`328f014798fe3cec46ec2c9555a8d843074b7eb62eb4de996e6d85a0f7ec9174`;
+RoutingPaths raw-byte SHA-256 is
+`656f6fb36b74de0ac30fcd0b76c5c028a6760eb8879c70dd647f1da57b9c006b`.
+Immutable URLs and inherited/fetched provenance remain in the route fixture and
+design. The public Wormhole replay embeds those citations and separately labels
+healthy availability, endpoint permissions, stage splits and capacities as assumed.
+Native clock/flit/interface settings reference the unchanged profile parameters.
+
+Paths in this table are relative to `simulator_detailed/`; hashes are file bytes.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `configs/profiles/wormhole_b0_n150_assumed.json` | `a959592f39b257091c509d95abde6842e10e08d84123fde6788ed55372429b9d` |
+| `configs/topologies/torus_small_v2.json` | `6afb9057b7e852645be5fb26f5a0fa4edbf6ed1178c53aa9e5bd8480781f7b16` |
+| `configs/replays/torus_small_v2.json` | `f6d4ffaa6d3b7fb2993e875d3b9f7349b6c83841ff8d9f1740a88f768feb0ce5` |
+| `configs/replays/wormhole_transport_v2.json` | `8774d3c3949940e1ed5684ee332ca52689197ad1cf81e959481a6a8b1cd67994` |
+| `tests/fixtures/wormhole_torus_routes.json` | `427b083973184f37c2748cfa14a03a2c8ac0458e876a9193847497b1b687cce5` |
+| `tests/fixtures/wormhole_b0_profile_reference.json` | `04ef81eee6b197646903102ebc72becfe40946be06519c5425539f3bd41ea8fe` |
+| `tests/fixtures/topology_baseline.json` | `c572fe5b906d1ef3c7f4e961dde840cffc75e3d5bad2d14a510f4ff6ebab2ad7` |
+| `replay_topology.py` | `2169ec058b874a2804987c97f94219b98ab236f128ea4ebf542880760dd72f9a` |
+| `hardware_profile.py` | `ca38f57b4c09a4d7860d222da7df3dae4ebb3c6f4455c8308e1f2efb355c8417` |
+
+### Resource argument and bounded umbrella handoff
+
+Request/response classes have disjoint lane/endpoint resources; each network class
+has two modeled dateline phases. Compiled network ranks increase within an axis,
+across the dateline and at dimension turns. Local injection precedes the network;
+ejection follows it. Request ejection leads through finite descriptors/service to
+response injection, and terminal response sinks never require request resources.
+Packet owners are lane-local. Every retained flit owns a bounded lane token;
+staging is a bounded subset, and delayed returns still consume the lane budget.
+
+Downstream lane capacity is reserved before finite router/wire service. A blocked
+forwarder holds charged input storage without retaining a shared physical grant.
+Eligible link service is fair and quantum-bounded; admitted router/wire service
+cannot wait for an unreserved destination. This progress argument assumes finite
+traffic/packets, finite positive service where required, eventual clock progress,
+enabled independently draining sinks, and no permanent resource failure. Finite
+slowdowns preserve those assumptions. Cycle-limit/idle-with-pending outcomes stay
+incomplete and are not evidence of deadlock freedom. Static dependency checks and
+dynamic resource/fairness tests cover different obligations.
+
+**TR-02** is delivered for both Wormhole raw-coordinate route families and configurable
+generic torus policy, retaining legacy mesh behavior. **TR-03** is delivered for
+this bounded unicast byte/request-response scope and its disclosed class/dateline
+abstraction. **TR-04** is delivered for canonical directed network slowdowns and
+stage/clock/byte trace identities. **Network VA-04** covers model latency,
+serialization throughput, packet accounting, dual fabrics, wraps, finite capacity,
+contention and drain. Memory-alias contention, compute pipelines, multicast and
+synchronization parts of VA-04 remain with later children.
+
+Next exploration is `wormhole-memory-transactions`: define real transaction/address,
+ordering, packet/header cost, visibility/completion and shared L1/DRAM service;
+audit those endpoint dependencies before reusing this transport. Current causal
+responses are byte fixtures, not NIU reads, writes or acknowledgements. Hardware
+VC/buddy/priority behavior, adaptive routing, multicast, atomics/semaphores,
+compute/DFG workloads, tensor/checkpoint execution, external simulator comparisons
+and measured silicon timing remain unsupported or unvalidated. No hardware accuracy
+percentage follows from these passing tests. Pending umbrella specs/tasks are not
+synced or declared complete; this child is not archived and no push is performed.
