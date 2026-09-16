@@ -89,6 +89,10 @@ class MemoryEndpointBinding(GraphRecord):
     roles: tuple[Literal["initiator", "target", "response_sink"], ...] = Field(min_length=1)
     resource_ids: tuple[Identifier, ...] = ()
     enabled: StrictBool = True
+    # Profile inventory has no local ports; its enabled bindings must supply them.
+    # Canonical graphs retain their resolved permissions when these are absent.
+    inject_port: Identifier | None = None
+    eject_port: Identifier | None = None
     evidence: TransportEvidence
 
     @model_validator(mode="after")

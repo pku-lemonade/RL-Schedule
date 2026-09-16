@@ -15,7 +15,7 @@ import simpy
 from pydantic import model_validator
 from simpy.events import Event, ProcessGenerator
 
-from .configs.schemas.memory_replay import MemoryBuffer, MemoryReplay, MemoryVersion
+from .configs.schemas.memory_replay import MemoryBuffer, MemoryVersion
 from .configs.schemas.topology import (
     GraphRecord,
     Identifier,
@@ -107,8 +107,7 @@ class MemoryResourcePlan:
     def compile(cls, plan: MemoryPlan) -> MemoryResourcePlan:
         # Preserve structural admission as a separate, pure boundary. Earlier
         # wire-only plans need not satisfy an unused memory-service geometry.
-        plan = MemoryPlan.compile(MemoryReplay.model_validate(plan.config.model_dump(mode="python")),
-                                  plan.graph.model_dump(mode="python"))
+        plan = plan.revalidate()
         config = plan.config
         graph = {r.resource_id: r for r in plan.graph.resources}
         definitions: list[MemoryResourceDefinition] = []

@@ -203,3 +203,23 @@ Public architecture facts support structural and semantic checks. Endpoint capac
 Implement the eight independently validated parts in `tasks.md`, committing each completed part before continuing. New behavior is opt-in throughout: contracts, packet compilation, shared transport extraction, memory resources, transaction runtime, ordering/local clients, legacy adapters, then CLI/evidence. Preserve existing examples and traces; add new examples under their own kind/version.
 
 Every part records its focused tests/type/lint and any changed fidelity claims. The final part runs the complete detailed suite, strict Pyright, scoped Ruff, generic/Wormhole/legacy CLI examples, and strict OpenSpec validation. A failed part is corrected before proceeding. Rollback is by reverting the relevant opt-in commit; no configuration migration, history rewrite, backup, push, spec sync, or archive is part of this change. Umbrella completion is not inferred from planning files; child 5 begins only after this child's implementation and evidence are delivered.
+
+## Part-8 interface clarification
+
+The executable JSON contract is `MemoryExecutionReplay`, extending the admission-only
+`MemoryReplay` with a required `runtime: MemoryRuntimeConfig`. This keeps pure
+admission independent of the transport/runtime import layer and gives the CLI
+complete explicit settings. Canonical graph inputs inherit resolved local ports;
+optional endpoint port declarations must match. Profile inputs require explicit
+endpoint injection/ejection ports and routing availability. The existing pure
+torus graph binder now exposes a topology-only port contract shared by v2 and
+memory; it creates no v2 traffic or sink-service placeholders. Profile inventory
+alone remains non-executable. Plan revalidation rebuilds the graph from its
+original profile and checks admitted identity before resource allocation.
+
+Result export adds every planned wire layout/route, actual injected-prefix byte
+decomposition, planned/actual channel totals, and completed memory useful/rounded
+bytes by direction. Existing root totals keep their meanings. Partial service is
+reported as pending ownership rather than completed service bytes. These are
+interface/accounting additions; event scheduling and v1/v2 result contracts are
+unchanged. See `delivery.md` for the final validation and compute-child boundary.

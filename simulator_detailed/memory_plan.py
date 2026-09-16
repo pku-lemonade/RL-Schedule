@@ -11,6 +11,7 @@ from .configs.schemas.memory_replay import MemoryReplay
 from .configs.schemas.topology import CanonicalTopology
 from .memory_records import MemoryPlanRecord, MemoryQuantity
 from .topology import content_digest, normalize_topology, topology_from_profile
+from .torus import TorusEndpointPorts, bind_torus_graph
 
 
 class MemoryPlan:
@@ -25,6 +26,19 @@ class MemoryPlan:
     def plan_sha256(self) -> str:
         return self.record.plan_sha256
 
+    def revalidate(self) -> MemoryPlan:
+        config = MemoryReplay.model_validate(self.config.model_dump(mode="python"))
+        if config.source.kind == "hardware_profile":
+            if self.graph.origin.kind != "hardware_profile" or self.graph.origin.document_json is None:
+                raise ValueError("profile memory plan requires its original source document")
+            source: object = json.loads(self.graph.origin.document_json)
+        else:
+            source = self.graph.model_dump(mode="python")
+        rebuilt = self.compile(config, source)
+        if rebuilt.graph != self.graph or rebuilt.record != self.record:
+            raise ValueError("memory plan does not match its admitted source and configuration")
+        return rebuilt
+
     @classmethod
     def compile(cls, config: MemoryReplay, source_document: object) -> MemoryPlan:
         if config.source.kind == "canonical_graph":
@@ -32,6 +46,12 @@ class MemoryPlan:
         else:
             profile = HardwareProfileConfig.model_validate(source_document)
             graph = topology_from_profile(profile).graph
+            if config.routing:
+                graph = bind_torus_graph(
+                    graph, config.routing,
+                    tuple(TorusEndpointPorts(e.endpoint_id, e.fabric_id, e.inject_port, e.eject_port,
+                                             "initiator" in e.roles) for e in config.endpoints if e.enabled),
+                    generate_links=True)
         if graph.connectivity_state != "complete":
             raise ValueError("memory plan requires complete topology connectivity")
 
@@ -54,6 +74,9 @@ class MemoryPlan:
                 raise ValueError(f"endpoint {endpoint.endpoint_id}: fabric/router binding disagrees with graph")
             if endpoint.enabled and (graph_endpoint.enabled is not True or graph_endpoint.replay_enabled is not True):
                 raise ValueError(f"endpoint {endpoint.endpoint_id}: graph attachment is unavailable")
+            if ((endpoint.inject_port is not None and endpoint.inject_port != graph_endpoint.inject_port)
+                    or (endpoint.eject_port is not None and endpoint.eject_port != graph_endpoint.eject_port)):
+                raise ValueError(f"endpoint {endpoint.endpoint_id}: local port disagrees with graph permission")
             if any(resource not in graph_endpoint.resource_ids for resource in endpoint.resource_ids):
                 raise ValueError(f"endpoint {endpoint.endpoint_id}: resource is not attached in graph")
         for buffer in config.buffers:

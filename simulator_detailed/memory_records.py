@@ -34,6 +34,36 @@ class MemoryBufferRecord(GraphRecord):
     ready: bool
 
 
+class MemoryPacketBytes(GraphRecord):
+    """Physical byte decomposition; padding includes unused data-flit capacity."""
+
+    useful_bytes: Index
+    header_bytes: Index
+    padding_bytes: Index
+    packet_bytes: Index
+
+    @model_validator(mode="after")
+    def conserved(self) -> MemoryPacketBytes:
+        if self.packet_bytes != self.useful_bytes + self.header_bytes + self.padding_bytes:
+            raise ValueError("packet bytes must equal useful, header and padding bytes")
+        return self
+
+
+class MemoryByteAccounting(GraphRecord):
+    """Planned logical work, actual launches and completed service stay distinct."""
+
+    planned_network_logical_bytes: Index
+    planned_local_logical_bytes: Index
+    planned_wire: MemoryPacketBytes
+    injected_wire: MemoryPacketBytes
+    planned_channel_bytes: Index
+    launched_channel_bytes: Index
+    completed_read_useful_bytes: Index
+    completed_write_useful_bytes: Index
+    completed_read_service_bytes: Index
+    completed_write_service_bytes: Index
+
+
 class MemoryOperationRecord(GraphRecord):
     operation_id: Identifier
     kind: Literal["read", "write_posted", "write_acknowledged", "local_read", "local_write", "fence"]

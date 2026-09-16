@@ -7,13 +7,15 @@ The separate [canonical topology and replay entry point](topology.md) also execu
 finite synthetic unicast traffic on heterogeneous directed graphs. It supports
 profile inventory inspection. [Version-2 torus replay](torus_transport.md) adds
 bounded unicast, causal response fixtures and directed slowdowns over an explicit
-Wormhole transport binding. Full Wormhole workloads and silicon timing calibration
-remain unavailable.
+Wormhole transport binding. [Addressed memory replay](memory_transactions.md) adds
+explicit reads/writes, shared memory service, local clients and ordering. Full
+Wormhole workloads and silicon timing calibration remain unavailable.
 
 - [Configuration](config.md)
 - [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
 - [Topology and endpoint mapping](topology.md)
 - [Version-2 torus transport, examples and limitations](torus_transport.md)
+- [Addressed memory replay, accounting and limits](memory_transactions.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

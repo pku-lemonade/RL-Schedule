@@ -23,14 +23,17 @@ from .memory_execution import (
     MemoryExecutionPlan,
     MemoryExecutionResult,
     MemoryLifecycleEvent,
+    MemoryPacketExecutionRecord,
     MemorySegmentDefinition,
     MemorySegmentRecord,
     SegmentKey,
+    memory_byte_accounting,
 )
 from .memory_packets import MemoryPacket
 from .memory_records import (
     MemoryBufferRecord,
     MemoryOperationRecord,
+    MemoryPacketBytes,
     MemoryServiceRecord,
 )
 from .memory_resources import (
@@ -392,14 +395,18 @@ class MemoryRuntime:
         packet_bytes = dict.fromkeys(self._segments, 0)
         channel_bytes = dict.fromkeys(self._segments, 0)
         service_bytes = dict.fromkeys(self._segments, 0)
+        injected_flits = dict.fromkeys(self._packets, 0)
+        launched_bytes = dict.fromkeys(self._packets, 0)
         for event in transport.trace:
             if event.packet is None or event.channel is None:
                 continue
             packet = self._packets[event.packet]
             key = packet.identity.operation_id, packet.identity.segment_index
             if event.action == "link_launch":
+                launched_bytes[event.packet] += event.physical_bytes
                 channel_bytes[key] += event.physical_bytes
                 if event.channel.kind == "inject":
+                    injected_flits[event.packet] += 1
                     packet_bytes[key] += event.physical_bytes
             if (event.action == "link_arrive" and event.channel.kind == "eject"
                     and packet.identity.traffic_class == "response" and event.flit_index == packet.layout.flit_count - 1):
@@ -443,6 +450,20 @@ class MemoryRuntime:
                 "memory_service_bytes": sum(c.serviced_bytes for c in chunks if c.client_id == operation.operation_id),
             }))
         descriptors = tuple(p.snapshot() for p in (*self._issues.values(), *self._responders.values(), *self._locals.values()))
+        wire_packets: list[MemoryPacketExecutionRecord] = []
+        for routed in self.plan.transport.wire.packets:
+            layout, identity = routed.packet.layout, routed.packet.identity.transport_identity
+            count = injected_flits[identity]
+            header = min(count, layout.header_flits) * layout.physical_flit_bytes
+            useful = min(max(0, count - layout.header_flits) * layout.data_capacity_bytes, layout.useful_bytes)
+            physical = count * layout.physical_flit_bytes
+            wire_packets.append(MemoryPacketExecutionRecord(
+                definition=routed, injected_flits=count,
+                planned=MemoryPacketBytes(useful_bytes=layout.useful_bytes, header_bytes=layout.header_bytes,
+                                          padding_bytes=layout.padding_bytes, packet_bytes=layout.packet_bytes),
+                injected=MemoryPacketBytes(useful_bytes=useful, header_bytes=header,
+                                           padding_bytes=physical - header - useful, packet_bytes=physical),
+                planned_channel_bytes=routed.planned_channel_bytes, launched_channel_bytes=launched_bytes[identity]))
         complete = self._before_teardown is not None and self._work_drained(transport)
         pending: list[str] = []
         if not complete:
@@ -481,6 +502,7 @@ class MemoryRuntime:
             service=tuple(MemoryServiceRecord.model_validate(c.model_dump(include=set(MemoryServiceRecord.model_fields)))
                           for c in chunks),
             chunks=chunks, pending=tuple(pending), logical_bytes=sum(o.logical_bytes for o in operations),
+            wire_packets=tuple(wire_packets), accounting=memory_byte_accounting(tuple(operations), tuple(wire_packets), chunks),
             packet_bytes=sum(o.packet_bytes for o in operations), channel_bytes=transport.transmitted_channel_bytes,
             memory_service_bytes=sum(c.serviced_bytes for c in chunks), execution="addressed_memory_ordered_v1",
             transport=transport, memory_resources=resources, descriptors=descriptors,

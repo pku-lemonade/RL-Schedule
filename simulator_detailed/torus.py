@@ -23,9 +23,11 @@ from .configs.schemas.torus_replay import (
     AvailabilitySetting,
     ChannelIdentity,
     LaneIdentity,
+    LinkAvailability,
     ProfileSource,
     RequestResponseTraffic,
     ResourceHop,
+    RouterAvailability,
     RouteRecord,
     TorusBinding,
     TorusEndpointBinding,
@@ -129,15 +131,30 @@ def _physical_directions(graph: CanonicalTopology, coordinates: Mapping[tuple[in
     return directions
 
 
-def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_links: bool) -> CanonicalTopology:
+@dataclass(frozen=True)
+class TorusEndpointPorts:
+    """Topology permissions without transaction timing or traffic templates."""
+
+    endpoint_id: str
+    fabric_id: int
+    inject_port: str | None
+    eject_port: str | None
+    initiates_requests: bool
+
+
+def bind_torus_graph(graph: CanonicalTopology, fabrics: tuple[TorusFabricBinding, ...],
+                     endpoints: tuple[TorusEndpointPorts, ...], *, generate_links: bool,
+                     router_availability: tuple[RouterAvailability, ...] = (),
+                     link_availability: tuple[LinkAvailability, ...] = ()) -> CanonicalTopology:
+    """Resolve a torus inventory for independently admitted transport or memory clients."""
     graph = normalize_topology(graph)
-    coordinates = _raw_maps(graph, binding.fabrics)
-    bindings = {f.fabric_id: f for f in binding.fabrics}
-    router_overrides = {(r.fabric_id, r.router_id): r for r in binding.router_overrides}
-    link_overrides = {(e.fabric_id, e.link_id): e for e in binding.link_overrides}
+    coordinates = _raw_maps(graph, fabrics)
+    bindings = {f.fabric_id: f for f in fabrics}
+    router_overrides = {(r.fabric_id, r.router_id): r for r in router_availability}
+    link_overrides = {(e.fabric_id, e.link_id): e for e in link_availability}
     if set(router_overrides) - {r.key for r in graph.routers}:
         raise ValueError("availability override refers to an unknown router")
-    endpoint_bindings = {e.endpoint_id: e for e in binding.endpoints}
+    endpoint_bindings = {e.endpoint_id: e for e in endpoints}
     if set(endpoint_bindings) - {a.endpoint_id for a in graph.attachments}:
         raise ValueError("binding refers to an unknown source endpoint")
     if generate_links and (graph.connectivity_state != "unresolved" or graph.links):
@@ -201,7 +218,7 @@ def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_lin
         tile = tiles[router.tile_id]
         if selected.inject_port is not None and tile.role == "worker" and tile.tile_id not in graph.enabled_worker_ids:
             raise ValueError(f"endpoint {endpoint.endpoint_id}: harvested worker cannot initiate traffic")
-        if tile.role == "memory" and "request_source" in selected.roles:
+        if tile.role == "memory" and selected.initiates_requests:
             raise ValueError("memory fixtures cannot initiate independent requests")
         ports = {p.port_id: p for p in router.ports}
         for direction, port_id in (("inject", selected.inject_port), ("eject", selected.eject_port)):
@@ -223,6 +240,14 @@ def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_lin
         "connectivity_state": "complete", "routers": tuple(routers.values()),
         "links": tuple(links), "attachments": tuple(attachments),
     }))
+
+
+def _bind_graph(graph: CanonicalTopology, binding: TorusBinding, *, generate_links: bool) -> CanonicalTopology:
+    return bind_torus_graph(graph, binding.fabrics,
+                            tuple(TorusEndpointPorts(e.endpoint_id, e.fabric_id, e.inject_port, e.eject_port,
+                                                     "request_source" in e.roles) for e in binding.endpoints),
+                            generate_links=generate_links, router_availability=binding.router_overrides,
+                            link_availability=binding.link_overrides)
 
 
 @dataclass(frozen=True)

@@ -46,7 +46,8 @@
     "memory_execution.py",
     "memory_ordering.py",
     "memory_runtime.py",
-    "memory_adapters.py"
+    "memory_adapters.py",
+    "replay_memory.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

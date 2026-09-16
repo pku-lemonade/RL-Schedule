@@ -21,7 +21,7 @@ from .configs.schemas.hardware_profile import (
 )
 
 SupportState = Literal["executable", "abstract", "represented_only", "unsupported"]
-MANIFEST_VERSION = "hardware-profile-2"
+MANIFEST_VERSION = "hardware-profile-3"
 
 # Implementation-owned: neither profile declarations nor policy names enable code.
 _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
@@ -48,7 +48,7 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "profile_runtime_adapter": (
         "unsupported",
         "profile execution",
-        "No hardware-profile-to-full-workload adapter exists; version-2 transport is a separate scope.",
+        "No hardware-profile-to-full-workload adapter exists; transport and memory replay are separate opt-in scopes.",
     ),
     "heterogeneous_topology": (
         "unsupported",
@@ -63,17 +63,17 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "multiple_fabrics": (
         "unsupported",
         "profile execution",
-        "Profile fabrics execute only through an explicit version-2 transport binding, not the full-workload path.",
+        "Profile fabrics require explicit transport or memory replay bindings; full-workload execution remains unsupported.",
     ),
     "memory_service": (
         "unsupported",
         "profile execution",
-        "Profile resources have no executing memory service.",
+        "Full-workload memory integration is unsupported; opt-in memory replay has explicit aggregate service.",
     ),
     "shared_memory_service": (
         "unsupported",
         "profile execution",
-        "Shared resource aliases do not implement transactions or contention.",
+        "Full-workload alias integration is unsupported; admitted memory replay shares capacity and service across aliases.",
     ),
     "compute_dataflow": (
         "unsupported",
@@ -88,17 +88,17 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "topology:torus_2d": (
         "unsupported",
         "profile execution",
-        "Full-workload torus execution is unsupported; opt-in transport requires a validated version-2 binding.",
+        "Full-workload torus execution is unsupported; transport and memory replays require validated bindings.",
     ),
     "routing:dimension_order_xy": (
         "unsupported",
         "profile execution",
-        "Profile inspection is descriptive; XY transport requires a validated version-2 binding.",
+        "Profile inspection is descriptive; XY execution requires an admitted transport or memory replay.",
     ),
     "routing:dimension_order_yx": (
         "unsupported",
         "profile execution",
-        "Profile inspection is descriptive; YX transport requires a validated version-2 binding.",
+        "Profile inspection is descriptive; YX execution requires an admitted transport or memory replay.",
     ),
     "torus_transport_binding": (
         "executable",
@@ -120,10 +120,30 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
         "opt-in version-2 transport",
         "Admitted directed-link schedules scale launch-time serialization, spacing and propagation.",
     ),
+    "memory_replay_binding": (
+        "executable",
+        "opt-in memory replay",
+        "Strict graph/profile compiler and CLI available; profile inspection alone does not establish runtime admission.",
+    ),
+    "addressed_memory_transactions": (
+        "abstract",
+        "opt-in memory replay",
+        "Admitted reads, posted/acknowledged writes, software segmentation and real headers execute on shared transport.",
+    ),
+    "aggregate_memory_service": (
+        "abstract",
+        "opt-in memory replay",
+        "Aliases and local clients share bounded capacity/readiness and combined read/write service; no bank/channel fidelity.",
+    ),
+    "explicit_memory_ordering": (
+        "abstract",
+        "opt-in memory replay",
+        "Producer dependencies and scoped fences execute with explicit event costs; no DFG, dynamic circular buffers or scalar executor.",
+    ),
     "niu_transactions": (
         "unsupported",
         "profile execution",
-        "NIU commands, hardware packetization, ordering, acknowledgements and barriers are not implemented.",
+        "Exact NIU commands/registers/counters, linked packets, atomics and hardware ordering are unsupported; memory replay uses explicit abstract transactions.",
     ),
 }
 

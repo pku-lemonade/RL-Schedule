@@ -30,7 +30,7 @@ The checked-in example describes:
 | Enabled workers | 72; physical worker row **y=11 is assumed disabled** |
 | Logical workers | Explicit row-major 8 × 9 simulator mapping |
 | Fabric maps | Raw NoC0 `(x,y)` and NoC1 `(9-x,11-y)` |
-| Unicast policy metadata | NoC0 X then Y; NoC1 Y then X; execution requires an explicit version-2 transport binding |
+| Unicast policy metadata | NoC0 X then Y; NoC1 Y then X; execution requires an explicit transport or memory replay binding |
 | Attachments | 240 descriptive tile/fabric records, including disabled workers |
 | Worker L1 | 1,499,136 bytes each (1464 KiB) |
 | Worker L1 inventory | 119,930,880 physical bytes; 107,937,792 bytes associated with enabled workers |
@@ -141,16 +141,17 @@ boundaries revalidate models, including nested data modified by Python callers.
 
 | Capability state | Meaning in this implementation |
 | --- | --- |
-| `executable` | Profile validation/inspection and the separately scoped transport binder are implemented |
-| `abstract` | Opt-in version-2 unicast, causal response fixtures and directed slowdowns execute with disclosed model assumptions |
+| `executable` | Profile validation/inspection and separately scoped transport/memory replay compilers are implemented |
+| `abstract` | Opt-in unicast/causal response transport and addressed memory transactions/service/ordering execute with disclosed model assumptions |
 | `represented_only` | Physical layout, coordinate mappings and memory inventory are descriptive data |
-| `unsupported` | Full-workload profile adapter, heterogeneous workload construction, mask scheduling, NIU transactions, memory service, compute/dataflow and calibrated hardware timing |
+| `unsupported` | Full-workload profile adapter, heterogeneous workload construction, mask scheduling, exact NIU behavior, workload memory integration, compute/dataflow and calibrated hardware timing |
 
-Manifest `hardware-profile-2` distinguishes `profile data`, `opt-in version-2
-transport` and `profile execution` scopes. Available compiler/transport features
-are implementation capabilities, not admission of the inspected profile. Only a
-version-2 replay with explicit availability, endpoint permissions and timing can
-pass transport compilation and runtime admission; see [the transport examples](torus_transport.md).
+Manifest `hardware-profile-3` distinguishes `profile data`, `opt-in version-2
+transport`, `opt-in memory replay` and `profile execution` scopes. Available
+compilers are implementation capabilities, not admission of the inspected
+profile. Explicit availability, endpoint permissions, timing and resource
+settings are required; see [transport examples](torus_transport.md) and
+[addressed memory replay](memory_transactions.md).
 `can_execute: false` and `blockers` still describe full-workload execution.
 
 The manifest belongs to the implementation. Unknown feature/policy names are
@@ -172,7 +173,8 @@ and timing logs. It loads the architecture only once. Existing synthetic
 execution remains owned by `ArchConfig`, `NoC`, `Core`, DMA and their existing
 validation paths. No full-workload hardware-profile adapter exists. The separate
 torus runtime creates transport routers/links/endpoints without Core, DMA, memory
-service or DFG execution.
+service or DFG execution. The separate memory runtime adds addressed transactions
+and aggregate shared service without enabling Core/DFG workload execution.
 
 Runtime traces, workload/failure JSON, detector checkpoints and RL
 observation/action shapes retain their existing contracts. Inspection JSON is
@@ -256,18 +258,18 @@ All following tests are in `simulator_detailed/tests/test_hardware_profile.py`:
 Child 2 has since delivered [canonical topology and synthetic replay](topology.md).
 It projects this profile's inventory without inventing ports, availability or torus
 edges. Its generic runtime does not change this profile's `can_execute: false`
-gate; Wormhole routing, scheduling and memory services remain pending. The following
-handoff records the child-1 boundary and inputs.
+gate. Children 3 and 4 have subsequently added explicit torus transport and
+addressed memory replay; workload scheduling and compute remain pending. The
+following handoff records the historical child-1 boundary and inputs.
 
-The next child is `generic-heterogeneous-topology`. Its inputs are validated
-physical tile IDs, roles, explicit enabled/logical worker mappings, fabric
-coordinates, endpoint records and unique memory identities. It must decide how
-to separate router/worker/resource construction, expose a generic graph and
-preserve downstream compatibility. No current profile data constructs runtime
-resources or selects routes.
+At the child-1 handoff, `generic-heterogeneous-topology` received validated
+physical tile IDs, roles, enabled/logical worker mappings, fabric coordinates,
+endpoint records and unique memory identities. Its responsibilities were separate
+router/worker/resource construction, a generic graph and downstream compatibility. Profile inspection itself still constructs no
+runtime resources and selects no routes.
 
 Umbrella HP-01..04 are covered only for this child's data/inspection boundary.
-HP-03 scheduling/transit behavior and later NoC, transactions, memory, compute
-and validation-harness requirements remain pending. VA evidence begins here,
-but measured accuracy remains unavailable. Each completed, validated part is committed before continuing to the next part.
+HP-03 scheduling and compute/validation-harness requirements remain pending;
+transport and memory delivery are documented in their separately scoped children.
+VA evidence begins here, but measured accuracy remains unavailable. Each completed, validated part is committed before continuing to the next part.
 Spec synchronization, archival and push are separate requested actions.

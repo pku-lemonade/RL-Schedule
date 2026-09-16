@@ -466,7 +466,13 @@ class ProfileInspectionTests(unittest.TestCase):
         transport = [feature for feature in report.features if feature.scope == "opt-in version-2 transport"]
         self.assertTrue(transport)
         self.assertTrue(all(not feature.required_for_execution for feature in transport))
-        self.assertEqual(report.manifest_version, "hardware-profile-2")
+        self.assertEqual(report.manifest_version, "hardware-profile-3")
+        memory = [feature for feature in report.features if feature.scope == "opt-in memory replay"]
+        self.assertEqual(len(memory), 4)
+        self.assertTrue(all(not feature.required_for_execution for feature in memory))
+        self.assertEqual(states["memory_replay_binding"], "executable")
+        self.assertEqual(states["aggregate_memory_service"], "abstract")
+        self.assertEqual(states["memory_service"], "unsupported")
         ids = [blocker.feature_id for blocker in report.blockers]
         self.assertEqual(ids, sorted(ids))
         self.assertIn("shared_memory_service", ids)
