@@ -24,11 +24,11 @@
 
 ## 4. Shared capacity, readiness metadata and memory service (MT-D04, D05)
 
-- [ ] 4.1 Add one canonical resource owner and handle ledger per L1/DRAM resource in `memory_resources.py`; verify aliases share capacity, distinct reservations cannot overlap, foreign/double release fails, finite replay allocation is charged once and teardown restores the budget.
-- [ ] 4.2 Add explicit initialized/producer range metadata and access leases without tensor values; verify allocation does not imply readiness, reads require the selected producer version, conflicting accesses cannot proceed early, and disjoint/concurrent-read accesses remain eligible.
-- [ ] 4.3 Implement `aggregate_shared_rw_v1` with a bounded FIFO waiting queue, one active slot, configurable granularity/chunk size/native latency/bandwidth/clock and service events; verify two independent analytical timelines, positive sub-quantum work and exact rounded read/write service bytes.
-- [ ] 4.4 Verify generic clients through different aliases/fabrics share combined read/write service while independent resources overlap; test finite admission under saturation, queue/active bounds and that no memory grant waits on a network resource.
-- [ ] 4.5 Run resource/ownership/service tests, strict type/lint and `git diff --check`; document aggregate-policy and narrow-write approximations, then commit this part before transaction integration.
+- [x] 4.1 Add one canonical resource owner and handle ledger per L1/DRAM resource in `memory_resources.py`; verify aliases share capacity, distinct reservations cannot overlap, foreign/double release fails, finite replay allocation is charged once and teardown restores the budget.
+- [x] 4.2 Add explicit initialized/producer range metadata and access leases without tensor values; verify allocation does not imply readiness, reads require the selected producer version, conflicting accesses cannot proceed early, and disjoint/concurrent-read accesses remain eligible.
+- [x] 4.3 Implement `aggregate_shared_rw_v1` with a bounded FIFO waiting queue, one active slot, configurable granularity/chunk size/native latency/bandwidth/clock and service events; verify two independent analytical timelines, positive sub-quantum work and exact rounded read/write service bytes.
+- [x] 4.4 Verify generic clients through different aliases/fabrics share combined read/write service while independent resources overlap; test finite admission under saturation, queue/active bounds and that no memory grant waits on a network resource.
+- [x] 4.5 Run resource/ownership/service tests, strict type/lint and `git diff --check`; document aggregate-policy and narrow-write approximations, then commit this part before transaction integration.
 
 ## 5. Bounded addressed read and write execution (MT-D03..06, D08)
 
