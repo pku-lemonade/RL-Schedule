@@ -1,4 +1,4 @@
-"""Pure admission and records for the initial disjoint memory execution subset."""
+"""Pure admission and records for explicitly ordered addressed memory execution."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from .configs.schemas.topology import (
     PositiveInt,
 )
 from .configs.schemas.torus_replay import Cycles, TransportEvidence
+from .memory_ordering import MemoryOperationOrder, MemoryOrderingPlan
 from .memory_packets import MemorySegment, MemoryWirePlan, RoutedMemoryPacket
 from .memory_plan import MemoryPlan
 from .memory_records import MemoryOperationRecord, MemoryReplayResult
@@ -40,6 +41,8 @@ class MemoryRuntimeConfig(GraphRecord):
     responder_capacity_packets: PositiveInt
     request_control_aci_cycles: Cycles
     response_control_aci_cycles: Cycles
+    local_capacity_operations: PositiveInt = 1
+    local_control_aci_cycles: Cycles = 0
     evidence: TransportEvidence
 
 
@@ -65,6 +68,7 @@ class MemoryExecutionPlan:
     settings: MemoryRuntimeConfig
     resources: MemoryResourcePlan
     transport: MemoryTransportPlan
+    ordering: MemoryOrderingPlan
     segments: tuple[MemorySegmentDefinition, ...]
     plan_sha256: str
 
@@ -77,32 +81,15 @@ class MemoryExecutionPlan:
         if (config.endpoint_queue_capacity_packets, config.endpoint_staging_capacity_flits) != (
                 settings.transport.endpoint_queue_capacity_packets, settings.transport.endpoint_staging_capacity_flits):
             raise ValueError("memory and transport endpoint capacities must agree")
-        buffers = {b.buffer_id: b for b in config.buffers}
-        accesses: list[tuple[str, int, int, bool]] = []
         for operation in config.operations:
-            if operation.kind not in {"read", "write_posted", "write_acknowledged"}:
-                raise ValueError("initial memory execution does not support local operations or fences")
-            if operation.depends_on or operation.fence_operations:
-                raise ValueError("initial memory execution does not support dependencies")
-            if operation.source is None or operation.destination is None:
-                raise ValueError("memory execution needs source and destination")
-            if not buffers[operation.source.buffer_id].initially_ready:
-                raise ValueError("initial memory execution requires an initialized source")
-            if not math.isfinite(operation.start_aci_cycles + config.issue_latency_aci_cycles):
-                raise ValueError("unrepresentable memory issue time")
-            for access, write in ((operation.source, False), (operation.destination, True)):
-                buffer = buffers[access.buffer_id]
-                start = buffer.base_address + access.offset_bytes
-                end = start + access.size_bytes
-                for resource, a, b, writes in accesses:
-                    if resource == buffer.resource_id and start < b and a < end and (write or writes):
-                        raise ValueError("initial memory execution rejects overlapping conflicting accesses")
-                accesses.append((buffer.resource_id, start, end, write))
-        if any(b.producer_operation_id is not None for b in config.buffers):
-            raise ValueError("producer-dependent buffer declarations require ordering support")
+            control = (settings.local_control_aci_cycles if operation.kind in {"local_read", "local_write"}
+                       else 0 if operation.kind == "fence" else config.issue_latency_aci_cycles)
+            if not math.isfinite(operation.start_aci_cycles + control):
+                raise ValueError("unrepresentable memory admission/control time")
         resources = MemoryResourcePlan.compile(memory)
         wire = MemoryWirePlan.compile(memory)
-        transport = MemoryTransportPlan.compile(wire, settings.transport)
+        ordering = MemoryOrderingPlan.compile(memory, wire.routes)
+        transport = MemoryTransportPlan.compile(wire, settings.transport, physical_flit_bytes=config.packet.physical_flit_bytes)
         operations = {o.operation_id: o for o in config.operations}
         routes = {r.operation_id: r for r in wire.routes.operations}
         responses = {(p.packet.identity.operation_id, p.packet.identity.segment_index): p
@@ -113,8 +100,8 @@ class MemoryExecutionPlan:
             routes[p.packet.identity.operation_id].initiator_resource_id)
             for p in wire.packets if p.packet.identity.traffic_class == "request")
         digest = content_digest({"memory_plan_sha256": memory.plan_sha256,
-                                 "settings": settings.model_dump(mode="json"), "execution": "addressed_memory_disjoint_v1"})
-        return cls(memory, settings, resources, transport, segments, digest)
+                                 "settings": settings.model_dump(mode="json"), "execution": "addressed_memory_ordered_v1"})
+        return cls(memory, settings, resources, transport, ordering, segments, digest)
 
 
 class MemorySegmentRecord(MemoryOperationRecord):
@@ -133,18 +120,18 @@ class MemorySegmentRecord(MemoryOperationRecord):
 class MemoryLifecycleEvent(GraphRecord):
     time_aci_cycles: Cycles
     operation_id: Identifier
-    segment_index: Index
+    segment_index: Index | None
     action: Literal["submission", "acceptance", "source_read_complete", "request_handoff",
                     "response_wire_receipt", "destination_ready", "complete"]
 
 
 class MemoryDescriptorState(GraphRecord):
-    kind: Literal["issue", "responder"]
+    kind: Literal["issue", "responder", "local_client"]
     owner_id: Identifier
     capacity: PositiveInt
     occupied: Index
     peak_occupied: Index
-    owners: tuple[tuple[Identifier, Index], ...]
+    owners: tuple[tuple[Identifier, Index | None], ...]
 
     @model_validator(mode="after")
     def bounded(self) -> Self:
@@ -155,17 +142,18 @@ class MemoryDescriptorState(GraphRecord):
 
 class MemoryDescriptorEvent(GraphRecord):
     time_aci_cycles: Cycles
-    kind: Literal["issue", "responder"]
+    kind: Literal["issue", "responder", "local_client"]
     owner_id: Identifier
     action: Literal["acquire", "release"]
     operation_id: Identifier
-    segment_index: Index
+    segment_index: Index | None
     occupied: Index
 
 
 class MemoryExecutionResult(MemoryReplayResult):
     execution_plan_sha256: Digest
     settings: MemoryRuntimeConfig
+    ordering: tuple[MemoryOperationOrder, ...]
     segments: tuple[MemorySegmentRecord, ...]
     transport: PacketTransportResult
     memory_resources: tuple[MemoryResourceState, ...]
@@ -187,6 +175,7 @@ class MemoryExecutionResult(MemoryReplayResult):
         if self.status == "complete" and (not self.teardown_complete or self.transport.status != "complete"
                                          or any(d.occupied for d in self.descriptors)
                                          or any(r.reserved_bytes for r in self.released_resources)
+                                         or any(o.completion_aci_cycles is None for o in self.operations)
                                          or any(s.completion_aci_cycles is None or s.destination_ready_aci_cycles is None for s in self.segments)):
             raise ValueError("memory execution cannot complete with pending effects or resources")
         return self

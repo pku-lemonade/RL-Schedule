@@ -1,7 +1,7 @@
 """Strict, executable-memory admission records.
 
-These records describe a future bounded runtime. Parsing and planning do not
-construct SimPy resources or claim that memory traffic is executable yet.
+Parsing does not construct SimPy resources. Execution admission separately
+checks addressed ranges, supported ordering and the shared service geometry.
 """
 
 from __future__ import annotations
@@ -122,6 +122,17 @@ class MemoryRange(GraphRecord):
     size_bytes: PositiveInt
 
 
+class MemoryVersion(GraphRecord):
+    kind: Literal["initial", "producer"]
+    producer_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def tagged(self) -> Self:
+        if (self.kind == "producer") != (self.producer_id is not None):
+            raise ValueError("only a producer version names an operation")
+        return self
+
+
 class MemoryOperation(GraphRecord):
     operation_id: Identifier
     initiator_id: Identifier
@@ -136,20 +147,26 @@ class MemoryOperation(GraphRecord):
     ]
     source: MemoryRange | None = None
     destination: MemoryRange | None = None
+    source_version: MemoryVersion | None = None
     depends_on: tuple[Identifier, ...] = ()
+    destination_ready_after: tuple[Identifier, ...] = ()
     fence_mode: Literal["local_handoff", "remote_completion"] | None = None
     fence_operations: tuple[Identifier, ...] = ()
+    fence_fabrics: tuple[Index, ...] = ()
     start_aci_cycles: NonNegative = 0
 
     @model_validator(mode="after")
     def shape(self) -> Self:
         network = self.kind in {"read", "write_posted", "write_acknowledged"}
-        local = self.kind in {"local_read", "local_write"}
         fence = self.kind == "fence"
         if network and (self.fabric_id is None or self.source is None or self.destination is None):
             raise ValueError("network memory operations require fabric, source and destination")
-        if local and (self.fabric_id is not None or self.source is None or self.destination is None):
-            raise ValueError("local operations require source and destination without a fabric")
+        if self.kind == "local_read" and (self.fabric_id is not None or self.source is None or self.destination is not None):
+            raise ValueError("local reads require only a source range without a fabric")
+        if self.kind == "local_write" and (self.fabric_id is not None or self.destination is None or self.source is not None):
+            raise ValueError("local writes require only a destination range without a fabric")
+        if self.source is None and self.source_version is not None:
+            raise ValueError("source version requires a source read")
         if fence and (
             self.fabric_id is not None
             or self.source is not None
@@ -158,8 +175,14 @@ class MemoryOperation(GraphRecord):
             or not self.fence_operations
         ):
             raise ValueError("fences require mode and operation IDs without memory ranges")
-        if not fence and (self.fence_mode is not None or self.fence_operations):
+        if not fence and (self.fence_mode is not None or self.fence_operations or self.fence_fabrics):
             raise ValueError("only fences may declare fence fields")
+        if fence and self.destination_ready_after:
+            raise ValueError("fences cannot observe destination readiness directly")
+        unique(self.depends_on, "completion dependency")
+        unique(self.destination_ready_after, "destination-ready dependency")
+        unique(self.fence_operations, "fence operation")
+        unique(self.fence_fabrics, "fence fabric")
         if self.kind == "write_posted" and self.fence_mode == "remote_completion":
             raise ValueError("posted writes cannot provide remote-completion fences")
         return self
@@ -214,7 +237,12 @@ class MemoryReplay(GraphRecord):
                 raise ValueError(f"operation {operation.operation_id}: unknown initiator")
             if operation.fabric_id is not None and operation.fabric_id not in self.fabrics:
                 raise ValueError(f"operation {operation.operation_id}: unknown fabric")
-            for dependency in operation.depends_on + operation.fence_operations:
+            if any(fabric not in self.fabrics for fabric in operation.fence_fabrics):
+                raise ValueError("fence refers to an unknown fabric")
+            if (operation.source_version is not None and operation.source_version.producer_id is not None
+                    and operation.source_version.producer_id not in operation_ids):
+                raise ValueError("source version refers to an unknown producer")
+            for dependency in operation.depends_on + operation.destination_ready_after + operation.fence_operations:
                 if dependency not in operation_ids:
                     raise ValueError(f"operation {operation.operation_id}: unknown dependency {dependency}")
             for access in (operation.source, operation.destination):
@@ -227,7 +255,7 @@ class MemoryReplay(GraphRecord):
     def _check_dependency_cycles(self) -> None:
         operations = {operation.operation_id: operation for operation in self.operations}
         edges = {
-            operation_id: set(operation.depends_on + operation.fence_operations)
+            operation_id: set(operation.depends_on + operation.destination_ready_after + operation.fence_operations)
             for operation_id, operation in operations.items()
         }
         visiting: set[str] = set()

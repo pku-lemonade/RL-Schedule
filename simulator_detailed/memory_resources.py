@@ -15,7 +15,7 @@ import simpy
 from pydantic import model_validator
 from simpy.events import Event, ProcessGenerator
 
-from .configs.schemas.memory_replay import MemoryBuffer, MemoryReplay
+from .configs.schemas.memory_replay import MemoryBuffer, MemoryReplay, MemoryVersion
 from .configs.schemas.topology import (
     GraphRecord,
     Identifier,
@@ -30,17 +30,6 @@ from .memory_service import (
     ServiceChunk,
     ServiceTiming,
 )
-
-
-class MemoryVersion(GraphRecord):
-    kind: Literal["initial", "producer"]
-    producer_id: Identifier | None = None
-
-    @model_validator(mode="after")
-    def tagged(self) -> Self:
-        if (self.kind == "producer") != (self.producer_id is not None):
-            raise ValueError("only a producer version names an operation")
-        return self
 
 
 class MemoryAccess(GraphRecord):

@@ -35,12 +35,15 @@ def documents(kind="write_acknowledged", size=33, fabric=0):
     return doc, graph
 
 
-def execution_plan(doc, graph, *, transport=None, responders=1, request_control=1, response_control=1):
+def execution_plan(doc, graph, *, transport=None, responders=1, request_control=1, response_control=1,
+                   local_capacity=1, local_control=0):
     return MemoryExecutionPlan.compile(MemoryPlan.compile(MemoryReplay.model_validate(doc), graph),
                                        MemoryRuntimeConfig(transport=transport or transport_config(),
                                                            responder_capacity_packets=responders,
                                                            request_control_aci_cycles=request_control,
-                                                           response_control_aci_cycles=response_control, evidence=EVIDENCE))
+                                                           response_control_aci_cycles=response_control,
+                                                           local_capacity_operations=local_capacity,
+                                                           local_control_aci_cycles=local_control, evidence=EVIDENCE))
 
 
 class MemoryRuntimeTests(unittest.TestCase):
@@ -51,7 +54,7 @@ class MemoryRuntimeTests(unittest.TestCase):
         self.assertEqual(result.packet_bytes, sum(e.physical_bytes for e in result.transport.trace
                                                 if e.action == "link_launch" and e.channel.kind == "inject"))
         self.assertEqual(result.memory_service_bytes, sum(c.serviced_bytes for c in result.chunks))
-        self.assertEqual(result.execution, "addressed_memory_disjoint_v1")
+        self.assertEqual(result.execution, "addressed_memory_ordered_v1")
         self.assertEqual(result.transport.memory_service, "external_hooks")
         self.assertEqual(result.silicon_timing, "unvalidated")
         owners, peaks = {}, Counter()
@@ -406,11 +409,10 @@ class MemoryRuntimeTests(unittest.TestCase):
         self.assertTrue(all(c.native_cycles == 1.5 and c.service_aci_cycles == 3 for c in result.chunks))
         self.assertEqual(Counter(c.useful_bytes for c in result.chunks), {4: 12, 1: 2})
 
-    def test_strict_execution_subset_rejected_before_environment_allocation(self):
+    def test_invalid_execution_rejected_before_environment_allocation(self):
         for mutate in (
             lambda d: d["buffers"][0].update(initially_ready=False),
             lambda d: d["operations"][0].update(kind="local_write", fabric_id=None),
-            lambda d: d["buffers"][1].update(producer_operation_id="transfer"),
             lambda d: d["operations"].append({**copy.deepcopy(d["operations"][0]), "operation_id": "conflict", "fabric_id": 1}),
             lambda d: d["operations"][0]["destination"].update(buffer_id="local"),
         ):
@@ -418,15 +420,10 @@ class MemoryRuntimeTests(unittest.TestCase):
             mutate(doc)
             with self.subTest(mutate=mutate), patch("simpy.Environment", side_effect=AssertionError("allocated")), self.assertRaises(ValueError):
                 execution_plan(doc, graph)
-        doc, graph = documents()
-        second = copy.deepcopy(doc["operations"][0])
-        second.update(operation_id="dependent", depends_on=["transfer"])
-        second["destination"]["offset_bytes"] = 64
-        doc["operations"].append(second)
-        with patch("simpy.Environment", side_effect=AssertionError("allocated")), self.assertRaises(ValueError):
-            execution_plan(doc, graph)
         plan = execution_plan(*documents())
         for settings in (plan.settings.model_copy(update={"responder_capacity_packets": True}),
+                         plan.settings.model_copy(update={"local_capacity_operations": True}),
+                         plan.settings.model_copy(update={"local_control_aci_cycles": -1}),
                          plan.settings.model_copy(update={"transport": transport_config(staging=2)})):
             with patch("simpy.Environment", side_effect=AssertionError("allocated")), self.assertRaises(ValueError):
                 MemoryExecutionPlan.compile(plan.memory, settings)

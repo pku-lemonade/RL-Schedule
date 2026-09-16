@@ -58,7 +58,7 @@ class MemoryOperationRecord(GraphRecord):
         values = (submission, acceptance, source, handoff, response, ready, complete)
         if any(value is not None and value < 0 for value in values):
             raise ValueError("memory lifecycle time cannot be negative")
-        pairs = [(submission, acceptance), *((acceptance, value) for value in (source, handoff, response, ready, complete)),
+        pairs = [(submission, acceptance), (submission, complete), *((acceptance, value) for value in (source, handoff, response, ready, complete)),
                  (source, ready)]
         # Lifecycle facts form a partial order. In a read, request handoff
         # precedes the remote source read; posted completion precedes visibility.
@@ -70,9 +70,18 @@ class MemoryOperationRecord(GraphRecord):
                 pairs.extend(((ready, response), (response, complete)))
             elif response is not None:
                 raise ValueError("posted writes have no response receipt")
+        elif self.kind in {"local_read", "local_write"}:
+            pairs.append((source if self.kind == "local_read" else ready, complete))
+            if handoff is not None or response is not None:
+                raise ValueError("local memory clients have no network lifecycle")
+            if (self.kind == "local_read" and ready is not None) or (self.kind == "local_write" and source is not None):
+                raise ValueError("local memory lifecycle must match its access direction")
+        elif self.kind == "fence" and any(value is not None for value in (acceptance, source, handoff, response, ready)):
+            raise ValueError("fences have no descriptor, memory or wire work")
         if any(a is not None and b is not None and a > b for a, b in pairs):
             raise ValueError("memory lifecycle violates its operation's causal order")
-        boundary = handoff if self.kind == "write_posted" else ready if self.kind == "read" else None
+        boundary = (handoff if self.kind == "write_posted" else ready if self.kind in {"read", "local_write"}
+                    else source if self.kind == "local_read" else None)
         if complete is not None and boundary is not None and complete != boundary:
             raise ValueError("memory completion differs from its observable boundary")
         return self
@@ -139,7 +148,7 @@ class MemoryReplayResult(GraphRecord):
     packet_bytes: Index
     channel_bytes: Index
     memory_service_bytes: Index
-    execution: Literal["addressed_memory_unimplemented", "addressed_memory_disjoint_v1"] = "addressed_memory_unimplemented"
+    execution: Literal["addressed_memory_unimplemented", "addressed_memory_disjoint_v1", "addressed_memory_ordered_v1"] = "addressed_memory_unimplemented"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
 
     @model_validator(mode="after")

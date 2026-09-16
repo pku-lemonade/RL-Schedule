@@ -106,16 +106,22 @@ class MemoryTransportPlan:
     network: PacketNetworkPlan
 
     @classmethod
-    def compile(cls, wire: MemoryWirePlan, config: MemoryTransportConfig) -> MemoryTransportPlan:
+    def compile(cls, wire: MemoryWirePlan, config: MemoryTransportConfig, *, physical_flit_bytes: int | None = None) -> MemoryTransportPlan:
         # Revalidate copy/construct inputs before callers allocate a network.
-        config = MemoryTransportConfig.model_validate(config.model_dump(mode="json"))
-        if not wire.packets:
+        config = MemoryTransportConfig.model_validate(config.model_dump(mode="python"))
+        if not wire.packets and physical_flit_bytes is None:
             raise ValueError("memory wire transport requires network packets")
         fabrics = {f.fabric_id: f for f in config.fabrics}
         graph = wire.routes.routing.topology.graph
         if set(fabrics) != {f.fabric_id for f in graph.fabrics}:
             raise ValueError("transport settings must cover exactly the graph fabrics")
         physical = {p.packet.layout.physical_flit_bytes for p in wire.packets}
+        if physical_flit_bytes is not None:
+            if type(physical_flit_bytes) is not int or physical_flit_bytes <= 0 or (physical and physical != {physical_flit_bytes}):
+                raise ValueError("declared physical width differs from memory packet layout")
+            # Local-only execution has an empty network but still validates its
+            # configured geometry; no fabricated packets or links are needed.
+            physical = {physical_flit_bytes}
         for f in config.fabrics:
             for link in (f.network_link, f.local_link):
                 if link.slowdowns:

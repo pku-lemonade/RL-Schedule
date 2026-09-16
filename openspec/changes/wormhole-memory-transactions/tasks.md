@@ -40,11 +40,11 @@
 
 ## 6. Explicit dependencies, local clients and scoped fences (MT-D04..08)
 
-- [ ] 6.1 Compile operation dependencies and physical-range conflict/version checks across aliases; verify cyclic/foreign/insufficient dependencies and unordered overlapping writes fail before execution, while independent operations are not globally serialized.
-- [ ] 6.2 Add local L1 read/write clients and producer destination-ready dependencies using the same memory service owner; verify local consumption waits for remote writes and both fabrics plus local clients contend without generating fictitious local network traffic or claiming DFG integration.
-- [ ] 6.3 Implement frozen per-initiator/fabric operation sets for local-handoff and remote-completion fences; verify legal cross-fabric ack/read ordering, posted writes rejected from remote fences, later issue gated only by explicit dependencies, and no zero-cost remote notification.
-- [ ] 6.4 Test producer overwrite hazards, partial-range readiness, source lease release and all-segment completion with backpressure; verify no buffer is freed early and the successful replay snapshot/teardown distinguishes readiness, persistent capacity and pending service.
-- [ ] 6.5 Run focused ordering/local-client and mixed-traffic liveness tests, strict type/lint and `git diff --check`; review the explicit ordering subset and commit this part before adapter work.
+- [x] 6.1 Compile operation dependencies and physical-range conflict/version checks across aliases; verify cyclic/foreign/insufficient dependencies and unordered overlapping writes fail before execution, while independent operations are not globally serialized.
+- [x] 6.2 Add local L1 read/write clients and producer destination-ready dependencies using the same memory service owner; verify local consumption waits for remote writes and both fabrics plus local clients contend without generating fictitious local network traffic or claiming DFG integration.
+- [x] 6.3 Implement frozen per-initiator/fabric operation sets for local-handoff and remote-completion fences; verify legal cross-fabric ack/read ordering, posted writes rejected from remote fences, later issue gated only by explicit dependencies, and no zero-cost remote notification.
+- [x] 6.4 Test producer overwrite hazards, partial-range readiness, source lease release and all-segment completion with backpressure; verify no buffer is freed early and the successful replay snapshot/teardown distinguishes readiness, persistent capacity and pending service.
+- [x] 6.5 Run focused ordering/local-client and mixed-traffic liveness tests, strict type/lint and `git diff --check`; review the explicit ordering subset and commit this part before adapter work.
 
 ## 7. Legacy DMA and scratchpad adapters (MT-D04, D09)
 

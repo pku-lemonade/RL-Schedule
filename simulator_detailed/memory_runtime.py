@@ -1,8 +1,8 @@
-"""Bounded addressed execution for initialized, nonconflicting network accesses.
+"""Bounded addressed execution with explicit effect/version ordering.
 
 One environment contains shared links, memory servers and canonical issue
-budgets. Segment coroutines retain control metadata only; all data service runs
-under the packet kernel's counted TX/RX staging leases.
+budgets. Segment coroutines retain control metadata only; network data service
+runs under counted TX/RX staging, and local clients use bounded chunk slots.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from typing import Literal
 import simpy
 from simpy.events import Event, ProcessGenerator
 
+from .configs.schemas.memory_replay import MemoryOperation
 from .configs.schemas.torus_replay import PacketIdentity
 from .memory_execution import (
     MemoryDescriptorEvent,
@@ -35,6 +36,7 @@ from .memory_records import (
 from .memory_resources import (
     AccessLease,
     MemoryAccess,
+    MemoryResource,
     MemoryResources,
     MemoryResourceState,
     MemoryVersion,
@@ -65,10 +67,10 @@ class _Segment:
 
 
 class _Descriptors:
-    def __init__(self, env: simpy.Environment, kind: Literal["issue", "responder"], owner: str, capacity: int,
+    def __init__(self, env: simpy.Environment, kind: Literal["issue", "responder", "local_client"], owner: str, capacity: int,
                  events: list[MemoryDescriptorEvent]):
         self.env, self.owner, self.capacity = env, owner, capacity
-        self.kind: Literal["issue", "responder"] = kind
+        self.kind: Literal["issue", "responder", "local_client"] = kind
         self.events = events
         self.owners: dict[SegmentKey, None] = {}
         self.peak = 0
@@ -93,14 +95,16 @@ class _Descriptors:
 
     def _log(self, action: Literal["acquire", "release"], key: SegmentKey) -> None:
         self.events.append(MemoryDescriptorEvent(time_aci_cycles=self.env.now, kind=self.kind, owner_id=self.owner,
-                                                action=action, operation_id=key[0], segment_index=key[1],
+                                                action=action, operation_id=key[0],
+                                                segment_index=None if self.kind == "local_client" else key[1],
                                                 occupied=len(self.owners)))
         self.changed.succeed()
         self.changed = self.env.event()
 
     def snapshot(self) -> MemoryDescriptorState:
         return MemoryDescriptorState(kind=self.kind, owner_id=self.owner, capacity=self.capacity,
-                                     occupied=len(self.owners), peak_occupied=self.peak, owners=tuple(self.owners))
+                                     occupied=len(self.owners), peak_occupied=self.peak,
+                                     owners=tuple((key[0], None if self.kind == "local_client" else key[1]) for key in self.owners))
 
 
 class MemoryRuntime:
@@ -110,6 +114,12 @@ class MemoryRuntime:
         self.env = simpy.Environment()
         self.memory = MemoryResources(self.env, self.plan.resources)
         self._segments = {d.key: _Segment(d) for d in self.plan.segments}
+        self._operation_facts: dict[str, dict[Fact, float]] = {o.operation_id: {} for o in self.plan.memory.config.operations}
+        self._operation_events = {(operation_id, action): self.env.event()
+                                  for operation_id in self._operation_facts for action in _FIELDS}
+        self._fact_counts: dict[tuple[str, Fact], int] = {}
+        self._segment_counts = {operation_id: sum(d.key[0] == operation_id for d in self.plan.segments)
+                                for operation_id in self._operation_facts}
         self._packets = {p.packet.identity.transport_identity: p.packet for d in self.plan.segments
                          for p in (d.request, d.response) if p is not None}
         self._descriptor_events: list[MemoryDescriptorEvent] = []
@@ -121,11 +131,20 @@ class MemoryRuntime:
         self._responders = {owner: _Descriptors(self.env, "responder", owner, self.plan.settings.responder_capacity_packets,
                                                 self._descriptor_events)
                             for owner in sorted({d.request.route.destination for d in self.plan.segments if d.response is not None})}
+        # Each charged local-client slot admits at most one memory chunk at a
+        # time, bounding its control and staging by the owner's configured M.
+        local_owners = {self.plan.ordering.operations[o.operation_id].initiator_resource_id
+                        for o in self.plan.memory.config.operations if o.kind in {"local_read", "local_write"}}
+        self._locals = {owner: _Descriptors(self.env, "local_client", owner, self.plan.settings.local_capacity_operations,
+                                           self._descriptor_events) for owner in sorted(local_owners)}
         self.transport = PacketTransport(self.env, self.plan.transport.network, self)
         self._before_teardown: tuple[MemoryResourceState, ...] | None = None
         self._final: MemoryExecutionResult | None = None
         for state in self._segments.values():
             self.env.process(self._issue(state))
+        for operation in self.plan.memory.config.operations:
+            if operation.kind in {"local_read", "local_write", "fence"}:
+                self.env.process(self._local_or_fence(operation))
 
     def _mark(self, state: _Segment, action: Fact) -> None:
         if action in state.facts:
@@ -133,6 +152,73 @@ class MemoryRuntime:
         state.facts[action] = float(self.env.now)
         self._lifecycle.append(MemoryLifecycleEvent(time_aci_cycles=self.env.now, operation_id=state.definition.key[0],
                                                     segment_index=state.definition.key[1], action=action))
+        operation_id = state.definition.key[0]
+        key = operation_id, action
+        self._fact_counts[key] = self._fact_counts.get(key, 0) + 1
+        threshold = 1 if action in {"submission", "acceptance"} else self._segment_counts[operation_id]
+        if self._fact_counts[key] == threshold:
+            self._mark_operation(operation_id, action, trace=False)
+
+    def _mark_operation(self, operation_id: str, action: Fact, *, trace: bool = True) -> None:
+        facts = self._operation_facts[operation_id]
+        if action in facts:
+            raise ValueError("operation lifecycle fact published twice")
+        facts[action] = float(self.env.now)
+        self._operation_events[operation_id, action].succeed()
+        if trace:
+            self._lifecycle.append(MemoryLifecycleEvent(time_aci_cycles=self.env.now, operation_id=operation_id,
+                                                        segment_index=None, action=action))
+
+    def _wait_dependencies(self, operation_id: str) -> ProcessGenerator:
+        for wait in self.plan.ordering.operations[operation_id].waits:
+            event = self._operation_events[wait.operation_id, wait.event]
+            if not event.triggered:
+                yield event
+
+    def _local_or_fence(self, operation: MemoryOperation) -> ProcessGenerator:
+        operation_id = operation.operation_id
+        yield from self._delay(operation.start_aci_cycles)
+        self._mark_operation(operation_id, "submission")
+        yield from self._wait_dependencies(operation_id)
+        if operation.kind == "fence":
+            self._mark_operation(operation_id, "complete")
+            return
+        write = operation.kind == "local_write"
+        extent = operation.destination if write else operation.source
+        if extent is None:
+            raise ValueError("local operation has no admitted range")
+        order = self.plan.ordering.operations[operation_id]
+        version = MemoryVersion(kind="producer", producer_id=operation_id) if write else order.source_version
+        if version is None:
+            raise ValueError("local read has no admitted source version")
+        owner = self.memory.resources[order.initiator_resource_id]
+        handle = self.memory.handles[extent.buffer_id]
+        access = MemoryAccess(client_id=operation_id, direction="write" if write else "read",
+                              offset_bytes=extent.offset_bytes, size_bytes=extent.size_bytes, version=version)
+        pool = self._locals[owner.resource_id]
+        while True:
+            if not write and not owner.is_ready(handle, offset_bytes=access.offset_bytes,
+                                                size_bytes=access.size_bytes, version=version):
+                yield owner.changed
+                continue
+            if pool.full:
+                yield pool.changed
+                continue
+            lease = owner.try_acquire(handle, access)
+            if lease is not None:
+                break
+            yield owner.changed
+        key = operation_id, 0
+        pool.acquire(key)
+        self._mark_operation(operation_id, "acceptance")
+        yield from self._delay(self.plan.settings.local_control_aci_cycles)
+        yield from self._serve(owner, lease, key, "destination" if write else "source", 0, extent.size_bytes)
+        if not owner.access_complete(lease):
+            raise ValueError("local operation completed before all useful bytes were serviced")
+        owner.release_access(lease)
+        self._mark_operation(operation_id, "destination_ready" if write else "source_read_complete")
+        self._mark_operation(operation_id, "complete")
+        pool.release(key)
 
     def _delay(self, cycles: float) -> ProcessGenerator:
         if cycles:
@@ -147,13 +233,17 @@ class MemoryRuntime:
             raise ValueError("admitted network operation has no memory range")
         yield from self._delay(operation.start_aci_cycles)
         self._mark(state, "submission")
+        yield from self._wait_dependencies(operation.operation_id)
         source_handle = self.memory.handles[operation.source.buffer_id]
         destination_handle = self.memory.handles[operation.destination.buffer_id]
         source = self.memory.resources[source_handle.buffer.resource_id]
         destination = self.memory.resources[destination_handle.buffer.resource_id]
+        version = self.plan.ordering.operations[operation.operation_id].source_version
+        if version is None:
+            raise ValueError("network source has no admitted version")
         source_access = MemoryAccess(client_id=operation.operation_id, direction="read",
                                      offset_bytes=operation.source.offset_bytes + segment.offset_bytes,
-                                     size_bytes=segment.logical_bytes, version=MemoryVersion(kind="initial"))
+                                     size_bytes=segment.logical_bytes, version=version)
         destination_access = MemoryAccess(client_id=operation.operation_id, direction="write",
                                           offset_bytes=operation.destination.offset_bytes + segment.offset_bytes,
                                           size_bytes=segment.logical_bytes,
@@ -238,6 +328,18 @@ class MemoryRuntime:
         owner = self.memory.resources[lease.handle.buffer.resource_id]
         start = (flit.flit_index - packet.layout.header_flits) * packet.layout.data_capacity_bytes
         end = start + flit.payload_bytes
+        yield from self._serve(owner, lease, key, side, start, end)
+        if owner.access_complete(lease):
+            owner.release_access(lease)
+            if side == "source":
+                state.source = None
+                self._mark(state, "source_read_complete")
+            else:
+                state.destination = None
+                self._mark(state, "destination_ready")
+
+    def _serve(self, owner: MemoryResource, lease: AccessLease, key: SegmentKey,
+               side: Literal["source", "destination"], start: int, end: int) -> ProcessGenerator:
         chunk_bytes = owner.definition.timing.config.chunk_bytes
         for offset in range(start, end, chunk_bytes):
             service_id = _identity(key[0], key[1], side, offset)
@@ -249,21 +351,14 @@ class MemoryRuntime:
                     yield owner.service.changed
             self._service_segments[service_id] = key
             yield done
-        if owner.access_complete(lease):
-            owner.release_access(lease)
-            if side == "source":
-                state.source = None
-                self._mark(state, "source_read_complete")
-            else:
-                state.destination = None
-                self._mark(state, "destination_ready")
 
     def _resource_states(self) -> tuple[MemoryResourceState, ...]:
         return tuple(r.snapshot() for r in self.memory.resources.values())
 
     def _work_drained(self, transport: PacketTransportResult) -> bool:
         return (transport.status == "complete" and self.memory.is_drained
-                and all(not p.owners for p in (*self._issues.values(), *self._responders.values()))
+                and all(not p.owners for p in (*self._issues.values(), *self._responders.values(), *self._locals.values()))
+                and all("complete" in facts for facts in self._operation_facts.values())
                 and all("complete" in s.facts and "destination_ready" in s.facts for s in self._segments.values()))
 
     def run(self, *, max_aci_cycles: float | None = None) -> MemoryExecutionResult:
@@ -316,7 +411,9 @@ class MemoryRuntime:
                 lifecycle.append(MemoryLifecycleEvent(time_aci_cycles=event.time_aci_cycles, operation_id=key[0],
                                                       segment_index=key[1], action="response_wire_receipt"))
         for chunk in chunks:
-            service_bytes[self._service_segments[chunk.service_id]] += chunk.serviced_bytes
+            key = self._service_segments[chunk.service_id]
+            if key in service_bytes:
+                service_bytes[key] += chunk.serviced_bytes
         segments = tuple(MemorySegmentRecord.model_validate({
             "operation_id": key[0], "kind": state.definition.operation.kind,
             "status": "complete" if "complete" in facts[key] else "incomplete",
@@ -334,16 +431,27 @@ class MemoryRuntime:
                 present = [v for v in values if v is not None]
                 times[name] = (min(present) if action in {"submission", "acceptance"} else
                                max(present) if len(present) == len(values) else None) if present else None
+            if not selected:
+                times = {name: self._operation_facts[operation.operation_id].get(action) for action, name in _FIELDS.items()}
+            extent = operation.source or operation.destination
+            logical_bytes = sum(s.logical_bytes for s in selected) if selected else 0 if extent is None else extent.size_bytes
             operations.append(MemoryOperationRecord.model_validate({
                 "operation_id": operation.operation_id, "kind": operation.kind, **times,
                 "status": "complete" if times["completion_aci_cycles"] is not None else "incomplete",
-                **{name: sum(getattr(s, name) for s in selected)
-                   for name in ("logical_bytes", "packet_bytes", "channel_bytes", "memory_service_bytes")},
+                "logical_bytes": logical_bytes,
+                "packet_bytes": sum(s.packet_bytes for s in selected), "channel_bytes": sum(s.channel_bytes for s in selected),
+                "memory_service_bytes": sum(c.serviced_bytes for c in chunks if c.client_id == operation.operation_id),
             }))
-        descriptors = tuple(p.snapshot() for p in (*self._issues.values(), *self._responders.values()))
+        descriptors = tuple(p.snapshot() for p in (*self._issues.values(), *self._responders.values(), *self._locals.values()))
         complete = self._before_teardown is not None and self._work_drained(transport)
         pending: list[str] = []
         if not complete:
+            for operation in self.plan.memory.config.operations:
+                if "complete" not in self._operation_facts[operation.operation_id]:
+                    pending.append(_identity("operation", operation.operation_id, "complete"))
+                    pending.extend(_identity("dependency", operation.operation_id, wait.operation_id, wait.event)
+                                   for wait in self.plan.ordering.operations[operation.operation_id].waits
+                                   if not self._operation_events[wait.operation_id, wait.event].triggered)
             for key, state in self._segments.items():
                 for action in ("complete", "destination_ready"):
                     if action not in state.facts:
@@ -363,6 +471,7 @@ class MemoryRuntime:
             status="complete" if complete else "incomplete",
             reason="drained" if complete else "idle_with_pending" if self.env.peek() == float("inf") else "cycle_limit",
             plan=self.plan.memory.record, execution_plan_sha256=self.plan.plan_sha256, settings=self.plan.settings,
+            ordering=tuple(self.plan.ordering.operations.values()),
             elapsed_aci_cycles=self.env.now, operations=tuple(operations), segments=segments,
             buffers=tuple(MemoryBufferRecord(buffer_id=b.buffer.buffer_id, resource_id=r.resource_id,
                                             base_address=b.buffer.base_address, size_bytes=b.buffer.size_bytes,
@@ -373,7 +482,7 @@ class MemoryRuntime:
                           for c in chunks),
             chunks=chunks, pending=tuple(pending), logical_bytes=sum(o.logical_bytes for o in operations),
             packet_bytes=sum(o.packet_bytes for o in operations), channel_bytes=transport.transmitted_channel_bytes,
-            memory_service_bytes=sum(c.serviced_bytes for c in chunks), execution="addressed_memory_disjoint_v1",
+            memory_service_bytes=sum(c.serviced_bytes for c in chunks), execution="addressed_memory_ordered_v1",
             transport=transport, memory_resources=resources, descriptors=descriptors,
             released_resources=self._resource_states() if complete else (), teardown_complete=complete,
             lifecycle=tuple(sorted(lifecycle, key=lambda e: e.time_aci_cycles)), descriptor_trace=tuple(self._descriptor_events),
