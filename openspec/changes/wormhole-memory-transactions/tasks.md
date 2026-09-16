@@ -16,11 +16,11 @@
 
 ## 3. Reusable bounded transport with real headers (MT-D03, D08, D09)
 
-- [ ] 3.1 Extract a typed internal packet/service contract from `virtual_channel.py` and `torus_transport.py`, provisionally into `packet_transport.py`, keeping old public wrappers/results unchanged; verify existing v2 routes, bytes, times, event ordering and v1 compatibility fixtures before adding memory scheduling.
-- [ ] 3.2 Implement admitted finite packet readiness/delivery hooks with bounded per-class producer/consumer staging in one shared environment; verify header-only and long streamed packets actually consume credits, router work and physical serialization, with no per-transaction network or uncharged full-packet storage.
-- [ ] 3.3 Connect memory wire envelope validation and real header/data layouts to the shared kernel; verify first/last-flit rules, unequal request/response packet sizes, zero useful payload headers, actual per-channel byte counts, and rejection before resource mutation.
-- [ ] 3.4 Stress runtime-triggered responses with one-slot staging, both wraps/fabrics and directed slowdown; verify fairness, exactly-once packet delivery, conservation, timeout diagnostics and complete delayed-credit drain while keeping memory service itself gated.
-- [ ] 3.5 Run focused kernel/transport tests, legacy network/DMA regressions, strict type/lint and `git diff --check`; audit retained flits/grants and commit this extraction/integration part before memory service work.
+- [x] 3.1 Extract a typed internal packet/service contract from `virtual_channel.py` and `torus_transport.py`, provisionally into `packet_transport.py`, keeping old public wrappers/results unchanged; verify existing v2 routes, bytes, times, event ordering and v1 compatibility fixtures before adding memory scheduling.
+- [x] 3.2 Implement admitted finite packet readiness/delivery hooks with bounded per-class producer/consumer staging in one shared environment; verify header-only and long streamed packets actually consume credits, router work and physical serialization, with no per-transaction network or uncharged full-packet storage.
+- [x] 3.3 Connect memory wire envelope validation and real header/data layouts to the shared kernel; verify first/last-flit rules, unequal request/response packet sizes, zero useful payload headers, actual per-channel byte counts, and rejection before resource mutation.
+- [x] 3.4 Stress runtime-triggered responses with one-slot staging, both wraps/fabrics and directed slowdown; verify fairness, exactly-once packet delivery, conservation, timeout diagnostics and complete delayed-credit drain while keeping memory service itself gated.
+- [x] 3.5 Run focused kernel/transport tests, legacy network/DMA regressions, strict type/lint and `git diff --check`; audit retained flits/grants and commit this extraction/integration part before memory service work.
 
 ## 4. Shared capacity, readiness metadata and memory service (MT-D04, D05)
 

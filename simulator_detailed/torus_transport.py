@@ -7,7 +7,6 @@ dispatch remain later parts of the change.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 
 import simpy
@@ -22,6 +21,7 @@ from .configs.schemas.torus_replay import (
     RouteRecord,
     TrafficClass,
 )
+from .packet_transport import RouterPipeline, forward_flit
 from .torus import TorusPlan
 from .torus_records import (
     PacketResult,
@@ -33,6 +33,7 @@ from .utils.definitions import compute_flit_count
 from .virtual_channel import LinkContract, VirtualChannelLink
 
 ChannelKey = tuple[int, str, str]
+__all__ = ["RouterPipeline", "TorusTransport"]
 
 
 def channel_key(channel: ChannelIdentity) -> ChannelKey:
@@ -105,87 +106,6 @@ class _ResponseDescriptors:
     @property
     def is_drained(self) -> bool:
         return not self._owners
-
-
-class RouterPipeline:
-    """Finite transfer-stage capacity shared by all outputs of one router.
-
-    A caller reserves the downstream lane before asking this stage for service.
-    The stage has no wait on a physical serializer or receiver while occupied.
-    Waiting output identities are bounded by the finite route/channel inventory.
-    """
-
-    def __init__(self, env: simpy.Environment, *, fabric_id: int, router_id: str,
-                 transfer_aci_cycles: float, initiation_aci_cycles: float,
-                 capacity: int):
-        self.env = env
-        self.fabric_id = fabric_id
-        self.router_id = router_id
-        self.transfer_aci_cycles = transfer_aci_cycles
-        self.initiation_aci_cycles = initiation_aci_cycles
-        self.capacity = capacity
-        self.active = 0
-        self.peak = 0
-        self._owners: dict[str, PacketIdentity] = {}
-        self._waiting: deque[ChannelIdentity] = deque()
-        self._waiting_set: set[str] = set()
-        self._next_start = float(env.now)
-        self._changed = env.event()
-
-    @property
-    def changed(self) -> Event:
-        return self._changed
-
-    def _notify(self) -> None:
-        self._changed.succeed()
-        self._changed = self.env.event()
-
-    def try_start(self, output: ChannelIdentity, packet: PacketIdentity) -> bool:
-        output_key = output.model_dump_json()
-        if output_key not in self._waiting_set:
-            self._waiting.append(output)
-            self._waiting_set.add(output_key)
-        if self.active >= self.capacity or self._waiting[0] != output:
-            return False
-        if self.env.now < self._next_start:
-            return False
-        self._waiting.popleft()
-        self._waiting_set.remove(output_key)
-        self.active += 1
-        self.peak = max(self.peak, self.active)
-        self._owners[f"{output.model_dump_json()}:{self.active}:{self.env.now}"] = packet
-        self._next_start = self.env.now + self.initiation_aci_cycles
-        if self.initiation_aci_cycles:
-            self.env.process(self._wake_after(self.initiation_aci_cycles))
-        self._notify()
-        return True
-
-    def _wake_after(self, delay: float) -> ProcessGenerator:
-        yield self.env.timeout(delay)
-        self._notify()
-
-    def finish(self, output: ChannelIdentity, packet: PacketIdentity) -> None:
-        for key, owner in tuple(self._owners.items()):
-            if owner == packet and key.startswith(f"{output.model_dump_json()}:"):
-                del self._owners[key]
-                break
-        else:
-            raise ValueError("router transfer completion does not match an active owner")
-        self.active -= 1
-        self._notify()
-
-    def resources(self) -> ResourceState:
-        owners = tuple(dict.fromkeys(self._owners.values()))
-        return ResourceState(
-            resource_id=f"router-pipeline:{self.router_id}", kind="router_pipeline",
-            fabric_id=self.fabric_id, unit="flits", lane=None, capacity=self.capacity,
-            available=self.capacity - self.active, occupied=self.active, pending_returns=0,
-            peak_occupied=self.peak, owners=owners,
-        )
-
-    @property
-    def is_drained(self) -> bool:
-        return self.active == 0 and not self._waiting
 
 
 class TorusTransport:
@@ -357,28 +277,13 @@ class TorusTransport:
         if router_id is None:
             raise ValueError("forwarding hop has no router transfer stage")
         pipeline = self.pipelines[(route.fabric_id, router_id)]
-        output_channel = route.hops[hop_index].lane.channel
         for index in range(state.expected_flits):
             token = incoming.take(in_lane)
             while token is None:
                 yield incoming.changed
                 token = incoming.take(in_lane)
-            out_token = outgoing.try_reserve(outgoing.contract.envelope(state.packet, index))
-            while out_token is None:
-                yield outgoing.changed
-                out_token = outgoing.try_reserve(outgoing.contract.envelope(state.packet, index))
-            while not pipeline.try_start(output_channel, state.packet):
-                yield pipeline.changed
-            outgoing.log_event("transfer_start", out_token,
-                               duration=pipeline.transfer_aci_cycles,
-                               router_id=route.hops[hop_index - 1].dst_router)
-            yield self.env.timeout(pipeline.transfer_aci_cycles)
-            outgoing.log_event("transfer_end", out_token,
-                               duration=pipeline.transfer_aci_cycles,
-                               router_id=route.hops[hop_index - 1].dst_router)
-            outgoing.make_ready(out_token)
-            pipeline.finish(output_channel, state.packet)
-            incoming.release(token)
+            yield from forward_flit(self.env, incoming, token, outgoing,
+                                    outgoing.contract.envelope(state.packet, index), pipeline)
 
     def _sink(self, state: _PacketState, route: RouteRecord) -> ProcessGenerator:
         link = self._link_for(route.hops[-1])

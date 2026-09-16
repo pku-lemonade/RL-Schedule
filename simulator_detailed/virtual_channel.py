@@ -28,6 +28,7 @@ from .configs.schemas.torus_replay import (
     RequestResponseTraffic,
     TransportEnvelope,
 )
+from .packet_transport import LinkService, WireFlit
 from .torus import TorusPlan
 from .torus_records import ResourceState, TransportTraceEvent
 from .utils.definitions import compute_flit_count
@@ -195,7 +196,9 @@ class LinkContract:
         return template.model_copy(update={"flit_index": flit_index,
                                            "payload_bytes": min(capacity, size - flit_index * capacity)})
 
-    def validate(self, envelope: TransportEnvelope) -> TransportEnvelope:
+    def validate(self, envelope: WireFlit) -> TransportEnvelope:
+        if not isinstance(envelope, TransportEnvelope):
+            raise TypeError("v2 link requires a v2 transport envelope")
         # Revalidate model_copy/model_construct inputs before any event or state change.
         checked = TransportEnvelope.model_validate(envelope.model_dump(mode="json"))
         if checked.plan_sha256 != self.plan_sha256:
@@ -210,7 +213,7 @@ class CreditToken:
     """Opaque instance capability; matching text IDs cannot forge another token."""
 
     token_id: str
-    envelope: TransportEnvelope
+    envelope: WireFlit
 
 
 Stage = Literal["reserved", "ready", "serializing", "propagating", "received", "held", "returning"]
@@ -242,7 +245,7 @@ class VirtualChannelLink:
     registers, until release(). None means backpressure, never queued work.
     """
 
-    def __init__(self, env: simpy.Environment, contract: LinkContract):
+    def __init__(self, env: simpy.Environment, contract: LinkService):
         self.env = env
         self.contract = contract
         self.config = contract.config
@@ -313,7 +316,7 @@ class VirtualChannelLink:
                 yield self.env.timeout(end - self.env.now)
             self._log_failure("failure_end", failure_id)
 
-    def try_reserve(self, envelope: TransportEnvelope) -> CreditToken | None:
+    def try_reserve(self, envelope: WireFlit) -> CreditToken | None:
         flit = self.contract.validate(envelope)
         lane = self._lanes[flit.lane]
         expected = self._next_reserve.get(flit.packet, 0)

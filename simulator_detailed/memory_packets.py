@@ -207,6 +207,7 @@ class RoutedMemoryPacket(GraphRecord):
 class MemoryWirePlan:
     plan_sha256: str
     memory_plan_sha256: str
+    aci_clock_hz: float
     packets: tuple[RoutedMemoryPacket, ...]
     routes: MemoryRoutes
 
@@ -232,7 +233,7 @@ class MemoryWirePlan:
         unique(tuple(item.packet.identity for item in packets), "memory packet identity")
         digest = content_digest({"memory_plan_sha256": plan.plan_sha256,
                                  "packets": [item.model_dump(mode="json") for item in packets]})
-        return cls(digest, plan.plan_sha256, tuple(packets), routes)
+        return cls(digest, plan.plan_sha256, plan.config.aci_clock_hz, tuple(packets), routes)
 
     def envelope(self, identity: MemoryPacketIdentity, flit_index: int, hop_index: int) -> MemoryWireEnvelope:
         matches = tuple(item for item in self.packets if item.packet.identity == identity)
