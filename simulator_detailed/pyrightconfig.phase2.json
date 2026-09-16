@@ -9,6 +9,7 @@
     "configs/schemas/hardware_profile.py",
     "configs/schemas/topology.py",
     "configs/schemas/torus_replay.py",
+    "configs/schemas/memory_replay.py",
     "core.py",
     "dma_endpoint.py",
     "endpoint_registry.py",
@@ -32,7 +33,9 @@
     "torus.py",
     "torus_dependencies.py",
     "virtual_channel.py",
-    "torus_transport.py"
+    "torus_transport.py",
+    "memory_records.py",
+    "memory_plan.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

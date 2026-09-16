@@ -1,10 +1,10 @@
 ## 1. Versioned memory contracts and admission (MT-D01, D02, D09)
 
-- [ ] 1.1 Add strict `MemoryReplay` configuration in `simulator_detailed/configs/schemas/memory_replay.py` with tagged input, packet/service/issue parameters, bindings, buffers, operation kinds, and explicit dependency/fence policy; verify round trips and rejection of wrong versions, unknown fields, invalid units, nonfinite values, unsupported modes and inconsistent granularity/alignment.
-- [ ] 1.2 Add immutable effective-plan and memory result/event contracts in `memory_plan.py` and `memory_records.py`, retaining source evidence and stable content identity; verify path-independent normalization, setting-sensitive hashes, absent lifecycle facts and independent byte units without constructing a runtime.
-- [ ] 1.3 Compile physical resource aliases, enabled worker initiators, selected fabric attachments, address arithmetic, permissions and buffer extents; verify invalid roles, foreign resource bindings, out-of-bounds/MMIO ranges and unsupported DRAM initiation fail before environment construction.
-- [ ] 1.4 Extend `pyrightconfig.phase2.json` to cover the new modules and preserve dependency-free consumer rejection/full-profile execution gates; verify focused admission tests and existing profile/topology contracts before exposing any new execution capability.
-- [ ] 1.5 Run the focused contract tests, strict Pyright, scoped Ruff and `git diff --check`; record the current/expected behavior, validation commands and remaining unsupported runtime in delivery notes, then commit this part before part 2.
+- [x] 1.1 Add strict MemoryReplay configuration in simulator_detailed/configs/schemas/memory_replay.py with tagged input, packet/service/issue parameters, bindings, buffers, operation kinds, and explicit dependency/fence policy; verify round trips and rejection of wrong versions, unknown fields, invalid units, nonfinite values, unsupported modes and inconsistent granularity/alignment.
+- [x] 1.2 Add immutable effective-plan and memory result/event contracts in memory_plan.py and memory_records.py, retaining source evidence and stable content identity; verify path-independent normalization, setting-sensitive hashes, absent lifecycle facts and independent byte units without constructing a runtime.
+- [x] 1.3 Compile physical resource aliases, enabled worker initiators, selected fabric attachments, address arithmetic, permissions and buffer extents; verify invalid roles, foreign resource bindings, out-of-bounds/MMIO ranges and unsupported DRAM initiation fail before environment construction.
+- [x] 1.4 Extend pyrightconfig.phase2.json to cover the new modules and preserve dependency-free consumer rejection/full-profile execution gates; verify focused admission tests and existing profile/topology contracts before exposing any new execution capability.
+- [x] 1.5 Run the focused contract tests, strict Pyright, scoped Ruff and git diff --check; record the current/expected behavior, validation commands and remaining unsupported runtime in delivery notes, then commit this part before part 2.
 
 ## 2. Wire packetization and route compilation (MT-D02, D03, D10)
 
