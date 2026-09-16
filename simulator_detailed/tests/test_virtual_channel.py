@@ -377,14 +377,14 @@ class VirtualChannelTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 LinkContract.from_plan(plan, channel)
 
-    def test_pending_slowdown_execution_is_rejected_explicitly(self):
+    def test_slowdown_schedule_is_bound_to_the_network_contract(self):
         plan, contract = fixture()
         data = plan.binding.contract.config.model_dump(mode="json")
         data["slowdowns"] = [{"failure_id": "slow", "fabric_id": 0, "link_id": contract.channel.identity,
                               "start_aci_cycles": 0, "end_aci_cycles": 5, "factor": 2}]
         plan = TorusPlan.compile(TorusReplay.model_validate(data), plan.record.graph.model_dump(mode="json"))
-        with self.assertRaisesRegex(ValueError, "slowdown execution is not implemented"):
-            LinkContract.from_plan(plan, contract.channel)
+        slowed = LinkContract.from_plan(plan, contract.channel)
+        self.assertEqual(slowed.config.slowdowns, (("slow", 0.0, 5.0, 2.0),))
 
 
 if __name__ == "__main__":

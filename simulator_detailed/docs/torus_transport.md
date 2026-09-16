@@ -291,7 +291,8 @@ Focused transport checks cover same-router delivery, 10-flit packets longer than
 the configured lane capacity, shared-route packet contention, a direct two-output
 pipeline overlap, both fabrics on the assumed 10x12 profile, cycle-limit pending
 state, delayed final credits after payload delivery, and explicit rejection of
-slowdown modes. The profile run is an assumed inventory/transport fixture, not a
+invalid slowdown targets. The profile run is an assumed inventory/transport fixture,
+not a
 hardware execution or timing calibration.
 
 ## Part 5: bounded causal request/response fixtures
@@ -324,7 +325,35 @@ causal byte totals, same-fabric reverse paths and bounded endpoint storage. This
 transport-only behavior: NIU packetization, memory transactions, compute execution,
 multicast and silicon timing remain outside the supported scope.
 
-Directed slowdown snapshots and reconstructable failure traces (part 6), and
-CLI/examples/support-boundary integration (part 7), remain pending. Full NIU
+## Part 6: directed slowdown and reconstructable timing traces
+
+Slowdown targets are resolved before `SimPy` resources are created. Each target
+must be a fabric-qualified, enabled directed inter-router link in the compiled
+canonical graph; local channels, missing links and disabled links fail admission.
+The schema's finite factor and non-overlap checks remain in force, including
+adjacent intervals. The legacy paired-link/router-wide failure path is unchanged.
+
+At each physical `link_launch`, the target schedule is evaluated as a half-open
+interval `[start,end)`. The launch records its effective factor and failure ID;
+serialization duration, launch spacing and propagation duration are all multiplied
+by that snapshot. A flit already launched retains its snapshot after recovery, and
+untargeted channels/fabrics retain factor `1`. Failure start/end events are emitted
+on the canonical network channel. This keeps route identities and byte accounting
+unchanged while making timing effects explicit.
+
+Propagation arrivals are ordered per modeled lane. If a recovered flit would arrive
+before an earlier slowed flit, the link retains the charged staging token until the
+earlier arrival and emits `arrival_order_wait`; the lane's FIFO order is preserved
+without granting a second physical serializer. `link_launch`, serialization,
+propagation, arrival-order-wait and failure events contain ACI timestamps and
+durations, so launch, arrival and drain timelines can be reconstructed without
+adding overlapping stages together.
+
+Focused tests cover half-open start/end boundaries, recovery snapshots, a slowed
+wrap link, disabled/local target rejection, long propagation with arrival-order
+waiting, both assumed fabrics, and the unchanged legacy slowdown fixture. Factors,
+intervals, clocks, widths and capacities remain configurable synthetic values; this
+is a timing model and analytical invariant check, not silicon calibration. Full NIU
 packetization, memory service, compute/DFG execution, multicast and hardware
-VC/buddy/priority behavior remain outside this child.
+VC/buddy/priority behavior remain outside this child. CLI integration (part 7)
+remains pending.

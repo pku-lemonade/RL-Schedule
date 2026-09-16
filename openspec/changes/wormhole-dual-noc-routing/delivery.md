@@ -186,9 +186,9 @@ git diff --check
 The profile replay test uses the assumed Wormhole inventory and checks both fabric
 IDs; it is a bounded transport invariant, not a silicon comparison. The delayed
 credit fixture reaches the expected payload before returning all credits and stays
-incomplete. Transfer and sink events use canonical plan/lane identities. Causal
-responses, failure snapshots, CLI dispatch, NIU transactions, memory/compute
-service and hardware timing calibration remain pending or unsupported.
+incomplete. Transfer and sink events use canonical plan/lane identities. Directed
+slowdown execution is now covered below; CLI dispatch, NIU transactions,
+memory/compute service and hardware timing calibration remain pending or unsupported.
 
 ## Part 5: bounded causal request/response fixtures
 
@@ -236,3 +236,56 @@ transport remain in-memory and transport-only. Directed slowdown execution,
 version-2 CLI dispatch, NIU transactions, memory/compute service and hardware
 timing calibration remain pending or unsupported; no parent specs were synced,
 no archive was created and no push was performed.
+
+## Part 6: directed slowdown and reconstructable timing traces
+
+Tasks 6.1–6.5 are delivered in the commit containing this section, titled
+`feat: add directed slowdown timing traces`, based on the next checkpoint commit.
+Production changes are in `simulator_detailed/virtual_channel.py` and
+`simulator_detailed/torus_transport.py`; focused coverage is in the corresponding
+virtual-channel and transport tests.
+
+| Requirement subset | Executable evidence |
+| --- | --- |
+| TR-D06 | Slowdown targets are resolved against enabled canonical directed links before `SimPy` environment/resource construction; local, missing and disabled targets fail explicitly |
+| TR-D07 | Launch-time half-open schedules snapshot factor per flit and scale serialization, launch spacing and propagation without changing route selection or unrelated fabrics |
+| TR-D08 | Failure start/end, launch factor, stage durations and arrival-order-wait events use canonical channel identities and ACI timestamps; physical bytes remain charged once per launch |
+
+The runtime stores only the slowdown intervals that match a physical network
+channel. At each launch it evaluates `[start,end)`, records the active failure ID
+and factor, and applies that factor to the current flit's serialization, next-launch
+spacing and propagation. Failure boundaries are scheduled as channel events. A
+per-lane arrival tail retains staging ownership when recovery would otherwise let a
+later flit arrive first, and the explicit `arrival_order_wait` duration makes that
+delay reconstructable. Adjacent intervals use the recovered factor exactly at the
+end boundary. Local links and independent fabric-qualified links remain unchanged.
+
+The targeted wrap-link and long-propagation fixtures verify recovery, half-open
+boundaries, lane order, failure events, invalid target rejection and complete
+resource drain. The existing legacy paired-link/router slowdown fixture remains
+unchanged. All factors, clocks, widths, propagation values and capacities are
+configurable synthetic settings; these tests establish model invariants and
+analytical timing behavior, not Wormhole silicon calibration.
+
+Validation on 2026-09-16:
+
+```bash
+.venv/bin/python -m unittest simulator_detailed.tests.test_virtual_channel simulator_detailed.tests.test_torus_transport
+# 30 tests pass
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+# 130 tests pass, including the legacy topology/link/runtime suite
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+# 0 errors, 0 warnings
+.venv/bin/ruff check simulator_detailed/virtual_channel.py simulator_detailed/torus_transport.py simulator_detailed/tests/test_virtual_channel.py simulator_detailed/tests/test_torus_transport.py
+# All checks passed
+openspec validate wormhole-dual-noc-routing --strict --no-interactive
+# Valid
+git diff --check
+# Clean
+```
+
+The in-memory runtime now supports directed slowdown timing for the admitted
+transport scope. CLI dispatch, NIU transactions, memory/compute service,
+multicast, hardware VC/buddy/priority behavior and silicon timing calibration
+remain pending or unsupported; no parent specs were synced, no archive was
+created and no push was performed.

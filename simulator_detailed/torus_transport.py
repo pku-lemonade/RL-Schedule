@@ -192,8 +192,7 @@ class TorusTransport:
     """Finite transport runtime for an already compiled :class:`TorusPlan`."""
 
     def __init__(self, plan: TorusPlan):
-        if plan.binding.contract.config.slowdowns:
-            raise ValueError("directed slowdown execution belongs to part 6")
+        self._validate_slowdowns(plan)
         self.plan = plan
         self.env = simpy.Environment()
         traffic = plan.binding.contract.config.traffic
@@ -250,6 +249,16 @@ class TorusTransport:
             for endpoint in plan.binding.contract.config.binding.endpoints
             if "responder" in endpoint.roles and endpoint.response_queue_capacity_packets is not None
         }
+
+    @staticmethod
+    def _validate_slowdowns(plan: TorusPlan) -> None:
+        graph_links = {(link.fabric_id, link.link_id): link for link in plan.record.graph.links}
+        for failure in plan.binding.contract.config.slowdowns:
+            link = graph_links.get((failure.fabric_id, failure.link_id))
+            if link is None:
+                raise ValueError(f"slowdown target is not an admitted inter-router link: {failure.link_id}")
+            if not link.enabled:
+                raise ValueError(f"slowdown target is disabled: {failure.link_id}")
 
     def _quantities(self) -> dict[str, int | float]:
         return {item.field_path: item.value for item in self.plan.record.quantities}

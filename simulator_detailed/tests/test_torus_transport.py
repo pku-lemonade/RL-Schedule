@@ -141,8 +141,53 @@ class TorusTransportTests(unittest.TestCase):
         slowdown_data = small_replay((2, 1)).model_dump(mode="json")
         slowdown_data["slowdowns"] = [{"failure_id": "f", "fabric_id": 0, "link_id": "t0_0/x+",
                                         "start_aci_cycles": 0, "end_aci_cycles": 3, "factor": 2}]
-        with self.assertRaisesRegex(ValueError, "slowdown"):
-            TorusTransport(TorusPlan.compile(TorusReplay.model_validate(slowdown_data), small_graph()))
+        result = TorusTransport(TorusPlan.compile(TorusReplay.model_validate(slowdown_data), small_graph())).run()
+        self.assertEqual(result.status, "complete")
+        failure_events = [event for event in result.trace if event.action.startswith("failure_")]
+        self.assertEqual([event.action for event in failure_events], ["failure_start", "failure_end"])
+        self.assertEqual(failure_events[0].failure_id, "f")
+
+    def test_slowdown_half_open_snapshot_and_recovery(self):
+        config = small_replay((2, 1))
+        data = config.model_dump(mode="json")
+        data["slowdowns"] = [{"failure_id": "slow", "fabric_id": 0, "link_id": "t0_0/x+",
+                              "start_aci_cycles": 0, "end_aci_cycles": 3, "factor": 3}]
+        data["traffic"][0]["payload_bytes"] = 49
+        result = TorusTransport(TorusPlan.compile(TorusReplay.model_validate(data), small_graph())).run()
+        self.assertEqual(result.status, "complete")
+        launches = [event for event in result.trace if event.action == "link_launch"
+                    and event.channel is not None and event.channel.identity == "t0_0/x+"]
+        self.assertGreaterEqual(len(launches), 2)
+        self.assertEqual(launches[0].launch_factor, 3)
+        self.assertEqual(launches[-1].launch_factor, 1)
+        self.assertEqual(launches[0].failure_id, "slow")
+        self.assertIsNone(launches[-1].failure_id)
+
+    def test_recovery_preserves_lane_arrival_order(self):
+        config = small_replay((2, 1))
+        data = config.model_dump(mode="json")
+        data["fabrics"][0]["network_link"]["propagation_noc_cycles"] = 20
+        data["fabrics"][0]["network_link"]["lane_capacity_flits"] = 3
+        data["fabrics"][0]["network_link"]["staging_capacity_flits"] = 3
+        data["slowdowns"] = [{"failure_id": "slow", "fabric_id": 0, "link_id": "t0_0/x+",
+                              "start_aci_cycles": 0, "end_aci_cycles": 3, "factor": 3}]
+        data["traffic"][0]["payload_bytes"] = 49
+        result = TorusTransport(TorusPlan.compile(TorusReplay.model_validate(data), small_graph())).run()
+        self.assertEqual(result.status, "complete")
+        arrivals = [event.flit_index for event in result.trace
+                     if event.action == "link_arrive" and event.channel is not None
+                     and event.channel.identity == "t0_0/x+"]
+        waits = [event for event in result.trace if event.action == "arrival_order_wait"
+                 and event.channel is not None and event.channel.identity == "t0_0/x+"]
+        self.assertEqual(arrivals, [0, 1, 2])
+        self.assertTrue(waits)
+
+    def test_slowdown_target_must_be_enabled_directed_link(self):
+        config = small_replay((2, 1)).model_dump(mode="json")
+        config["slowdowns"] = [{"failure_id": "missing", "fabric_id": 0, "link_id": "local",
+                                "start_aci_cycles": 0, "end_aci_cycles": 3, "factor": 2}]
+        with self.assertRaisesRegex(ValueError, "inter-router link"):
+            TorusTransport(TorusPlan.compile(TorusReplay.model_validate(config), small_graph()))
 
     def test_causal_response_is_generated_once_after_request_service(self):
         result = TorusTransport(self.response_plan()).run()

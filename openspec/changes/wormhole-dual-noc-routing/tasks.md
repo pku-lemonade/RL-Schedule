@@ -40,11 +40,11 @@
 
 ## 6. Directed slowdown and reconstructable timing traces (TR-D06..08)
 
-- [ ] 6.1 Resolve failure IDs and fabric-qualified directed inter-router targets before environment construction; verify missing/disabled/local targets, invalid factors/intervals and same-target overlap fail without creating output artifacts.
-- [ ] 6.2 Apply half-open schedules at physical launch with per-flit serialization/spacing/propagation snapshots and deterministic interval boundaries; verify unchanged routes, adjacent intervals, recovery, and per-lane order when a later flit has shorter propagation.
-- [ ] 6.3 Export effective launch factors, failure start/end and stage/arrival-order-wait events with canonical identities and native/ACI units; verify an independent timeline reconstructs first-flit, packet/response and resource-drain completion without double-counting overlapping stages.
-- [ ] 6.4 Test a slowed directed wrap link, matching dense IDs on different fabrics, all lanes sharing its physical cost, and independent-resource control traffic; verify untargeted parameters and legacy paired-link/router slowdown behavior remain unchanged.
-- [ ] 6.5 Run directed-failure/timing and affected transport/legacy checks plus strict type/lint; review scheduler boundary determinism and byte/capacity accounting, then commit this part before part 7.
+- [x] 6.1 Resolve failure IDs and fabric-qualified directed inter-router targets before environment construction; verify missing/disabled/local targets, invalid factors/intervals and same-target overlap fail without creating output artifacts.
+- [x] 6.2 Apply half-open schedules at physical launch with per-flit serialization/spacing/propagation snapshots and deterministic interval boundaries; verify unchanged routes, adjacent intervals, recovery, and per-lane order when a later flit has shorter propagation.
+- [x] 6.3 Export effective launch factors, failure start/end and stage/arrival-order-wait events with canonical identities and native/ACI units; verify an independent timeline reconstructs first-flit, packet/response and resource-drain completion without double-counting overlapping stages.
+- [x] 6.4 Test a slowed directed wrap link, matching dense IDs on different fabrics, all lanes sharing its physical cost, and independent-resource control traffic; verify untargeted parameters and legacy paired-link/router slowdown behavior remain unchanged.
+- [x] 6.5 Run directed-failure/timing and affected transport/legacy checks plus strict type/lint; review scheduler boundary determinism and byte/capacity accounting, then commit this part before part 7.
 
 ## 7. CLI integration, examples, support claims and handoff (TR-D01..10)
 

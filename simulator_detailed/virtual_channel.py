@@ -47,6 +47,7 @@ class ResolvedLinkConfig(GraphRecord):
     lane_capacity_flits: PositiveInt
     staging_capacity_flits: PositiveInt
     arbitration_quantum_flits: PositiveInt
+    slowdowns: tuple[tuple[str, float, float, float], ...] = ()
 
     @model_validator(mode="after")
     def timing_bounds(self) -> Self:
@@ -71,6 +72,12 @@ class ResolvedLinkConfig(GraphRecord):
 
     def aci(self, native_cycles: float) -> float:
         return native_cycles / (self.noc_clock_hz / self.aci_clock_hz)
+
+    def slowdown_at(self, time_aci_cycles: float) -> tuple[str | None, float]:
+        for failure_id, start, end, factor in self.slowdowns:
+            if start <= time_aci_cycles < end:
+                return failure_id, factor
+        return None, 1.0
 
     def export(self) -> dict[str, object]:
         return {
@@ -98,8 +105,6 @@ class LinkContract:
         channel = ChannelIdentity.model_validate(channel.model_dump(mode="json"))
         prepared = plan.binding.contract
         config = prepared.config
-        if config.slowdowns:
-            raise ValueError("directed slowdown execution is not implemented by this kernel")
         fabric = next((f for f in config.fabrics if f.fabric_id == channel.fabric_id), None)
         if fabric is None:
             raise ValueError("unknown channel fabric")
@@ -113,6 +118,9 @@ class LinkContract:
                              if (o.fabric_id, o.link_id) == (channel.fabric_id, channel.identity)), None)
             settings = fabric.network_link if override is None else override.settings
             label = f"{prefix}.network_link" if override is None else f"network_overrides.{fabric.fabric_id}.{channel.identity}"
+            slowdowns = tuple((failure.failure_id, failure.start_aci_cycles, failure.end_aci_cycles, failure.factor)
+                              for failure in config.slowdowns
+                              if (failure.fabric_id, failure.link_id) == (channel.fabric_id, channel.identity))
         else:
             endpoint = next((e for e in config.binding.endpoints if e.endpoint_id == channel.identity), None)
             if endpoint is None or endpoint.fabric_id != channel.fabric_id or (
@@ -123,6 +131,7 @@ class LinkContract:
                           if (o.endpoint_id, o.direction) == (channel.identity, channel.kind)), None)
             settings = fabric.local_link if local is None else local.settings
             label = f"{prefix}.local_link" if local is None else f"local_overrides.{channel.identity}.{channel.kind}"
+            slowdowns = ()
         quantities = {q.field_path: q.value for q in prepared.quantities}
         physical = int(quantities[f"{prefix}.flit.physical_flit_bytes"])
         resolved = ResolvedLinkConfig(
@@ -136,6 +145,7 @@ class LinkContract:
             lane_capacity_flits=settings.lane_capacity_flits,
             staging_capacity_flits=settings.staging_capacity_flits,
             arbitration_quantum_flits=settings.arbitration_quantum_flits,
+            slowdowns=slowdowns,
         )
         templates: dict[PacketIdentity, TransportEnvelope] = {}
         payloads: dict[PacketIdentity, tuple[int, int]] = {}
@@ -220,6 +230,7 @@ class _Lane:
     received: deque[CreditToken] = field(default_factory=lambda: deque[CreditToken]())
     owner: PacketIdentity | None = None
     peak: int = 0
+    arrival_tail: float = 0.0
 
 
 class VirtualChannelLink:
@@ -250,6 +261,8 @@ class VirtualChannelLink:
         self._changed = env.event()
         self._events: list[TransportTraceEvent] = []
         env.process(self._serialize())
+        if self.config.slowdowns:
+            env.process(self._failure_events())
 
     @property
     def changed(self) -> Event:
@@ -281,6 +294,24 @@ class VirtualChannelLink:
             "payload_bytes": flit.payload_bytes if launched else 0,
             "duration_aci_cycles": duration, "launch_factor": 1.0 if launched else None,
         }))
+
+    def _log_failure(self, action: Literal["failure_start", "failure_end"], failure_id: str) -> None:
+        self._events.append(TransportTraceEvent.model_validate({
+            "action": action, "time_aci_cycles": self.env.now,
+            "fabric_id": self.contract.channel.fabric_id, "router_id": None, "port_id": None,
+            "channel": self.contract.channel, "lane": None, "packet": None, "flit_index": None,
+            "token_id": None, "failure_id": failure_id, "physical_bytes": 0, "payload_bytes": 0,
+            "duration_aci_cycles": None, "launch_factor": None,
+        }))
+
+    def _failure_events(self) -> ProcessGenerator:
+        for failure_id, start, end, _ in self.config.slowdowns:
+            if start > self.env.now:
+                yield self.env.timeout(start - self.env.now)
+            self._log_failure("failure_start", failure_id)
+            if end > self.env.now:
+                yield self.env.timeout(end - self.env.now)
+            self._log_failure("failure_end", failure_id)
 
     def try_reserve(self, envelope: TransportEnvelope) -> CreditToken | None:
         flit = self.contract.validate(envelope)
@@ -382,9 +413,15 @@ class VirtualChannelLink:
             self._staging += 1
             self._staging_peak = max(self._staging_peak, self._staging)
             self._quantum_left -= 1
-            duration = self.config.aci(self.config.serialization_noc_cycles)
-            self._busy_until = float(self.env.now) + self.config.aci(self.config.launch_interval_noc_cycles)
+            failure_id, factor = self.config.slowdown_at(float(self.env.now))
+            duration = self.config.aci(self.config.serialization_noc_cycles) * factor
+            interval = self.config.aci(self.config.launch_interval_noc_cycles) * factor
+            propagation = self.config.aci(self.config.propagation_noc_cycles) * factor
+            self._busy_until = float(self.env.now) + interval
             self._log("link_launch", token, duration=duration)
+            self._events[-1] = self._events[-1].model_copy(update={
+                "launch_factor": factor, "failure_id": failure_id,
+            })
             if token.envelope.is_tail:
                 lane.owner = None
                 # A new packet must receive a fresh quantum even on the same lane.
@@ -395,18 +432,23 @@ class VirtualChannelLink:
             yield self.env.timeout(duration)
             slot.stage = "propagating"
             self._log("serialization_end", token)
-            self._log("propagation_start", token, duration=self.config.aci(self.config.propagation_noc_cycles))
-            self.env.process(self._deliver(token))
+            self._log("propagation_start", token, duration=propagation)
+            arrival_time = max(float(self.env.now) + propagation, lane.arrival_tail)
+            lane.arrival_tail = arrival_time
+            self.env.process(self._deliver(token, propagation, arrival_time))
             # Propagation owns the charged token now; the wire retains no flit.
             del token, slot
             self._notify()
-            gap = self.config.aci(self.config.launch_interval_noc_cycles) - duration
+            gap = interval - duration
             if gap:
                 yield self.env.timeout(gap)
                 self._notify()
 
-    def _deliver(self, token: CreditToken) -> ProcessGenerator:
-        yield self.env.timeout(self.config.aci(self.config.propagation_noc_cycles))
+    def _deliver(self, token: CreditToken, propagation: float, arrival_time: float) -> ProcessGenerator:
+        yield self.env.timeout(propagation)
+        if arrival_time > self.env.now:
+            self._log("arrival_order_wait", token, duration=arrival_time - self.env.now)
+            yield self.env.timeout(arrival_time - self.env.now)
         lane, slot = self._slot(token, "propagating")
         self._staging -= 1
         slot.stage = "received"
