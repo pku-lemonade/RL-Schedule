@@ -52,21 +52,29 @@ class MemoryOperationRecord(GraphRecord):
 
     @model_validator(mode="after")
     def ordered_times(self) -> MemoryOperationRecord:
-        values = (
-            self.submission_aci_cycles,
-            self.descriptor_acceptance_aci_cycles,
-            self.source_read_completion_aci_cycles,
-            self.final_request_handoff_aci_cycles,
-            self.response_receipt_aci_cycles,
-            self.destination_ready_aci_cycles,
-            self.completion_aci_cycles,
-        )
-        previous: float | None = None
-        for value in values:
-            if value is not None and (previous is not None and value < previous):
-                raise ValueError("memory operation lifecycle timestamps must be ordered")
-            if value is not None:
-                previous = value
+        submission, acceptance = self.submission_aci_cycles, self.descriptor_acceptance_aci_cycles
+        source, handoff = self.source_read_completion_aci_cycles, self.final_request_handoff_aci_cycles
+        response, ready, complete = self.response_receipt_aci_cycles, self.destination_ready_aci_cycles, self.completion_aci_cycles
+        values = (submission, acceptance, source, handoff, response, ready, complete)
+        if any(value is not None and value < 0 for value in values):
+            raise ValueError("memory lifecycle time cannot be negative")
+        pairs = [(submission, acceptance), *((acceptance, value) for value in (source, handoff, response, ready, complete)),
+                 (source, ready)]
+        # Lifecycle facts form a partial order. In a read, request handoff
+        # precedes the remote source read; posted completion precedes visibility.
+        if self.kind == "read":
+            pairs.extend(((handoff, source), (source, response), (response, ready), (ready, complete)))
+        elif self.kind in {"write_posted", "write_acknowledged"}:
+            pairs.extend(((source, handoff), (handoff, ready), (handoff, complete)))
+            if self.kind == "write_acknowledged":
+                pairs.extend(((ready, response), (response, complete)))
+            elif response is not None:
+                raise ValueError("posted writes have no response receipt")
+        if any(a is not None and b is not None and a > b for a, b in pairs):
+            raise ValueError("memory lifecycle violates its operation's causal order")
+        boundary = handoff if self.kind == "write_posted" else ready if self.kind == "read" else None
+        if complete is not None and boundary is not None and complete != boundary:
+            raise ValueError("memory completion differs from its observable boundary")
         return self
 
 
@@ -131,7 +139,7 @@ class MemoryReplayResult(GraphRecord):
     packet_bytes: Index
     channel_bytes: Index
     memory_service_bytes: Index
-    execution: Literal["addressed_memory_unimplemented"] = "addressed_memory_unimplemented"
+    execution: Literal["addressed_memory_unimplemented", "addressed_memory_disjoint_v1"] = "addressed_memory_unimplemented"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
 
     @model_validator(mode="after")

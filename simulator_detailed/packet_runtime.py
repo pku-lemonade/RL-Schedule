@@ -127,7 +127,7 @@ class PacketTransportResult(GraphRecord):
     received_useful_bytes: Index
     pending_packets: tuple[PacketIdentity, ...]
     execution: Literal["wire_packets_only"] = "wire_packets_only"
-    memory_service: Literal["unsupported"] = "unsupported"
+    memory_service: Literal["unsupported", "external_hooks"] = "unsupported"
 
     @model_validator(mode="after")
     def totals(self) -> Self:
@@ -383,7 +383,7 @@ class PacketTransport:
             self.notify_changed()
             del flit, token, lease
 
-    def snapshot(self) -> PacketTransportResult:
+    def snapshot(self, *, memory_service: Literal["unsupported", "external_hooks"] = "unsupported") -> PacketTransportResult:
         trace = tuple(sorted((event for link in self.links.values() for event in link.events),
                              key=lambda e: (e.time_aci_cycles, e.action, e.fabric_id, e.token_id or "")))
         resources = tuple(resource for link in self.links.values() for resource in link.resources()) + tuple(
@@ -400,7 +400,8 @@ class PacketTransport:
             elapsed_aci_cycles=self.env.now, packets=tuple(self._states.values()), resources=resources,
             endpoint_buffers=buffers, trace=trace, endpoint_trace=tuple(self.endpoint_events),
             transmitted_channel_bytes=sum(e.physical_bytes for e in trace if e.action == "link_launch"),
-            received_useful_bytes=sum(s.received_useful_bytes for s in self._states.values()), pending_packets=pending)
+            received_useful_bytes=sum(s.received_useful_bytes for s in self._states.values()), pending_packets=pending,
+            memory_service=memory_service)
 
     def run(self, *, max_aci_cycles: float) -> PacketTransportResult:
         if not math.isfinite(max_aci_cycles) or max_aci_cycles <= self.env.now:

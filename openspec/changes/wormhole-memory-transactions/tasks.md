@@ -32,11 +32,11 @@
 
 ## 5. Bounded addressed read and write execution (MT-D03..06, D08)
 
-- [ ] 5.1 Add `memory_runtime.py` composition with shared initiator segment issue slots, responder state and counted request/response TX/RX staging; initially gate execution to initialized-source, disjoint-access cases and reject dependency/local/fence modes until part 6; verify source readiness precedes issue, saturation cannot hide resident data, and each descriptor has exactly one retirement path.
-- [ ] 5.2 Implement posted and acknowledged writes with source-read service, streamed real request packets, destination-write service and causal header-only acks; verify posted local completion can precede visibility, acknowledgements follow target service, and large segmented writes account for every effect once.
-- [ ] 5.3 Implement reads with real header requests, target-read service, bounded streamed responses and initiator-local write service; verify response arrival cannot prematurely complete a read, aliases use shared resources, and segment aggregation permits different arrival orders.
-- [ ] 5.4 Add operation/segment lifecycle traces and resource-complete termination; stress mixed read/write traffic through both fabrics with capacity-one endpoints and slow memory, verifying wait-resource ordering, no grant-to-network cycle, exactly-once responses and pending diagnostics on timeout/idle-with-pending.
-- [ ] 5.5 Run transaction/transport/resource tests, strict type/lint and `git diff --check`; audit actual waits against design decision 6 and commit the bounded runtime with explicit remaining ordering/local-client scope before part 6.
+- [x] 5.1 Add `memory_runtime.py` composition with shared initiator segment issue slots, responder state and counted request/response TX/RX staging; initially gate execution to initialized-source, disjoint-access cases and reject dependency/local/fence modes until part 6; verify source readiness precedes issue, saturation cannot hide resident data, and each descriptor has exactly one retirement path.
+- [x] 5.2 Implement posted and acknowledged writes with source-read service, streamed real request packets, destination-write service and causal header-only acks; verify posted local completion can precede visibility, acknowledgements follow target service, and large segmented writes account for every effect once.
+- [x] 5.3 Implement reads with real header requests, target-read service, bounded streamed responses and initiator-local write service; verify response arrival cannot prematurely complete a read, aliases use shared resources, and segment aggregation permits different arrival orders.
+- [x] 5.4 Add operation/segment lifecycle traces and resource-complete termination; stress mixed read/write traffic through both fabrics with capacity-one endpoints and slow memory, verifying wait-resource ordering, no grant-to-network cycle, exactly-once responses and pending diagnostics on timeout/idle-with-pending.
+- [x] 5.5 Run transaction/transport/resource tests, strict type/lint and `git diff --check`; audit actual waits against design decision 6 and commit the bounded runtime with explicit remaining ordering/local-client scope before part 6.
 
 ## 6. Explicit dependencies, local clients and scoped fences (MT-D04..08)
 

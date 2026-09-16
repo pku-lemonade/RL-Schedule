@@ -42,7 +42,9 @@
     "packet_runtime.py",
     "memory_transport.py",
     "memory_service.py",
-    "memory_resources.py"
+    "memory_resources.py",
+    "memory_execution.py",
+    "memory_runtime.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
