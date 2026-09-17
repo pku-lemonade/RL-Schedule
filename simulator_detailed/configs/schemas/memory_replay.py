@@ -192,10 +192,9 @@ class MemoryOperation(GraphRecord):
         return self
 
 
-class MemoryReplay(GraphRecord):
-    kind: Literal["memory_replay"]
-    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
-    model_revision: Literal["addressed_memory_v1"]
+class MemorySystemConfig(GraphRecord):
+    """Shared memory settings; no operations or execution capability implied."""
+
     source: MemorySource
     aci_clock_hz: Positive
     fabrics: tuple[Index, ...] = Field(min_length=1)
@@ -209,23 +208,18 @@ class MemoryReplay(GraphRecord):
     resources: tuple[MemoryResourceConfig, ...] = Field(min_length=1)
     endpoints: tuple[MemoryEndpointBinding, ...] = Field(min_length=1)
     buffers: tuple[MemoryBuffer, ...] = Field(min_length=1)
-    operations: tuple[MemoryOperation, ...] = Field(min_length=1)
     max_aci_cycles: Positive
     evidence: tuple[EvidenceSource, ...] = ()
 
     @model_validator(mode="after")
-    def identities_and_modes(self) -> Self:
+    def system_identities(self) -> Self:
         unique(self.fabrics, "memory fabric")
         unique(tuple(f.fabric_id for f in self.routing), "memory routing fabric")
         unique(tuple(r.resource_id for r in self.resources), "memory resource")
         unique(tuple(e.endpoint_id for e in self.endpoints), "memory endpoint")
         unique(tuple(b.buffer_id for b in self.buffers), "memory buffer")
-        unique(tuple(o.operation_id for o in self.operations), "memory operation")
         unique(tuple(s.url for s in self.evidence), "memory evidence source")
         resource_ids = {r.resource_id for r in self.resources}
-        endpoint_ids = {e.endpoint_id for e in self.endpoints}
-        buffer_ids = {b.buffer_id for b in self.buffers}
-        operation_ids = {o.operation_id for o in self.operations}
         for endpoint in self.endpoints:
             if endpoint.fabric_id not in self.fabrics:
                 raise ValueError(f"endpoint {endpoint.endpoint_id}: unknown fabric")
@@ -234,6 +228,22 @@ class MemoryReplay(GraphRecord):
         for buffer in self.buffers:
             if buffer.resource_id not in resource_ids:
                 raise ValueError(f"buffer {buffer.buffer_id}: unknown resource")
+        return self
+
+
+class MemoryReplay(MemorySystemConfig):
+    kind: Literal["memory_replay"]
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
+    model_revision: Literal["addressed_memory_v1"]
+    operations: tuple[MemoryOperation, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def identities_and_modes(self) -> Self:
+        unique(tuple(o.operation_id for o in self.operations), "memory operation")
+        endpoint_ids = {e.endpoint_id for e in self.endpoints}
+        buffer_ids = {b.buffer_id for b in self.buffers}
+        operation_ids = {o.operation_id for o in self.operations}
+        for buffer in self.buffers:
             if buffer.producer_operation_id is not None and buffer.producer_operation_id not in operation_ids:
                 raise ValueError(f"buffer {buffer.buffer_id}: unknown producer")
         for operation in self.operations:

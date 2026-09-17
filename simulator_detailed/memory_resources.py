@@ -15,8 +15,13 @@ import simpy
 from pydantic import model_validator
 from simpy.events import Event, ProcessGenerator
 
-from .configs.schemas.memory_replay import MemoryBuffer, MemoryVersion
+from .configs.schemas.memory_replay import (
+    MemoryBuffer,
+    MemorySystemConfig,
+    MemoryVersion,
+)
 from .configs.schemas.topology import (
+    CanonicalTopology,
     GraphRecord,
     Identifier,
     Index,
@@ -109,28 +114,34 @@ class MemoryResourcePlan:
         # wire-only plans need not satisfy an unused memory-service geometry.
         plan = plan.revalidate()
         config = plan.config
-        graph = {r.resource_id: r for r in plan.graph.resources}
-        definitions: list[MemoryResourceDefinition] = []
-        for r in config.resources:
-            if graph[r.resource_id].kind not in {"local_sram", "dram"}:
-                raise ValueError("memory service requires L1 or DRAM backing storage")
-            service = r.service
-            if config.packet.address_alignment_bytes % service.service_granule_bytes or config.packet.data_capacity_bytes % service.chunk_bytes:
-                raise ValueError("packet alignment/data capacity and memory granule/chunk are incompatible")
-            definition = MemoryResourceDefinition(resource_id=r.resource_id,
-                                                  capacity_bytes=r.capacity_override_bytes or graph[r.resource_id].capacity_bytes,
-                                                  timing=ServiceTiming(config=service, aci_clock_hz=config.aci_clock_hz))
-            selected = sorted((b for b in config.buffers if b.resource_id == r.resource_id), key=lambda b: b.base_address)
-            end = 0
-            for buffer in selected:
-                if buffer.base_address < end:
-                    raise ValueError("distinct memory buffer reservations overlap")
-                end = buffer.base_address + buffer.size_bytes
-                if end > definition.capacity_bytes:
-                    raise ValueError("buffer exceeds effective memory capacity")
-            definitions.append(definition)
+        definitions = memory_resource_definitions(config, plan.graph)
         aliases = {(e.endpoint_id, r): r for e in config.endpoints if e.enabled for r in e.resource_ids}
         return cls(plan.plan_sha256, tuple(definitions), config.buffers, MappingProxyType(aliases))
+
+
+def memory_resource_definitions(config: MemorySystemConfig, graph: CanonicalTopology) -> tuple[MemoryResourceDefinition, ...]:
+    """Check shared service geometry and reservations before runtime allocation."""
+    resources = {r.resource_id: r for r in graph.resources}
+    definitions: list[MemoryResourceDefinition] = []
+    for r in config.resources:
+        if resources[r.resource_id].kind not in {"local_sram", "dram"}:
+            raise ValueError("memory service requires L1 or DRAM backing storage")
+        service = r.service
+        if config.packet.address_alignment_bytes % service.service_granule_bytes or config.packet.data_capacity_bytes % service.chunk_bytes:
+            raise ValueError("packet alignment/data capacity and memory granule/chunk are incompatible")
+        definition = MemoryResourceDefinition(resource_id=r.resource_id,
+                                              capacity_bytes=r.capacity_override_bytes or resources[r.resource_id].capacity_bytes,
+                                              timing=ServiceTiming(config=service, aci_clock_hz=config.aci_clock_hz))
+        selected = sorted((b for b in config.buffers if b.resource_id == r.resource_id), key=lambda b: b.base_address)
+        end = 0
+        for buffer in selected:
+            if buffer.base_address < end:
+                raise ValueError("distinct memory buffer reservations overlap")
+            end = buffer.base_address + buffer.size_bytes
+            if end > definition.capacity_bytes:
+                raise ValueError("buffer exceeds effective memory capacity")
+        definitions.append(definition)
+    return tuple(definitions)
 
 
 @dataclass(frozen=True, eq=False)

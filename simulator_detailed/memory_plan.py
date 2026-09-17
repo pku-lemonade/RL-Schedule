@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from .configs.schemas.hardware_profile import HardwareProfileConfig
-from .configs.schemas.memory_replay import MemoryReplay
+from .configs.schemas.memory_replay import MemoryReplay, MemorySystemConfig
 from .configs.schemas.topology import CanonicalTopology
 from .memory_records import MemoryPlanRecord, MemoryQuantity
 from .topology import content_digest, normalize_topology, topology_from_profile
@@ -41,58 +41,14 @@ class MemoryPlan:
 
     @classmethod
     def compile(cls, config: MemoryReplay, source_document: object) -> MemoryPlan:
-        if config.source.kind == "canonical_graph":
-            graph = normalize_topology(CanonicalTopology.model_validate(source_document))
-        else:
-            profile = HardwareProfileConfig.model_validate(source_document)
-            graph = topology_from_profile(profile).graph
-            if config.routing:
-                graph = bind_torus_graph(
-                    graph, config.routing,
-                    tuple(TorusEndpointPorts(e.endpoint_id, e.fabric_id, e.inject_port, e.eject_port,
-                                             "initiator" in e.roles) for e in config.endpoints if e.enabled),
-                    generate_links=True)
-        if graph.connectivity_state != "complete":
-            raise ValueError("memory plan requires complete topology connectivity")
-
-        resources = {item.resource_id: item for item in graph.resources}
+        graph = bind_memory_system(config, source_document)
         configured = {item.resource_id: item for item in config.resources}
-        if set(configured) != set(resources):
-            missing = sorted(set(resources) - set(configured))
-            extra = sorted(set(configured) - set(resources))
-            raise ValueError(f"memory resource set differs from graph (missing={missing}, extra={extra})")
-        for resource_id, item in configured.items():
-            capacity = resources[resource_id].capacity_bytes
-            if item.capacity_override_bytes is not None and item.capacity_override_bytes > capacity:
-                raise ValueError(f"resource {resource_id}: capacity override exceeds graph capacity")
-        graph_endpoints = {item.endpoint_id: item for item in graph.attachments}
-        for endpoint in config.endpoints:
-            graph_endpoint = graph_endpoints.get(endpoint.endpoint_id)
-            if graph_endpoint is None:
-                raise ValueError(f"unknown graph endpoint {endpoint.endpoint_id}")
-            if endpoint.fabric_id != graph_endpoint.fabric_id or endpoint.router_id != graph_endpoint.router_id:
-                raise ValueError(f"endpoint {endpoint.endpoint_id}: fabric/router binding disagrees with graph")
-            if endpoint.enabled and (graph_endpoint.enabled is not True or graph_endpoint.replay_enabled is not True):
-                raise ValueError(f"endpoint {endpoint.endpoint_id}: graph attachment is unavailable")
-            if ((endpoint.inject_port is not None and endpoint.inject_port != graph_endpoint.inject_port)
-                    or (endpoint.eject_port is not None and endpoint.eject_port != graph_endpoint.eject_port)):
-                raise ValueError(f"endpoint {endpoint.endpoint_id}: local port disagrees with graph permission")
-            if any(resource not in graph_endpoint.resource_ids for resource in endpoint.resource_ids):
-                raise ValueError(f"endpoint {endpoint.endpoint_id}: resource is not attached in graph")
-        for buffer in config.buffers:
-            resource = resources[buffer.resource_id]
-            if buffer.base_address + buffer.size_bytes > resource.capacity_bytes:
-                raise ValueError(f"buffer {buffer.buffer_id}: range exceeds resource capacity")
-            if buffer.base_address % config.packet.address_alignment_bytes:
-                raise ValueError(f"buffer {buffer.buffer_id}: base address is not aligned")
-            if buffer.size_bytes % config.packet.address_alignment_bytes:
-                raise ValueError(f"buffer {buffer.buffer_id}: size is not alignment compatible")
         # Normalize the source before hashing so list ordering and source paths do
         # not become accidental plan identity inputs.
-        source_json = _canonical_json(graph)
-        configuration_json = _canonical_json(config.model_dump(mode="json"))
+        source_json = canonical_json(graph)
+        configuration_json = canonical_json(config.model_dump(mode="json"))
         source_sha = content_digest(json.loads(source_json))
-        configuration_sha = content_digest(_identity_configuration(config))
+        configuration_sha = content_digest(memory_configuration_identity(config))
         quantities = (
             MemoryQuantity(field_path="aci_clock_hz", value=config.aci_clock_hz, unit="Hz", source="configured"),
             MemoryQuantity(field_path="packet.physical_flit_bytes", value=config.packet.physical_flit_bytes, unit="bytes", source="configured"),
@@ -123,13 +79,13 @@ class MemoryPlan:
         return cls(config, record, graph)
 
 
-def _canonical_json(value: object) -> str:
+def canonical_json(value: object) -> str:
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json")  # type: ignore[union-attr]
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
-def _identity_configuration(config: MemoryReplay) -> object:
+def memory_configuration_identity(config: MemorySystemConfig) -> object:
     value = cast(dict[str, object], config.model_dump(mode="json"))
     source = value.get("source")
     if isinstance(source, dict):
@@ -143,3 +99,54 @@ def load_source(path: str, *, base_dir: Path) -> object:
     """Load a tagged source for callers that already parsed a replay config."""
     source_path = (base_dir / path).resolve()
     return json.loads(source_path.read_text())
+
+
+def bind_memory_system(config: MemorySystemConfig, source_document: object) -> CanonicalTopology:
+    """Pure shared graph/profile binding; no fabricated operation is required."""
+    if config.source.kind == "canonical_graph":
+        graph = normalize_topology(CanonicalTopology.model_validate(source_document))
+    else:
+        profile = HardwareProfileConfig.model_validate(source_document)
+        graph = topology_from_profile(profile).graph
+        if config.routing:
+            graph = bind_torus_graph(
+                graph, config.routing,
+                tuple(TorusEndpointPorts(e.endpoint_id, e.fabric_id, e.inject_port, e.eject_port,
+                                         "initiator" in e.roles) for e in config.endpoints if e.enabled),
+                generate_links=True)
+    if graph.connectivity_state != "complete":
+        raise ValueError("memory plan requires complete topology connectivity")
+
+    resources = {item.resource_id: item for item in graph.resources}
+    configured = {item.resource_id: item for item in config.resources}
+    if set(configured) != set(resources):
+        missing = sorted(set(resources) - set(configured))
+        extra = sorted(set(configured) - set(resources))
+        raise ValueError(f"memory resource set differs from graph (missing={missing}, extra={extra})")
+    for resource_id, item in configured.items():
+        capacity = resources[resource_id].capacity_bytes
+        if item.capacity_override_bytes is not None and item.capacity_override_bytes > capacity:
+            raise ValueError(f"resource {resource_id}: capacity override exceeds graph capacity")
+    graph_endpoints = {item.endpoint_id: item for item in graph.attachments}
+    for endpoint in config.endpoints:
+        graph_endpoint = graph_endpoints.get(endpoint.endpoint_id)
+        if graph_endpoint is None:
+            raise ValueError(f"unknown graph endpoint {endpoint.endpoint_id}")
+        if endpoint.fabric_id != graph_endpoint.fabric_id or endpoint.router_id != graph_endpoint.router_id:
+            raise ValueError(f"endpoint {endpoint.endpoint_id}: fabric/router binding disagrees with graph")
+        if endpoint.enabled and (graph_endpoint.enabled is not True or graph_endpoint.replay_enabled is not True):
+            raise ValueError(f"endpoint {endpoint.endpoint_id}: graph attachment is unavailable")
+        if ((endpoint.inject_port is not None and endpoint.inject_port != graph_endpoint.inject_port)
+                or (endpoint.eject_port is not None and endpoint.eject_port != graph_endpoint.eject_port)):
+            raise ValueError(f"endpoint {endpoint.endpoint_id}: local port disagrees with graph permission")
+        if any(resource not in graph_endpoint.resource_ids for resource in endpoint.resource_ids):
+            raise ValueError(f"endpoint {endpoint.endpoint_id}: resource is not attached in graph")
+    for buffer in config.buffers:
+        resource = resources[buffer.resource_id]
+        if buffer.base_address + buffer.size_bytes > resource.capacity_bytes:
+            raise ValueError(f"buffer {buffer.buffer_id}: range exceeds resource capacity")
+        if buffer.base_address % config.packet.address_alignment_bytes:
+            raise ValueError(f"buffer {buffer.buffer_id}: base address is not aligned")
+        if buffer.size_bytes % config.packet.address_alignment_bytes:
+            raise ValueError(f"buffer {buffer.buffer_id}: size is not alignment compatible")
+    return graph
