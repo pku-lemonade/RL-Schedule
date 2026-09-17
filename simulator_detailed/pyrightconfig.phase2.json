@@ -11,6 +11,8 @@
     "configs/schemas/torus_replay.py",
     "configs/schemas/memory_replay.py",
     "configs/schemas/compute_workload.py",
+    "configs/schemas/validation.py",
+    "validation",
     "compute_records.py",
     "compute_cost.py",
     "compute_plan.py",
