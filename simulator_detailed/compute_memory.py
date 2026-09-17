@@ -37,6 +37,7 @@ class ComputeJobMemory(GraphRecord):
     result_operation: Identifier
     writer_operation: Identifier | None
     completion_operations: tuple[Identifier, ...]
+    consumer_operations: tuple[Identifier, ...]
     gate_ids: tuple[Identifier, ...]
 
 
@@ -99,6 +100,7 @@ class _Lowering:
                                             for name, operand in (("a", job.a), ("b", job.b)) if operand.mode == "remote"),
                     operand_operations=(compute_memory_id(job.job_id, "operand_a"), compute_memory_id(job.job_id, "operand_b")),
                     result_operation=result, writer_operation=writer, completion_operations=completion,
+                    consumer_operations=self._local_consumers(job),
                     gate_ids=tuple(compute_memory_id(job.job_id, phase) for phase in
                                    ("reader", "inputs_ready", "compute", "math_done", "output_ready", "writer", "done")))
                 self.records[job.job_id] = record

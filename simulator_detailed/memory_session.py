@@ -125,3 +125,8 @@ class MemoryGateToken:
 @dataclass(frozen=True, eq=False)
 class MemoryOwnerToken:
     owner_id: str
+
+
+@dataclass(frozen=True, eq=False)
+class MemoryOwnerComponentToken:
+    component_id: str

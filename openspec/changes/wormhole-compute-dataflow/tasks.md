@@ -16,11 +16,11 @@
 
 ## 3. Reusable finite item slots (CD-D01, D05, D07)
 
-- [ ] 3.1 Implement `fifo_item_slots_v1` in `compute_buffers.py` using existing canonical memory reservations and whole A/B/C slot bundles; verify total configured footprints fit L1, nonoverlap, no extra capacity owner and exactly one physical reservation per extent.
-- [ ] 3.2 Implement generation-aware reserve/input-publish/consume/output-publish/drain/release transitions with deterministic FIFO slot assignment; test stale/foreign tokens, premature reads/reuse, double publication/release and version invalidation across repeated reuse.
-- [ ] 3.3 Add bounded producer waits and buffer event/snapshot records; verify free plus occupied slots equals capacity at every event, waiting producers own no partial bundle, and job counts much larger than slot count do not increase resident storage.
-- [ ] 3.4 Verify local posted-writer completion can release only the safe local generation while outstanding remote effects remain charged, and failed/incomplete work cannot trigger teardown; exercise the existing exclusive scratchpad capacity adapter without auto-binding active legacy cores.
-- [ ] 3.5 Run focused slot/resource/version/adapter tests plus strict type/scoped lint/whitespace checks; document conservative bundled lifetime and commit this part before executing jobs.
+- [x] 3.1 Implement `fifo_item_slots_v1` in `compute_buffers.py` using existing canonical memory reservations and whole A/B/C slot bundles; verify total configured footprints fit L1, nonoverlap, no extra capacity owner and exactly one physical reservation per extent.
+- [x] 3.2 Implement generation-aware reserve/input-publish/consume/output-publish/drain/release transitions with deterministic FIFO slot assignment; test stale/foreign tokens, premature reads/reuse, double publication/release and version invalidation across repeated reuse.
+- [x] 3.3 Add bounded producer waits and buffer event/snapshot records; verify free plus occupied slots equals capacity at every event, waiting producers own no partial bundle, and job counts much larger than slot count do not increase resident storage.
+- [x] 3.4 Verify local posted-writer completion can release only the safe local generation while outstanding remote effects remain charged, and failed/incomplete work cannot trigger teardown; exercise the existing exclusive scratchpad capacity adapter without auto-binding active legacy cores.
+- [x] 3.5 Run focused slot/resource/version/adapter tests plus strict type/scoped lint/whitespace checks; document conservative bundled lifetime and commit this part before executing jobs.
 
 ## 4. Single-job reader compute writer execution (CD-D02..04, D06, D07, D09)
 

@@ -44,7 +44,12 @@ from .memory_resources import (
     MemoryResourceState,
     MemoryVersion,
 )
-from .memory_session import MemoryGateToken, MemoryOwnerToken, MemorySessionPlan
+from .memory_session import (
+    MemoryGateToken,
+    MemoryOwnerComponentToken,
+    MemoryOwnerToken,
+    MemorySessionPlan,
+)
 from .packet_runtime import PacketTransport, PacketTransportResult
 from .packet_transport import PacketFlit
 
@@ -129,6 +134,8 @@ class MemorySession:
         self.plan, self.env, self.binding = plan, env, binding
         self._owner = None if binding is None else MemoryOwnerToken(binding.owner_id)
         self._owner_complete = binding is None
+        self._owner_components: dict[str, MemoryOwnerComponentToken] = {}
+        self._completed_components: set[str] = set()
         self._gate_definitions = {} if binding is None else {g.gate_id: g for g in binding.gates}
         self._gate_tokens = {key: MemoryGateToken(key) for key in self._gate_definitions}
         self._gate_events = {key: env.event() for key in self._gate_definitions}
@@ -423,7 +430,26 @@ class MemorySession:
             raise ValueError("enclosing memory owner completed twice")
         if len(self._gate_times) != len(self._gate_tokens):
             raise ValueError("enclosing owner still has unopened stage gates")
+        if len(self._completed_components) != len(self._owner_components):
+            raise ValueError("enclosing owner still has pending components")
         self._owner_complete = True
+
+    def register_owner_component(self, owner: MemoryOwnerToken, component_id: str) -> MemoryOwnerComponentToken:
+        """Bind a finite lifecycle owner before any stage activation; no capacity charge."""
+        self._check_owner(owner)
+        if (self.binding is None or self._owner_complete or self._gate_times
+                or not component_id or any(c.isspace() for c in component_id)
+                or component_id in self._owner_components):
+            raise ValueError("owner component must be unique and registered before activation")
+        token = MemoryOwnerComponentToken(component_id)
+        self._owner_components[component_id] = token
+        return token
+
+    def complete_component(self, token: MemoryOwnerComponentToken) -> None:
+        if (self._owner_components.get(token.component_id) is not token
+                or token.component_id in self._completed_components):
+            raise ValueError("foreign or already completed owner component")
+        self._completed_components.add(token.component_id)
 
     def _check_owner(self, token: MemoryOwnerToken | None) -> None:
         if token is not self._owner:
@@ -435,14 +461,7 @@ class MemorySession:
         Observers get a relay, never the internal event used by ordering checks.
         Triggering a caller's relay cannot publish a fact or unlock another gate.
         """
-        operations = {o.operation_id: o for o in self.plan.memory.config.operations}
-        op = operations.get(operation_id)
-        if (op is None or action not in _FIELDS or action == "response_wire_receipt"
-                or (action == "request_handoff" and op.kind in {"local_read", "local_write", "fence"})
-                or (action == "source_read_complete" and op.source is None)
-                or (action == "destination_ready" and op.destination is None)
-                or (action == "acceptance" and op.kind == "fence")):
-            raise ValueError("operation has no observable lifecycle event of this kind")
+        self.lifecycle_time(operation_id, action)
         source = self._operation_events[operation_id, action]
         observer = self.env.event()
         if source.triggered:
@@ -454,6 +473,18 @@ class MemorySession:
                     observer.succeed()
             self.env.process(forward())
         return observer
+
+    def lifecycle_time(self, operation_id: str, action: Fact) -> float | None:
+        """Read an observed fact without allocating a waiting event/process."""
+        operations = {o.operation_id: o for o in self.plan.memory.config.operations}
+        op = operations.get(operation_id)
+        if (op is None or action not in _FIELDS or action == "response_wire_receipt"
+                or (action == "request_handoff" and op.kind in {"local_read", "local_write", "fence"})
+                or (action == "source_read_complete" and op.source is None)
+                or (action == "destination_ready" and op.destination is None)
+                or (action == "acceptance" and op.kind == "fence")):
+            raise ValueError("operation has no observable lifecycle event of this kind")
+        return self._operation_facts[operation_id].get(action)
 
     def _wait_activation(self, operation: MemoryOperation) -> ProcessGenerator:
         gate_id = self._operation_gates.get(operation.operation_id)
@@ -572,6 +603,8 @@ class MemorySession:
         pending: list[str] = []
         if not complete:
             pending.extend(_identity("activation", gate) for gate in self._gate_tokens if gate not in self._gate_times)
+            pending.extend(_identity("owner_component", component) for component in self._owner_components
+                           if component not in self._completed_components)
             if not self._owner_complete and self._owner is not None:
                 pending.append(_identity("owner_completion", self._owner.owner_id))
             for operation in self.plan.memory.config.operations:

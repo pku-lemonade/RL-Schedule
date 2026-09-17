@@ -271,6 +271,18 @@ class MemoryResource:
                 return True
         return False
 
+    def range_is_idle(self, handle: BufferHandle, *, offset_bytes: int, size_bytes: int) -> bool:
+        """Whether this reserved subrange is free of all active access leases."""
+        buffer = self._handle(handle)
+        if (type(offset_bytes) is not int or offset_bytes < 0 or type(size_bytes) is not int
+                or size_bytes <= 0 or offset_bytes + size_bytes > buffer.size_bytes):
+            raise ValueError("invalid memory idle-query range")
+        start = buffer.base_address + offset_bytes
+        return not any(_overlap(start, start + size_bytes,
+                                s.lease.handle.buffer.base_address + s.lease.access.offset_bytes,
+                                s.lease.handle.buffer.base_address + s.lease.access.offset_bytes + s.lease.access.size_bytes)
+                       for s in self._accesses.values())
+
     def try_acquire(self, handle: BufferHandle, access: MemoryAccess) -> AccessLease | None:
         access = MemoryAccess.model_validate(access.model_dump(mode="python"))
         start, end = self._validate_access(handle, access)

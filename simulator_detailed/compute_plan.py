@@ -73,7 +73,7 @@ class ComputePlan:
         return ComputeWorkloadResult(plan=self.revalidate().record)
 
     def require_executable(self) -> None:
-        raise NotImplementedError("compute costs are planned only; memory composition, slot lifecycle and runtime remain unimplemented")
+        raise NotImplementedError("a compute plan does not execute arithmetic; a workload coordinator is still required")
 
 
 class _Admission:
