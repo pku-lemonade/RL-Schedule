@@ -383,7 +383,8 @@ class PacketTransport:
             self.notify_changed()
             del flit, token, lease
 
-    def snapshot(self, *, memory_service: Literal["unsupported", "external_hooks"] = "unsupported") -> PacketTransportResult:
+    def snapshot(self, *, memory_service: Literal["unsupported", "external_hooks"] = "unsupported",
+                 require_idle_environment: bool = True) -> PacketTransportResult:
         trace = tuple(sorted((event for link in self.links.values() for event in link.events),
                              key=lambda e: (e.time_aci_cycles, e.action, e.fabric_id, e.token_id or "")))
         resources = tuple(resource for link in self.links.values() for resource in link.resources()) + tuple(
@@ -393,7 +394,9 @@ class PacketTransport:
         pending = tuple(p for p in self.plan.packets if not self.receipt(p).triggered)
         drained = (not pending and all(link.is_drained for link in self.links.values())
                    and all(p.is_drained for p in self.pipelines.values()) and not any(b.occupied for b in buffers))
-        complete = drained and self.env.peek() == float("inf")
+        # An attached memory session shares the clock with unrelated workload
+        # processes; only standalone transport owns the whole event queue.
+        complete = drained and (not require_idle_environment or self.env.peek() == float("inf"))
         return PacketTransportResult(
             plan_sha256=self.plan.plan_sha256, status="complete" if complete else "incomplete",
             reason="drained" if complete else "idle_with_pending" if self.env.peek() == float("inf") else "cycle_limit",

@@ -44,6 +44,7 @@ from .memory_resources import (
     MemoryResourceState,
     MemoryVersion,
 )
+from .memory_session import MemoryGateToken, MemoryOwnerToken, MemorySessionPlan
 from .packet_runtime import PacketTransport, PacketTransportResult
 from .packet_transport import PacketFlit
 
@@ -110,11 +111,29 @@ class _Descriptors:
                                      owners=tuple((key[0], None if self.kind == "local_client" else key[1]) for key in self.owners))
 
 
-class MemoryRuntime:
-    def __init__(self, plan: MemoryExecutionPlan):
-        # Recompile the opt-in boundary before allocating any runtime resources.
-        self.plan = MemoryExecutionPlan.compile(plan.memory, plan.settings)
-        self.env = simpy.Environment()
+class MemorySession:
+    """Attach one finite memory plan to an enclosing workload's environment.
+
+    Activation capabilities and finalization ownership are local to this session.
+    Advancing or snapshotting never completes the external owner automatically.
+    """
+
+    def __init__(self, env: simpy.Environment, binding: MemorySessionPlan):
+        binding = binding.revalidate()
+        self._initialize(env, binding.execution, binding)
+
+    def _initialize(self, env: simpy.Environment, plan: MemoryExecutionPlan,
+                    binding: MemorySessionPlan | None) -> None:
+        if not math.isfinite(env.now) or env.now < 0:
+            raise ValueError("memory session requires a finite nonnegative clock")
+        self.plan, self.env, self.binding = plan, env, binding
+        self._owner = None if binding is None else MemoryOwnerToken(binding.owner_id)
+        self._owner_complete = binding is None
+        self._gate_definitions = {} if binding is None else {g.gate_id: g for g in binding.gates}
+        self._gate_tokens = {key: MemoryGateToken(key) for key in self._gate_definitions}
+        self._gate_events = {key: env.event() for key in self._gate_definitions}
+        self._gate_times: dict[str, float] = {}
+        self._operation_gates = {op: g.gate_id for g in self._gate_definitions.values() for op in g.operation_ids}
         self.memory = MemoryResources(self.env, self.plan.resources)
         self._segments = {d.key: _Segment(d) for d in self.plan.segments}
         self._operation_facts: dict[str, dict[Fact, float]] = {o.operation_id: {} for o in self.plan.memory.config.operations}
@@ -180,7 +199,7 @@ class MemoryRuntime:
 
     def _local_or_fence(self, operation: MemoryOperation) -> ProcessGenerator:
         operation_id = operation.operation_id
-        yield from self._delay(operation.start_aci_cycles)
+        yield from self._wait_activation(operation)
         self._mark_operation(operation_id, "submission")
         yield from self._wait_dependencies(operation_id)
         if operation.kind == "fence":
@@ -234,7 +253,7 @@ class MemoryRuntime:
         segment = definition.segment
         if operation.source is None or operation.destination is None:
             raise ValueError("admitted network operation has no memory range")
-        yield from self._delay(operation.start_aci_cycles)
+        yield from self._wait_activation(operation)
         self._mark(state, "submission")
         yield from self._wait_dependencies(operation.operation_id)
         source_handle = self.memory.handles[operation.source.buffer_id]
@@ -364,7 +383,86 @@ class MemoryRuntime:
                 and all("complete" in facts for facts in self._operation_facts.values())
                 and all("complete" in s.facts and "destination_ready" in s.facts for s in self._segments.values()))
 
-    def run(self, *, max_aci_cycles: float | None = None) -> MemoryExecutionResult:
+    @property
+    def is_drained(self) -> bool:
+        return self._work_drained(self._transport_snapshot())
+
+    def _transport_snapshot(self) -> PacketTransportResult:
+        return self.transport.snapshot(memory_service="external_hooks", require_idle_environment=self.binding is None)
+
+    @property
+    def owner(self) -> MemoryOwnerToken:
+        if self._owner is None:
+            raise ValueError("standalone memory has no external finalization owner")
+        return self._owner
+
+    def gate(self, gate_id: str) -> MemoryGateToken:
+        if gate_id not in self._gate_tokens:
+            raise ValueError("unknown memory activation gate")
+        return self._gate_tokens[gate_id]
+
+    def gate_time(self, gate_id: str) -> float | None:
+        self.gate(gate_id)
+        return self._gate_times.get(gate_id)
+
+    def activate(self, token: object) -> None:
+        if not isinstance(token, MemoryGateToken) or self._gate_tokens.get(token.gate_id) is not token:
+            raise ValueError("foreign or unadmitted memory activation gate")
+        if token.gate_id in self._gate_times:
+            raise ValueError("memory activation gate opened twice")
+        definition = self._gate_definitions[token.gate_id]
+        if (any(parent not in self._gate_times for parent in definition.after_gates)
+                or any(not self._operation_events[w.operation_id, w.event].triggered for w in definition.waits)):
+            raise ValueError("memory activation precedes its admitted stage/lifecycle prerequisites")
+        self._gate_times[token.gate_id] = float(self.env.now)
+        self._gate_events[token.gate_id].succeed()
+
+    def complete_owner(self, token: MemoryOwnerToken) -> None:
+        self._check_owner(token)
+        if self._owner_complete:
+            raise ValueError("enclosing memory owner completed twice")
+        if len(self._gate_times) != len(self._gate_tokens):
+            raise ValueError("enclosing owner still has unopened stage gates")
+        self._owner_complete = True
+
+    def _check_owner(self, token: MemoryOwnerToken | None) -> None:
+        if token is not self._owner:
+            raise ValueError("foreign memory finalization owner")
+
+    def lifecycle_event(self, operation_id: str, action: Fact) -> Event:
+        """Observe a real operation fact; snapshot-only wire arrival is excluded.
+
+        Observers get a relay, never the internal event used by ordering checks.
+        Triggering a caller's relay cannot publish a fact or unlock another gate.
+        """
+        operations = {o.operation_id: o for o in self.plan.memory.config.operations}
+        op = operations.get(operation_id)
+        if (op is None or action not in _FIELDS or action == "response_wire_receipt"
+                or (action == "request_handoff" and op.kind in {"local_read", "local_write", "fence"})
+                or (action == "source_read_complete" and op.source is None)
+                or (action == "destination_ready" and op.destination is None)
+                or (action == "acceptance" and op.kind == "fence")):
+            raise ValueError("operation has no observable lifecycle event of this kind")
+        source = self._operation_events[operation_id, action]
+        observer = self.env.event()
+        if source.triggered:
+            observer.succeed()
+        else:
+            def forward() -> ProcessGenerator:
+                yield source
+                if not observer.triggered:
+                    observer.succeed()
+            self.env.process(forward())
+        return observer
+
+    def _wait_activation(self, operation: MemoryOperation) -> ProcessGenerator:
+        gate_id = self._operation_gates.get(operation.operation_id)
+        if gate_id is not None and not self._gate_events[gate_id].triggered:
+            yield self._gate_events[gate_id]
+        # Configured start times are absolute in the shared ACI clock domain.
+        yield from self._delay(max(0.0, operation.start_aci_cycles - self.env.now))
+
+    def advance(self, *, max_aci_cycles: float | None = None) -> MemoryExecutionResult:
         if self._final is not None:
             return self._final
         horizon = self.plan.memory.config.max_aci_cycles if max_aci_cycles is None else max_aci_cycles
@@ -372,21 +470,27 @@ class MemoryRuntime:
             raise ValueError("memory horizon must be finite and later than current time")
         while self.env.peek() != float("inf") and self.env.peek() <= horizon:
             self.env.step()
-        transport = self.transport.snapshot(memory_service="external_hooks")
-        if self._work_drained(transport):
-            self._before_teardown = self._resource_states()
-            self.memory.teardown()
-            # Only synchronous release notifications/container bookkeeping remain.
+        return self.snapshot()
+
+    def finalize(self, token: MemoryOwnerToken | None = None) -> MemoryExecutionResult:
+        self._check_owner(token)
+        if self._final is not None:
+            return self._final
+        if not self._owner_complete or not self.is_drained:
+            raise ValueError("memory finalization requires enclosing-owner completion and full memory drain")
+        self._before_teardown = self._resource_states()
+        self.memory.teardown()
+        # Composed sessions never step unrelated same-time workload callbacks.
+        if self.binding is None:
             while self.env.peek() == self.env.now:
                 self.env.step()
-            self._final = self.snapshot()
-            return self._final
-        return self.snapshot()
+        self._final = self.snapshot()
+        return self._final
 
     def snapshot(self) -> MemoryExecutionResult:
         if self._final is not None:
             return self._final
-        transport = self.transport.snapshot(memory_service="external_hooks")
+        transport = self._transport_snapshot()
         resources = self._resource_states() if self._before_teardown is None else self._before_teardown
         chunks = tuple(sorted((c for r in self.memory.resources.values() for c in r.service.records),
                               key=lambda c: (c.end_aci_cycles, c.resource_id, c.service_id)))
@@ -467,6 +571,9 @@ class MemoryRuntime:
         complete = self._before_teardown is not None and self._work_drained(transport)
         pending: list[str] = []
         if not complete:
+            pending.extend(_identity("activation", gate) for gate in self._gate_tokens if gate not in self._gate_times)
+            if not self._owner_complete and self._owner is not None:
+                pending.append(_identity("owner_completion", self._owner.owner_id))
             for operation in self.plan.memory.config.operations:
                 if "complete" not in self._operation_facts[operation.operation_id]:
                     pending.append(_identity("operation", operation.operation_id, "complete"))
@@ -510,3 +617,23 @@ class MemoryRuntime:
             lifecycle=tuple(sorted(lifecycle, key=lambda e: e.time_aci_cycles)), descriptor_trace=tuple(self._descriptor_events),
             ownership_trace=tuple(sorted((e for r in self.memory.resources.values() for e in r.events), key=lambda e: e.time_aci_cycles)),
             service_trace=tuple(sorted((e for r in self.memory.resources.values() for e in r.service.events), key=lambda e: e.time_aci_cycles)))
+
+
+class MemoryRuntime(MemorySession):
+    """Standalone replay retains its own environment, activation and finalization."""
+
+    def __init__(self, plan: MemoryExecutionPlan):
+        admitted = MemoryExecutionPlan.compile(plan.memory, plan.settings)
+        self._initialize(simpy.Environment(), admitted, None)
+
+    def run(self, *, max_aci_cycles: float | None = None) -> MemoryExecutionResult:
+        if self._final is not None:
+            return self._final
+        result = self.advance(max_aci_cycles=max_aci_cycles)
+        if not self.is_drained:
+            return result
+        result = self.finalize()
+        # Preserve standalone release-notification bookkeeping at the final time.
+        while self.env.peek() == self.env.now:
+            self.env.step()
+        return result

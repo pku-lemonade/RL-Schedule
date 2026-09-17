@@ -8,11 +8,11 @@
 
 ## 2. Composable finite memory session (CD-D03, D04, D07)
 
-- [ ] 2.1 Refactor the memory runtime around an explicit shared-environment session with closed operation activation gates and lifecycle-event access; verify no operation submits early or twice, foreign/unadmitted gates are rejected and default standalone activation remains unchanged.
-- [ ] 2.2 Separate memory-session completion/snapshot from reservation teardown, leaving the standalone wrapper responsible for its existing finalization; compare complete and incomplete standalone operation/packet/service/ownership traces, digests, timings and exactly-once capacity restoration with established fixtures.
-- [ ] 2.3 Extend compute plan lowering to predeclare remote reader/writer and local operand/result operations, source versions and slot-reuse ordering; verify the combined memory/compute/FIFO graph is acyclic, preserves existing conflict checks and rejects dependencies requiring zero-cost remote notification.
-- [ ] 2.4 Test a delayed external compute gate and concurrent local/network clients on shared and independent memory owners; verify actual contention and that early memory-only completion cannot teardown a still-active enclosing workload.
-- [ ] 2.5 Run focused session, memory ordering/runtime/resource, CLI and transport regressions plus strict type/scoped lint/whitespace checks; inspect wait-resource changes and commit this part with standalone behavior evidence before buffer integration.
+- [x] 2.1 Refactor the memory runtime around an explicit shared-environment session with closed operation activation gates and lifecycle-event access; verify no operation submits early or twice, foreign/unadmitted gates are rejected and default standalone activation remains unchanged.
+- [x] 2.2 Separate memory-session completion/snapshot from reservation teardown, leaving the standalone wrapper responsible for its existing finalization; compare complete and incomplete standalone operation/packet/service/ownership traces, digests, timings and exactly-once capacity restoration with established fixtures.
+- [x] 2.3 Extend compute plan lowering to predeclare remote reader/writer and local operand/result operations, source versions and slot-reuse ordering; verify the combined memory/compute/FIFO graph is acyclic, preserves existing conflict checks and rejects dependencies requiring zero-cost remote notification.
+- [x] 2.4 Test a delayed external compute gate and concurrent local/network clients on shared and independent memory owners; verify actual contention and that early memory-only completion cannot teardown a still-active enclosing workload.
+- [x] 2.5 Run focused session, memory ordering/runtime/resource, CLI and transport regressions plus strict type/scoped lint/whitespace checks; inspect wait-resource changes and commit this part with standalone behavior evidence before buffer integration.
 
 ## 3. Reusable finite item slots (CD-D01, D05, D07)
 

@@ -42,6 +42,23 @@ git diff --check
 
 Focused tests: **23 passed**. Full detailed suite: **254 discovered, 253 passed, 1 skipped** (optional Torch/PyG unavailable). Strict Pyright: **0 errors / 0 warnings** with all four new implementation modules included. Scoped Ruff, strict OpenSpec validation and whitespace checks passed. A final result-schema strictness adjustment was followed by the 23 focused tests, strict Pyright and scoped Ruff again; no runtime or shared-memory behavior changed in that adjustment.
 
+## Part 2 — composable memory session and compute lowering (2026-09-17)
+
+Tasks 2.1–2.5 add a shared-clock `MemorySession` while retaining `MemoryRuntime` as the standalone owner of its original environment and teardown. `MemorySessionPlan` admits a closed set of local activation gates, validates operation ownership and same-worker waits, and checks the combined operation/gate DAG before any SimPy resources are allocated. Sessions expose relay lifecycle events, support bounded `advance()` snapshots and require an owner capability for exactly-once finalization. Attached snapshots report memory drain without treating unrelated workload events as a reason to keep the memory transport incomplete; attached finalization never steps those unrelated callbacks. Standalone runs retain their prior activation, complete/incomplete continuation, capacity restoration and full-result digests.
+
+`compute_memory.py` provides pure lowering from an admitted `ComputePlan` into one finite addressed-memory plan. Remote inputs become existing network reads into the assigned slot, both operands use ordinary local-read service, results use a local write, and remote outputs use the declared posted/acknowledged writer. Producer versions point at the corresponding admitted result/writer operation. Deterministic stream FIFO and slot-generation ordering add explicit operation dependencies and stage gates; no compute engine, tensor value, or SimPy environment is created by lowering. Local-only jobs omit network traffic while preserving local memory service. The lowering reuses `MemoryPlan`, `MemoryExecutionPlan`, `MemoryOrderingPlan` and `MemorySessionPlan`, so range, permission, version, capacity, route and cycle checks remain active. Cross-worker gate waits and other dependencies requiring an unmodeled remote notification are rejected.
+
+The stage controller remains declarative in this part: gates can delay or release admitted memory work, but compute arithmetic, reusable-slot state transitions, overlapping reader/compute/writer execution and workload result accounting are deferred to parts 3–5. This distinction is reflected in the absence of a compute execution API.
+
+### Part 2 checks
+
+- `simulator_detailed/tests/test_memory_session.py`: 8 tests covering closed gates, absolute starts, lifecycle-event relays, owner tokens, deferred teardown, delayed credits, shared/independent owners, cross-worker rejection and standalone equivalence hashes.
+- `simulator_detailed/tests/test_compute_memory.py`: 3 tests covering remote/local lowering, operation and gate ownership, source versions, writer/FIFO dependencies, slot generations and pure no-runtime admission.
+- Focused memory/compute/session/runtime/ordering tests: **69 passed**.
+- Full detailed suite: **265 passed, 1 skipped** (optional Torch/PyG dependency unavailable).
+- `.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json`: **0 errors / 0 warnings**.
+- Scoped `.venv/bin/ruff check` on all changed/new Part 2 Python files and `git diff --check`: passed.
+
 ### Remaining work
 
-Part 2 must lower actual memory operations and validate the combined memory/compute/FIFO dependency graph, retaining the memory ordering and version-conflict checks. Current planning checks do not establish that this future lowering will accept every plan. Shared-environment activation gates, reusable-slot transitions, compute execution, overlapping stages, final drain/resumption, the legacy FC adapter, compute CLI and executed evidence remain unimplemented. No source-level or silicon timing validation is claimed for the assumed compute rates.
+Reusable slot lifecycle, actual compute execution, bounded overlapping stages, final workload evidence, the legacy FC adapter, compute CLI and source/silicon accuracy validation remain unimplemented. No source-level or silicon timing validation is claimed for the assumed compute rates.

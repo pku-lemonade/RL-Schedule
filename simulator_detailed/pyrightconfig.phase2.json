@@ -50,6 +50,8 @@
     "memory_execution.py",
     "memory_ordering.py",
     "memory_runtime.py",
+    "memory_session.py",
+    "compute_memory.py",
     "memory_adapters.py",
     "replay_memory.py"
   ],
