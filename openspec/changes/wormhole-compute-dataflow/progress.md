@@ -239,3 +239,16 @@ The old detailed `Task.execute` FC branch silently did no work. It now raises `N
 Detailed feature contracts remain seven runtime features and four hardware features. Root RL contracts remain runtime `(44,64)`, hardware nodes `(64,3)`, edges `(2,96)`, with action `[layer, source core, destination core, operation]` and four current operations `replace/split/shift/remove`. Mesh/checkpoint layouts are unchanged. Actual model inference/encoder forward/checkpoint checks and RL training are unavailable without optional dependencies; no fabricated model run substitutes for them.
 
 Remaining: Part 7 CLI/examples, scoped capability reporting and final requirement-to-test delivery. Numerical matrices, TT-Metal/ISA execution and calibrated silicon timing remain unsupported/unvalidated.
+
+
+## Part 7 — CLI, examples and final delivery (2026-09-17)
+
+Tasks 7.1–7.5 finish the child at **35/35**. The JSON-only `replay_compute` CLI runs admitted workloads with optional file output, relative source paths, deterministic results and exit codes 0 complete / 1 incomplete / 2 invalid. Invalid admission preserves existing output. Four checked-in examples exercise generic BF16 matmul, integrated depth-one/depth-two scalar streaming (45/33 cycles), and profile-bound Wormhole BF16 matmul with explicit assumed rates and mask provenance.
+
+Execution results advertise only `abstract_compute_workload_v1` and retain numerical unsupported / silicon unvalidated fields. Math/context evidence validation reconstructs executed intervals, with a regression for small representable math after a large clock value. Independent export audits reconstruct useful/padded work, dense storage, actual injected/per-hop packet bytes, completed service chunks and partial occupied time. Source/configuration/effective/execution identities, pre/post-teardown capacity and pending owners are retained. A drained unfinalized workload has `awaiting_finalization`; nested memory still reports pending teardown, preserving its existing contract.
+
+The scoped manifest is now `hardware-profile-4`; legacy full-profile admission stays closed. Documentation distinguishes available code, pure planning, admitted abstract execution and absent external validation. Inspection corrected the proposal's stale root action shorthand to the actual layer/source/destination/operation contract without modifying root RL code.
+
+Final validation: **315 detailed tests discovered, 314 passed, 1 optional Torch/PyG skip**; strict Pyright **0 errors / 0 warnings**; scoped Ruff, strict OpenSpec and whitespace passed. Actual new CLI examples, invalid/incomplete variants and existing memory/topology CLI regressions are included. The independent root Darknet19 mapping/execution/trace smoke again completed all **37,888 nodes**, with 16 cores, 48 directed links and 11 windows; logs and trace files stayed temporary. Previously documented stale root remap tests remain explicitly recorded as failures, not hidden or counted as passing.
+
+[delivery.md](delivery.md) records CD-D01..10 → CD-01..05 / pipeline VA-04 coverage, commands, exact source/input/effective identities, stage timelines, conservation and drain reasoning, optional/unavailable tiers and fidelity limits. The next child is `wormhole-validation-harness`; this delivery does not begin it, sync/archive the umbrella or push.

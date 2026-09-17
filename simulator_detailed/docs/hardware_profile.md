@@ -1,7 +1,9 @@
 # Hardware profiles
 
 `wormhole-hardware-profile` adds a validated, inspectable description of one ASIC.
-It **does not execute Wormhole workloads**. Existing synthetic `ArchConfig`
+Inspection **does not execute workloads**. Separately admitted
+[finite compute workloads](compute_dataflow.md) can use the profile for explicit
+worker/topology/memory binding. Existing synthetic `ArchConfig`
 configurations retain their executable mesh/DMA path. The new profile is a
 separate input, with no conversion into defaulted `core`, `noc`, or `mem` fields.
 
@@ -141,13 +143,15 @@ boundaries revalidate models, including nested data modified by Python callers.
 
 | Capability state | Meaning in this implementation |
 | --- | --- |
-| `executable` | Profile validation/inspection and separately scoped transport/memory replay compilers are implemented |
+| `executable` | Profile validation/inspection, separately scoped transport/memory compilers and the admitted finite compute CLI/runtime are implemented |
 | `abstract` | Opt-in unicast/causal response transport and addressed memory transactions/service/ordering execute with disclosed model assumptions |
 | `represented_only` | Physical layout, coordinate mappings and memory inventory are descriptive data |
-| `unsupported` | Full-workload profile adapter, heterogeneous workload construction, mask scheduling, exact NIU behavior, workload memory integration, compute/dataflow and calibrated hardware timing |
+| `unsupported` | Legacy full-profile workload adapter/scheduler/integration, exact NIU behavior, general compute/dataflow and calibrated hardware timing |
 
-Manifest `hardware-profile-3` distinguishes `profile data`, `opt-in version-2
-transport`, `opt-in memory replay` and `profile execution` scopes. Available
+Manifest `hardware-profile-4` distinguishes `profile data`, `opt-in version-2
+transport`, `opt-in memory replay`, `opt-in finite compute workload` and
+`profile execution` scopes. `abstract_compute_workload_v1` is available only
+through the supported explicitly admitted finite FC/matmul path. Available
 compilers are implementation capabilities, not admission of the inspected
 profile. Explicit availability, endpoint permissions, timing and resource
 settings are required; see [transport examples](torus_transport.md) and

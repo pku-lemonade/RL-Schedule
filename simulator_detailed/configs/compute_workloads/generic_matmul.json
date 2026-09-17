@@ -1,0 +1,479 @@
+{
+  "kind": "compute_workload",
+  "schema_version": 1,
+  "policy": "finite_compute_dataflow_v1",
+  "buffer_policy": "fifo_item_slots_v1",
+  "memory": {
+    "source": {
+      "kind": "canonical_graph",
+      "graph_path": "../topologies/memory_small.json"
+    },
+    "aci_clock_hz": 500000000.0,
+    "fabrics": [
+      0,
+      1
+    ],
+    "packet": {
+      "physical_flit_bytes": 32,
+      "data_capacity_bytes": 32,
+      "header_flits": 1,
+      "max_segment_payload_bytes": 8192,
+      "address_alignment_bytes": 1,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+      }
+    },
+    "issue_latency_aci_cycles": 1.0,
+    "max_outstanding_segments": 2,
+    "endpoint_queue_capacity_packets": 2,
+    "endpoint_staging_capacity_flits": 2,
+    "resources": [
+      {
+        "resource_id": "dram",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 1,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      },
+      {
+        "resource_id": "l1-a",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 1,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      }
+    ],
+    "endpoints": [
+      {
+        "endpoint_id": "src0",
+        "fabric_id": 0,
+        "router_id": "t0_0",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "l1-a"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      },
+      {
+        "endpoint_id": "ram0",
+        "fabric_id": 0,
+        "router_id": "t2_2",
+        "roles": [
+          "target"
+        ],
+        "resource_ids": [
+          "dram"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      },
+      {
+        "endpoint_id": "src1",
+        "fabric_id": 1,
+        "router_id": "t0_0",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "l1-a"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      },
+      {
+        "endpoint_id": "ram1",
+        "fabric_id": 1,
+        "router_id": "t2_2",
+        "roles": [
+          "target"
+        ],
+        "resource_ids": [
+          "dram"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      }
+    ],
+    "buffers": [
+      {
+        "buffer_id": "local",
+        "resource_id": "l1-a",
+        "base_address": 0,
+        "size_bytes": 16384,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "remote",
+        "resource_id": "dram",
+        "base_address": 0,
+        "size_bytes": 16384,
+        "initially_ready": true
+      }
+    ],
+    "max_aci_cycles": 10000,
+    "routing": [
+      {
+        "fabric_id": 0,
+        "topology_policy": "torus_2d_positive",
+        "routing_policy": "dimension_order_xy",
+        "dateline": {
+          "x": 0,
+          "y": 0
+        },
+        "router_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "link_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+          "sources": []
+        }
+      },
+      {
+        "fabric_id": 1,
+        "topology_policy": "torus_2d_positive",
+        "routing_policy": "dimension_order_yx",
+        "dateline": {
+          "x": 0,
+          "y": 0
+        },
+        "router_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "link_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+          "sources": []
+        }
+      }
+    ]
+  },
+  "dtypes": [
+    {
+      "dtype_id": "bf16",
+      "bytes_per_element": 2,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+      }
+    }
+  ],
+  "rates": [
+    {
+      "rate_id": "matrix",
+      "policy": "effective_matmul_v1",
+      "key": {
+        "operation": "matmul",
+        "a_dtype": "bf16",
+        "b_dtype": "bf16",
+        "c_dtype": "bf16",
+        "accumulator_precision": "fp32",
+        "layout": {
+          "kind": "dense_row_major"
+        },
+        "fidelity": "assumed_high"
+      },
+      "block": {
+        "m": 4,
+        "n": 8,
+        "k": 4
+      },
+      "work_per_native_cycle": 128.0,
+      "setup_native_cycles": 2.0,
+      "quantum_native_cycles": 0.5,
+      "minimum_native_cycles": 1.0,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+      }
+    }
+  ],
+  "workers": [
+    {
+      "tile_id": "t0_0",
+      "l1_resource_id": "l1-a",
+      "endpoint_ids": [
+        "src0",
+        "src1"
+      ],
+      "rate_ids": [
+        "matrix"
+      ],
+      "native_clock_hz": 1000000000.0,
+      "reader_capacity": 1,
+      "compute_contexts": 1,
+      "writer_capacity": 1,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+      }
+    }
+  ],
+  "streams": [
+    {
+      "stream_id": "stream",
+      "worker_tile_id": "t0_0",
+      "slots": [
+        {
+          "slot_id": "slot0",
+          "a": {
+            "buffer_id": "local",
+            "offset_bytes": 0,
+            "size_bytes": 128
+          },
+          "b": {
+            "buffer_id": "local",
+            "offset_bytes": 128,
+            "size_bytes": 128
+          },
+          "c": {
+            "buffer_id": "local",
+            "offset_bytes": 256,
+            "size_bytes": 128
+          }
+        }
+      ],
+      "jobs": [
+        {
+          "job_id": "job0",
+          "operation": {
+            "kind": "matmul",
+            "shared_weights": true,
+            "a": {
+              "shape": [
+                2,
+                3,
+                5
+              ],
+              "dtype": "bf16",
+              "layout": {
+                "kind": "dense_row_major"
+              }
+            },
+            "b": {
+              "shape": [
+                5,
+                7
+              ],
+              "dtype": "bf16",
+              "layout": {
+                "kind": "dense_row_major"
+              }
+            },
+            "c": {
+              "shape": [
+                2,
+                3,
+                7
+              ],
+              "dtype": "bf16",
+              "layout": {
+                "kind": "dense_row_major"
+              }
+            },
+            "accumulator_precision": "fp32",
+            "fidelity": "assumed_high"
+          },
+          "a": {
+            "mode": "remote",
+            "fabric_id": 0,
+            "source": {
+              "buffer_id": "remote",
+              "offset_bytes": 0,
+              "size_bytes": 60
+            },
+            "version": {
+              "kind": "initial"
+            }
+          },
+          "b": {
+            "mode": "remote",
+            "fabric_id": 0,
+            "source": {
+              "buffer_id": "remote",
+              "offset_bytes": 128,
+              "size_bytes": 70
+            },
+            "version": {
+              "kind": "initial"
+            }
+          },
+          "output": {
+            "mode": "write_acknowledged",
+            "fabric_id": 1,
+            "destination": {
+              "buffer_id": "remote",
+              "offset_bytes": 256,
+              "size_bytes": 84
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "runtime": {
+    "transport": {
+      "fabrics": [
+        {
+          "fabric_id": 0,
+          "network_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "local_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "router": {
+            "transfer_aci_cycles": 1.0,
+            "initiation_aci_cycles": 1.0,
+            "capacity_flits": 1
+          }
+        },
+        {
+          "fabric_id": 1,
+          "network_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "local_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "router": {
+            "transfer_aci_cycles": 1.0,
+            "initiation_aci_cycles": 1.0,
+            "capacity_flits": 1
+          }
+        }
+      ],
+      "overrides": [],
+      "endpoint_queue_capacity_packets": 2,
+      "endpoint_staging_capacity_flits": 2,
+      "burst_quantum_flits": 1,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+        "sources": []
+      }
+    },
+    "responder_capacity_packets": 1,
+    "request_control_aci_cycles": 1.0,
+    "response_control_aci_cycles": 1.0,
+    "local_capacity_operations": 1,
+    "local_control_aci_cycles": 0.0,
+    "evidence": {
+      "status": "assumed",
+      "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement.",
+      "sources": []
+    }
+  }
+}

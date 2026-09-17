@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Annotated, Literal, Self
 
 import simpy
-from pydantic import Field, StrictBool, model_validator
+from pydantic import Field, StrictBool, field_validator, model_validator
 from simpy.events import ProcessGenerator
 
 from .compute_buffers import (
@@ -46,6 +46,8 @@ class ComputeExecutionResult(GraphRecord):
     policy: Literal["finite_compute_dataflow_v1"] = "finite_compute_dataflow_v1"
     execution: Literal["single_job_v1", "bounded_overlap_v1"] = "single_job_v1"
     buffer_policy: Literal["fifo_item_slots_v1"] = "fifo_item_slots_v1"
+    capability: Literal["abstract_compute_workload_v1"] = "abstract_compute_workload_v1"
+    execution_supported: Literal[True] = True
     numerical_execution: Literal["unsupported"] = "unsupported"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
     status: Literal["complete", "incomplete"]
@@ -63,6 +65,13 @@ class ComputeExecutionResult(GraphRecord):
     memory_session: MemoryExecutionResult
     pending: tuple[Identifier, ...]
     teardown_complete: StrictBool
+
+    @field_validator("execution_supported", mode="before")
+    @classmethod
+    def strict_execution_flag(cls, value: object) -> object:
+        if type(value) is not bool:
+            raise ValueError("execution support must be a boolean")
+        return value
 
     @model_validator(mode="after")
     def result_state(self) -> Self:
@@ -93,6 +102,42 @@ class ComputeExecutionResult(GraphRecord):
                 or self.work.completed_useful_work != sum(job.cost.useful_work for job in math_jobs)
                 or self.work.completed_executed_work != sum(job.cost.executed_work for job in math_jobs)):
             raise ValueError("compute accounting disagrees with executed events or admitted costs")
+        math_starts: dict[str, float] = {}
+        math_busy = 0.0
+        for event in self.stages:
+            if event.action == "math_start":
+                math_starts[event.job_id] = event.time_aci_cycles
+            elif event.action == "math_end":
+                start = math_starts.pop(event.job_id)
+                # Validate the same representable addition used by the clock;
+                # subtracting a large start can round a small legal duration.
+                if event.time_aci_cycles != start + jobs[event.job_id].cost.service_aci_cycles:
+                    raise ValueError("math interval differs from admitted cost")
+                math_busy += event.time_aci_cycles - start
+        math_busy += sum(self.elapsed_aci_cycles - start for start in math_starts.values())
+        contexts: dict[tuple[str, ComputeResourceKind, int], tuple[str, float]] = {}
+        context_time = 0.0
+        previous = 0.0
+        for event in self.resource_events:
+            job = jobs.get(event.job_id)
+            key = event.worker_tile_id, event.kind, event.engine_index
+            if job is None or event.worker_tile_id != job.worker_tile_id or not previous <= event.time_aci_cycles <= self.elapsed_aci_cycles:
+                raise ValueError("resource event differs from admitted worker or clock")
+            previous = event.time_aci_cycles
+            if event.action == "acquire":
+                if key in contexts:
+                    raise ValueError("compute stage engine is already occupied")
+                contexts[key] = event.job_id, event.time_aci_cycles
+            else:
+                owner = contexts.pop(key, None)
+                if owner is None or owner[0] != event.job_id:
+                    raise ValueError("stage release has no matching acquisition")
+                if event.kind == "compute":
+                    context_time += event.time_aci_cycles - owner[1]
+        context_time += sum(self.elapsed_aci_cycles - start for (_, kind, _), (_, start) in contexts.items() if kind == "compute")
+        if (not math.isclose(math_busy, self.work.math_busy_aci_cycles, rel_tol=1e-12, abs_tol=1e-12)
+                or not math.isclose(context_time, self.work.context_occupied_aci_cycles, rel_tol=1e-12, abs_tol=1e-12)):
+            raise ValueError("math/context accounting differs from executed intervals")
         if (self.status == "complete") != (self.reason == "drained") or self.teardown_complete != (self.status == "complete"):
             raise ValueError("only finalized full drain can report workload completion")
         if self.status == "complete" and (

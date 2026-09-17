@@ -21,7 +21,7 @@ from .configs.schemas.hardware_profile import (
 )
 
 SupportState = Literal["executable", "abstract", "represented_only", "unsupported"]
-MANIFEST_VERSION = "hardware-profile-3"
+MANIFEST_VERSION = "hardware-profile-4"
 
 # Implementation-owned: neither profile declarations nor policy names enable code.
 _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
@@ -78,7 +78,7 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
     "compute_dataflow": (
         "unsupported",
         "profile execution",
-        "No profile compute/dataflow executor exists.",
+        "Legacy full-profile compute remains unsupported; finite abstract compute requires separate workload admission.",
     ),
     "hardware_timing": (
         "unsupported",
@@ -144,6 +144,12 @@ _MANIFEST: dict[str, tuple[SupportState, str, str]] = {
         "unsupported",
         "profile execution",
         "Exact NIU commands/registers/counters, linked packets, atomics and hardware ordering are unsupported; memory replay uses explicit abstract transactions.",
+    ),
+    "abstract_compute_workload_v1": (
+        "executable",
+        "opt-in finite compute workload",
+        ("CLI/runtime available only for admitted finite FC/matmul, explicit effective rates, addressed memory and bundled slots; "
+         "inspection is not admission. No tensor values, kernels or calibrated silicon timing execute."),
     ),
 }
 

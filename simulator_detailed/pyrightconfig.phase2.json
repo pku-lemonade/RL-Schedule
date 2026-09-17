@@ -57,7 +57,8 @@
     "compute_pipeline.py",
     "compute_adapters.py",
     "memory_adapters.py",
-    "replay_memory.py"
+    "replay_memory.py",
+    "replay_compute.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

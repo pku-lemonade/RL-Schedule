@@ -8,14 +8,18 @@ finite synthetic unicast traffic on heterogeneous directed graphs. It supports
 profile inventory inspection. [Version-2 torus replay](torus_transport.md) adds
 bounded unicast, causal response fixtures and directed slowdowns over an explicit
 Wormhole transport binding. [Addressed memory replay](memory_transactions.md) adds
-explicit reads/writes, shared memory service, local clients and ordering. Full
-Wormhole workloads and silicon timing calibration remain unavailable.
+explicit reads/writes, shared memory service, local clients and ordering.
+[Finite compute workloads](compute_dataflow.md) execute configured FC/matmul
+costs with transaction-backed readers/writers and bounded overlapping streams.
+Numerical/kernel execution, general Wormhole workloads and silicon timing
+calibration remain unavailable.
 
 - [Configuration](config.md)
 - [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
 - [Topology and endpoint mapping](topology.md)
 - [Version-2 torus transport, examples and limitations](torus_transport.md)
 - [Addressed memory replay, accounting and limits](memory_transactions.md)
+- [Finite compute workloads, examples and compatibility](compute_dataflow.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

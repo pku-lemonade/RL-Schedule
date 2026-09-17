@@ -466,7 +466,12 @@ class ProfileInspectionTests(unittest.TestCase):
         transport = [feature for feature in report.features if feature.scope == "opt-in version-2 transport"]
         self.assertTrue(transport)
         self.assertTrue(all(not feature.required_for_execution for feature in transport))
-        self.assertEqual(report.manifest_version, "hardware-profile-3")
+        self.assertEqual(report.manifest_version, "hardware-profile-4")
+        self.assertEqual(states["abstract_compute_workload_v1"], "executable")
+        self.assertEqual(states["compute_dataflow"], "unsupported")
+        compute = [feature for feature in report.features if feature.scope == "opt-in finite compute workload"]
+        self.assertEqual(len(compute), 1)
+        self.assertFalse(compute[0].required_for_execution)
         memory = [feature for feature in report.features if feature.scope == "opt-in memory replay"]
         self.assertEqual(len(memory), 4)
         self.assertTrue(all(not feature.required_for_execution for feature in memory))
