@@ -32,11 +32,11 @@
 
 ## 5. Bounded overlapping streams and contention (CD-D05..07, D09)
 
-- [ ] 5.1 Add independent FIFO reader/compute/writer scheduling with configured bounded stage admission, compute contexts and per-stream reusable slots; verify one-slot serial execution, deterministic multi-slot order, and no hidden queue of resident operands/results.
-- [ ] 5.2 Verify the independent three-item `R=2,C=3,W=2` oracle gives depth-one 21 and depth-two 14, then add integrated memory timelines whose expected causal boundaries come from explicit service/route arithmetic rather than recorded simulator output.
-- [ ] 5.3 Exercise multiple streams/workers sharing or separating compute, L1, DRAM aliases and both fabrics; verify shared-engine serialization, eligible independent overlap, aggregate service limits and that software thread count cannot multiply one engine's rate.
-- [ ] 5.4 Stress more jobs than slots, slow readers/writers, minimum staging/descriptors/queues, posted/acknowledged output and incomplete resumption; check every token/byte/credit/context invariant and audit actual acquisition order against the design's wait-resource table.
-- [ ] 5.5 Run pipeline/liveness/ownership and all affected memory/NoC tests plus strict type/scoped lint/whitespace checks; record the supported finite-model drain argument and conservative overlap limitation, then commit before compatibility adapters.
+- [x] 5.1 Add independent FIFO reader/compute/writer scheduling with configured bounded stage admission, compute contexts and per-stream reusable slots; verify one-slot serial execution, deterministic multi-slot order, and no hidden queue of resident operands/results.
+- [x] 5.2 Verify the independent three-item `R=2,C=3,W=2` oracle gives depth-one 21 and depth-two 14, then add integrated memory timelines whose expected causal boundaries come from explicit service/route arithmetic rather than recorded simulator output.
+- [x] 5.3 Exercise multiple streams/workers sharing or separating compute, L1, DRAM aliases and both fabrics; verify shared-engine serialization, eligible independent overlap, aggregate service limits and that software thread count cannot multiply one engine's rate.
+- [x] 5.4 Stress more jobs than slots, slow readers/writers, minimum staging/descriptors/queues, posted/acknowledged output and incomplete resumption; check every token/byte/credit/context invariant and audit actual acquisition order against the design's wait-resource table.
+- [x] 5.5 Run pipeline/liveness/ownership and all affected memory/NoC tests plus strict type/scoped lint/whitespace checks; record the supported finite-model drain argument and conservative overlap limitation, then commit before compatibility adapters.
 
 ## 6. Explicit DFG adapter and consumer guards (CD-D01, D08, D09)
 

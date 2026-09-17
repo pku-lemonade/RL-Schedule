@@ -93,6 +93,38 @@ class MemorySessionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "twice"):
                     session.activate(gate)
 
+    def test_waiting_for_gate_prerequisites_cannot_publish_parent_or_fact(self):
+        doc, graph = documents()
+        doc["operations"] = [local("operand", size=32), local("result", write=True, size=32, offset=64,
+                                                            depends_on=["operand"])]
+        gates = (
+            MemoryGateDefinition(gate_id="input", resource_id="l1-a", operation_ids=("operand",)),
+            MemoryGateDefinition(gate_id="math_done", resource_id="l1-a", operation_ids=("result",),
+                                 after_gates=("input",), waits=({"operation_id": "operand", "event": "complete"},)),
+        )
+        env = simpy.Environment()
+        session = MemorySession(env, binding(execution_plan(doc, graph), gates))
+        observer = session.wait_gate_prerequisites("math_done")
+        # A yielded observation is not the internal gate event. Even forcing
+        # the caller's generator onward cannot authorize an early activation.
+        next(observer).succeed()
+        next(observer).succeed()
+        with self.assertRaises(StopIteration):
+            next(observer)
+        self.assertIsNone(session.gate_time("input"))
+        self.assertIsNone(session.lifecycle_time("operand", "complete"))
+        with self.assertRaisesRegex(ValueError, "prerequisites"):
+            session.activate(session.gate("math_done"))
+        wait = env.process(session.wait_gate_prerequisites("math_done"))
+        session.advance(max_aci_cycles=1)
+        self.assertFalse(wait.triggered)
+        session.activate(session.gate("input"))
+        session.advance(max_aci_cycles=100)
+        self.assertTrue(wait.triggered)
+        self.assertIsNotNone(session.lifecycle_time("operand", "complete"))
+        self.assertIsNone(session.gate_time("math_done"))
+        session.activate(session.gate("math_done"))
+
     def test_delayed_math_gate_and_external_owner_outlive_memory(self):
         doc, graph = documents()
         doc["operations"] = [local("operand", size=32), local("result", write=True, size=32, offset=64, depends_on=["operand"])]

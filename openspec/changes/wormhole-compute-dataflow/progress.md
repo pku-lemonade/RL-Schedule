@@ -158,3 +158,63 @@ Focused compute tests: **36 passed**. Full detailed suite: **286 discovered, 285
 The executor currently admits exactly one job. Configured stage capacities are enforced and reported, but concurrent streams, stage backpressure and overlap are not yet executable. In this single-job path, `try_reserve()` opens the reader gate and the reader context is acquired in the same uninterrupted call before any memory coroutine runs. Part 5 must coordinate slot admission, stage grants and gate activation under contention; it must not allow a blocked reader to activate memory early or hold a stage grant while waiting for an unavailable slot. The 21/14 depth-control oracle, shared-engine contention and full scheduler wait-resource audit remain pending.
 
 The legacy FC adapter, compute CLI/examples, final capability/documentation delivery and external validation harness also remain pending. Legacy full-profile execution remains closed. This part implements abstract configured-cost arithmetic scheduling and memory traffic, not numerical matrices, TT-Metal/ISA execution, optimized circular buffers or calibrated hardware performance.
+
+## Part 5 — bounded overlapping streams and shared resources (2026-09-17)
+
+Tasks 5.1–5.5 add `ComputeOverlapRuntime(ComputeMemoryPlan)` with execution scope `bounded_overlap_v1`. The explicit `ComputeRuntime` single-job entry point remains available and still rejects multi-job plans before allocation. Both paths share clock advancement, snapshots, work accounting, stage pools and finalization. A one-job comparison preserves all result evidence except the declared execution scope, including nested memory/transport traces.
+
+### Scheduling and class boundaries
+
+`compute_pipeline.py` contains the service-independent `BoundedPipeline` and physical-worker `StagePool`. One feeder per stream requests only its next FIFO item. After a whole slot is reserved, the reader joins its worker's FIFO context queue. It opens the admitted memory gate only after receiving a reader context. On input publication the reader releases that context and can feed another slot while the previous item's compute and writer proceed independently. Downstream coroutines and context waiters exist only for counted, occupied item slots; finite job/operation metadata is not resident payload storage.
+
+The memory adapter in `compute_runtime.py` waits for each stage's admitted gate prerequisites before requesting its context. Compute waits for published inputs and the previous same-stream output, then holds its context across local operand service, configured arithmetic and result publication. Writer eligibility follows output publication and the previous same-stream writer completion. Contexts are keyed by canonical physical worker and stage, so streams and the two fabric interfaces do not create extra engines. Configured multiple compute contexts explicitly represent independent effective engines; adding software streams alone cannot multiply a declared engine's rate.
+
+`ComputeBuffers.try_reserve(..., activate_reader=False)` separates whole-slot reservation from reader activation; its default retains the previous immediate activation behavior. `start_reader()` opens the gate for the live reserved generation. `release_ready()` observes the existing completion, consumer and range-lease conditions without changing ownership. The adapter releases the writer context at the configured writer completion boundary, before waiting for local-result consumers to release the producer's slot. This permits a consumer to make progress without retaining an unnecessary producer stage grant.
+
+`MemorySession.wait_gate_prerequisites()` observes admitted gate parents and operation facts. It does not activate a gate or publish readiness, and yields observation events rather than the internal events used by gate checks. A regression forces those observations to complete early and verifies that actual parent/fact state remains unchanged and activation still rejects the missing prerequisites. Standalone memory execution does not call this new helper.
+
+`ComputeExecutionResult` now validates a causal stage prefix for every admitted job and identifies the execution scope explicitly. Completed arithmetic and job completion are reconstructed from separate events. Math busy time and compute context time sum executed intervals across jobs, including partial intervals at an observation horizon; with parallel engines these sums can exceed wall-clock elapsed time. Pending slot-release IDs now identify only unreleased jobs. Success still requires coordinated memory effects, credits, leases, contexts and slots to drain before exactly-once teardown.
+
+### Independent timelines and contention controls
+
+- **Constant-service scheduler oracle:** the production scheduling core uses synthetic reader/compute/writer services of 2/3/2 cycles for three jobs. One bundled slot yields stages `(0–2, 2–5, 5–7)`, `(7–9, 9–12, 12–14)`, `(14–16, 16–19, 19–21)`. Two slots yield `(0–2, 2–5, 5–7)`, `(2–4, 5–8, 8–10)`, `(7–9, 9–12, 12–14)`. Makespans are **21 and 14**, respectively. These are scheduler mechanics, not hardware timing predictions.
+- **Integrated memory oracle:** each job remotely reads one byte through a same-router request/response and uses one local B byte. Unit service gives request transport 0–3, source read 3–4, response header 3–6, data transport 5–8 and destination write 8–9. Local operands take 9–11, math 11–14, and result service 14–15; local writer handoff costs no network time. With one slot, readers start at 0/15/30 and finish the workload at **45**. With two slots, readers start at 0/9/18 and finish at **33**. The next reader's source service overlaps arithmetic and its destination write follows the previous result, so these intervals do not hide a shared-L1 collision. Totals are 15 memory-service bytes, 9 math cycles and 18 compute-context cycles.
+- **Shared engine versus independent workers:** two local scalar jobs each require two operand cycles, three math cycles and one result cycle. One shared engine takes **12** cycles; two workers with independent engines/L1s take **6**. Total math/context time remains 6/12 in either case.
+- **Two declared engines, one shared L1:** both contexts start at zero. Each compute gate admits both operand operations, so FIFO service is A0/B0/A1/B1 over 0–4, followed by math at 2–5 and 4–7 and results at 5–6 and 7–8. Makespan is **8**, with six service bytes, six math cycles and fourteen context cycles. An initial test estimate interleaved the two operand pairs; inspection of the admitted operations corrected that ordering. Independent L1 service would take six cycles; a second context does not duplicate the shared server.
+- **DRAM aliases and fabrics:** two workers read through fabrics 0 and 1 using 32-cycle one-byte DRAM service. Both aliases of one physical DRAM produce two nonoverlapping chunks totaling 64 busy cycles. Explicitly declaring a second DRAM resource permits those services to overlap and reduces makespan. Both cases retain ordinary shared endpoint/link constraints; adding an endpoint alias alone does not add a memory server.
+- **Configurable context limits:** one/two reader contexts admit exactly one/two remote reads at the early observation point; a reserved item waiting for a reader grant has a closed reader gate and no submitted read. One/two writer contexts produce corresponding peak occupancy. Both fabrics on one worker continue to use one configured compute pool.
+
+### Boundedness and drain audit
+
+The tests exercise 12 jobs over one/two slots with posted/acknowledged writers, slow remote readers or writers, one outstanding segment, one service queue entry, one endpoint packet/staging slot, one responder, and delayed credit returns. Interrupted runs retain their charged state and resume. Separate split-horizon tests compare the entire final result against uninterrupted execution. Slot replay checks exact generation ownership, free-plus-occupied conservation and physical context occupancy; existing memory/transport assertions reconstruct descriptor, reservation, service, staging and credit ownership. Every memory submission is checked against its executed stage boundary, and memory chunks on each canonical aggregate server never overlap.
+
+The implemented wait order follows the design's resource table:
+
+| Wait | Retained state and release condition | Evidence |
+| --- | --- | --- |
+| Reader prerequisites or free slot | Next-job metadata only; no stage grant or partial slot | A stream listed first can wait for a later stream's job without blocking its context; generation/slot replay |
+| Eligible reader context | Whole charged slot, no open reader gate | Early one/two-context submission control |
+| Compute eligibility/context | Published input in whole slot, no compute grant until dependencies are satisfied | Causal stage prefixes, context acquisition boundaries and shared-engine controls |
+| Local operands, math or result service | Whole slot and counted compute context | Service timeline/byte checks and math-versus-context accounting |
+| Writer eligibility/context and transfer | Whole slot; writer grant only after its FIFO parents; bounded existing transport owners | Posted/acknowledged and capacity-one stress matrix |
+| Local-result consumers | Whole producer slot, writer context already released | Consumer read completes, then producer slot releases and the next generation becomes eligible |
+| Final effects/credits and teardown | Persistent memory reservations; completed slots/contexts may already be free | All posted jobs can complete with slots drained while the workload remains incomplete; premature finalize rejects and later drain succeeds |
+
+For this finite admitted subset, dependency/reuse cycles are rejected by the existing combined admission graph. Prerequisite waits take no stage grant, occupied ready items enter finite FIFO stage queues, and finite configured service releases those grants. The result-consumer release path does not hold a writer grant. The capacity-one controls exercise the existing independent response/credit service paths. This is a model-specific progress argument supported by targeted tests, not a proof for arbitrary kernels or externally pinned memory. An external lease that never releases or other idle pending state must remain incomplete; the runtime does not force success at a horizon.
+
+### Validation and remaining scope
+
+Validation commands:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_compute_overlap simulator_detailed.tests.test_memory_session
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+.venv/bin/ruff check simulator_detailed/compute_pipeline.py simulator_detailed/compute_runtime.py simulator_detailed/compute_buffers.py simulator_detailed/memory_runtime.py simulator_detailed/tests/test_compute_overlap.py simulator_detailed/tests/test_memory_session.py
+openspec validate wormhole-compute-dataflow --strict --no-interactive
+git diff --check
+```
+
+Focused overlap/session tests: **23 passed** (14 overlap tests and 9 session tests). Full detailed suite: **301 discovered, 300 passed, 1 skipped** (optional Torch/PyG unavailable), including established standalone memory/packet timing and whole-result digest fixtures. Strict Pyright: **0 errors / 0 warnings**, with `compute_pipeline.py` added to coverage. Scoped Ruff, strict OpenSpec validation and whitespace checks passed.
+
+Conservative whole A/B/C bundles still retain more storage than optimized independent TT-Metal circular buffers. The single-stream FIFO stage gates also do not dispatch two jobs of that same stream to parallel engines; independent streams can occupy explicitly configured engines. No numerical matrices, instruction/kernel execution, detailed unpack/pack pipelines or calibrated silicon timing are implemented. The next portion remains the explicit legacy FC adapter and consumer guards (Part 6), followed by CLI/examples/capability delivery (Part 7).

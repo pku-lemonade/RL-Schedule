@@ -412,6 +412,22 @@ class MemorySession:
         self.gate(gate_id)
         return self._gate_times.get(gate_id)
 
+    def wait_gate_prerequisites(self, gate_id: str) -> ProcessGenerator:
+        """Wait on admitted parents/facts without granting or opening the gate.
+
+        Consumers never receive internal events, so these waits cannot publish
+        readiness or bypass the identity and lifecycle checks in activate().
+        """
+        self.gate(gate_id)
+        definition = self._gate_definitions[gate_id]
+        for parent in definition.after_gates:
+            if parent not in self._gate_times:
+                yield self.env.all_of((self._gate_events[parent],))
+        for wait in definition.waits:
+            event = self._operation_events[wait.operation_id, wait.event]
+            if not event.triggered:
+                yield self.env.all_of((event,))
+
     def activate(self, token: object) -> None:
         if not isinstance(token, MemoryGateToken) or self._gate_tokens.get(token.gate_id) is not token:
             raise ValueError("foreign or unadmitted memory activation gate")

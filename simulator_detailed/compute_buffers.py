@@ -180,7 +180,7 @@ class ComputeBuffers:
             raise ValueError(f"foreign, stale or wrong-stage compute slot token; expected {expected}")
         return token, slot
 
-    def try_reserve(self, job_id: str) -> ComputeSlotToken | None:
+    def try_reserve(self, job_id: str, *, activate_reader: bool = True) -> ComputeSlotToken | None:
         self._check_backing()
         job = self._jobs.get(job_id)
         if job is None:
@@ -199,12 +199,18 @@ class ComputeBuffers:
             return None
         if slot.generation != job.slot_generation:
             raise ValueError("FIFO slot generation differs from admitted assignment")
-        self.session.activate(self.session.gate(reader))
+        if activate_reader:
+            self.session.activate(self.session.gate(reader))
         slot.token, slot.stage = token, "reserved"
         self._next[stream.stream_id] += 1
         self._waiting.discard(job_id)
         self._record(token, "reserve")
         return token
+
+    def start_reader(self, token: ComputeSlotToken) -> None:
+        """Open a reserved reader gate after its bounded reader context is owned."""
+        token, _ = self._live(token, "reserved")
+        self.session.activate(self.session.gate(self._memory_jobs[token.job_id].gate_ids[0]))
 
     def publish_inputs(self, token: ComputeSlotToken) -> None:
         token, slot = self._live(token, "reserved")
@@ -247,11 +253,16 @@ class ComputeBuffers:
         self.session.activate(self.session.gate(self._memory_jobs[token.job_id].gate_ids[6]))
         self._record(token, "writer_complete")
 
-    def release(self, token: ComputeSlotToken) -> None:
+    def release_ready(self, token: ComputeSlotToken) -> bool:
+        """Observe release eligibility without changing ownership or readiness."""
         token, slot = self._live(token, "draining")
         job = self._memory_jobs[token.job_id]
-        if (self.session.gate_time(job.gate_ids[6]) is None or not self._idle(slot)
-                or any(self.session.lifecycle_time(op, "complete") is None for op in job.consumer_operations)):
+        return (self.session.gate_time(job.gate_ids[6]) is not None and self._idle(slot)
+                and all(self.session.lifecycle_time(op, "complete") is not None for op in job.consumer_operations))
+
+    def release(self, token: ComputeSlotToken) -> None:
+        token, slot = self._live(token, "draining")
+        if not self.release_ready(token):
             raise ValueError("slot still has an unfinished writer, consumer or memory lease")
         slot.token, slot.stage = None, "free"
         slot.generation += 1
