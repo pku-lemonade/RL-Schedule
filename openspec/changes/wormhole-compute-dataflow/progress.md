@@ -111,3 +111,50 @@ Focused slot tests: **8 passed**. Full detailed suite: **273 discovered, 272 pas
 ### Remaining work after Part 3
 
 Actual configured arithmetic execution, automatic reader/compute/writer scheduling, bounded stage overlap, workload result accounting, the legacy FC adapter and compute CLI remain unimplemented. `ComputePlan.require_executable()` still rejects execution; its diagnostic now reflects the implemented memory composition and slot lifecycle. Source/silicon accuracy validation remains later work, and no calibrated timing claim is made.
+
+## Part 4 — single-job reader, compute and writer execution (2026-09-17)
+
+Tasks 4.1–4.5 add `ComputeRuntime(ComputeMemoryPlan)` and `ComputeExecutionResult` with execution scope `single_job_v1`. Previously only test controllers could open the math gate, using a synthetic delay. The production coordinator now executes one admitted FC/matmul job using its configured effective cost. It revalidates the lowering and rejects multi-job plans before allocating an environment. The planner remains a pure planning API: `ComputeWorkloadResult` still reports no execution or completed work, and its remaining step now accurately names explicit runtime admission.
+
+### Implemented causality and ownership
+
+The coordinator owns one environment shared by `MemorySession`, its canonical L1/DRAM resources, packet transport and `ComputeBuffers`. It reserves the whole A/B/C slot, executes remote readers when present, and publishes the admitted input versions before acquiring a compute context. It then charges local operand reads, advances the clock by the admitted positive arithmetic duration, opens the result-write gate and waits for local result publication. The compute context remains occupied through that result service; arithmetic busy time is reported separately. Writer service follows output publication, using either the existing posted/acknowledged transaction or a local handoff without network traffic. Both fabric interfaces use the same physical worker's context pool.
+
+Reader, compute and writer context capacities come from each worker's configuration. They have bounded ownership records and deterministic engine indices, without a second memory-capacity owner. The legacy `TPU`, `LSU`, scratchpad allocation and synthetic network sink are not used to charge the new stages. No changes were needed in the shared memory/session/transport implementations for this part; their established standalone results continue to pass.
+
+`advance()` returns a snapshot without teardown; `run()` additionally finalizes when the coordinator, slots, stages and memory effects have all drained. Both take an absolute horizon and resume the original processes. If future events lie beyond the horizon, this workload API advances the observation clock to that horizon so partial math/context occupancy is visible; it does not extend an already idle/drained run. Work counters advance only at math completion, job completion follows the configured writer boundary, and neither implies that posted target effects or delayed credits have drained. Incomplete and idle-with-pending runs preserve ownership. A drained but unfinalized snapshot explicitly reports `awaiting_finalization`; repeated finalization and final-result access return the same result without another release.
+
+Results include unrounded stage events, physical context acquisition/release and current owners, slot generations, planned versus completed useful/padded arithmetic, math/context time and the nested memory session with its existing traffic/service units and pre/post-teardown evidence. Result validation checks the single-job causal stage prefix, admitted identities, work totals and finalized completion. Numerical tensor execution remains unsupported and silicon timing remains unvalidated.
+
+### Admission correction found by execution tests
+
+`ComputePlan._range()` had required both a tensor's address and its length to be alignment multiples. The existing memory ordering/packet path only requires aligned access addresses and supports partial final chunks. This extra compute restriction prevented valid dense tensor lengths from exposing rounded service-byte accounting. It now checks the aligned address while preserving buffer bounds, exact tensor storage sizes, reservation alignment, slot fit and overlap checks. The correction affects compute admission only; the memory runtime and its granule cost rules are unchanged.
+
+### Independent execution oracles
+
+- **Fractional local case:** scalar A/B/C use one byte each. Each local access costs `1 + 1/4 = 1.25` cycles. Operand reads finish at 2.5; two arithmetic operations at rate 4 plus setup 0.25 cost 0.75, ending at 3.25; result service ends at 4.5. Math is busy for 0.75 and its context is occupied for 4.5, with three service bytes and no packets.
+- **Same-router network case:** one-byte input read has request transport at 0–3, response header at 3–6, data at 5–8 and destination service at 8–9. Local operands finish at 11, three-cycle math at 14, and result service at 15. The writer reads at 15–16, hands off at 17 and publishes its target at 21. Posted completion is 17 with full drain at 21; acknowledged completion/drain is 24. The posted/acknowledged cases use 160/192 packet bytes, 320/384 channel bytes and seven memory-service bytes.
+- **Longer route:** four request links and two return links add twelve channel/router cycles relative to the same-router read. With one credit, the response header retains the first network buffer through its next router transfer ending at 15; data arriving at the injection buffer at 14 waits one more cycle. Destination readiness is therefore 22, and compute starts thirteen cycles later with unchanged arithmetic. The initial test estimate omitted this credit wait; the corrected oracle explicitly enumerates it instead of using a recorded timestamp as a fixture.
+- **Dense matrix case:** A/B/C use 60/70/84 bytes, useful work is 420 and padded work is 1024. The runtime executes five arithmetic cycles. Six packet headers and eight data flits give 448 packet bytes; the configured two fabrics give 1984 channel bytes. Local and network accesses total 344 useful read bytes plus 298 useful write bytes. With one-byte service granules those are also the service bytes; 32-byte service granules instead charge 416 read and 352 write bytes while packet padding remains 42 bytes.
+- **Tiled storage control:** independent 2×4 storage tiles change A/B/C storage to 128/96/128 bytes without changing their useful bytes or the five-cycle arithmetic cost. Eleven data flits plus six headers give 544 packet bytes, zero packet padding and 1056 service bytes. These are explicit storage inputs, not a simulated layout conversion.
+
+`simulator_detailed/tests/test_compute_runtime.py` adds **13 tests**, including these oracles, FC/matmul equivalence, shared environment/worker identity, positive sub-quantum execution, exact JSON round trips, rejected false result evidence, pure single-job runtime admission, invalid horizons, failure before math publication, safe incomplete state, external-lease idle diagnostics and exactly-once teardown. Local and remote split-horizon runs compare the entire final result with uninterrupted execution, including all nested memory/transport traces. Existing memory conservation checks independently reconstruct resource, descriptor, service and credit ownership for both complete and incomplete snapshots.
+
+Validation commands:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_compute_runtime simulator_detailed.tests.test_compute_contracts
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+.venv/bin/ruff check simulator_detailed/compute_runtime.py simulator_detailed/compute_records.py simulator_detailed/compute_plan.py simulator_detailed/tests/test_compute_runtime.py
+openspec validate wormhole-compute-dataflow --strict --no-interactive
+git diff --check
+```
+
+Focused compute tests: **36 passed**. Full detailed suite: **286 discovered, 285 passed, 1 skipped** (optional Torch/PyG unavailable). Strict Pyright: **0 errors / 0 warnings**, with the new runtime included. Scoped Ruff, strict OpenSpec validation and whitespace checks passed.
+
+### Remaining work and Part 5 handoff
+
+The executor currently admits exactly one job. Configured stage capacities are enforced and reported, but concurrent streams, stage backpressure and overlap are not yet executable. In this single-job path, `try_reserve()` opens the reader gate and the reader context is acquired in the same uninterrupted call before any memory coroutine runs. Part 5 must coordinate slot admission, stage grants and gate activation under contention; it must not allow a blocked reader to activate memory early or hold a stage grant while waiting for an unavailable slot. The 21/14 depth-control oracle, shared-engine contention and full scheduler wait-resource audit remain pending.
+
+The legacy FC adapter, compute CLI/examples, final capability/documentation delivery and external validation harness also remain pending. Legacy full-profile execution remains closed. This part implements abstract configured-cost arithmetic scheduling and memory traffic, not numerical matrices, TT-Metal/ISA execution, optimized circular buffers or calibrated hardware performance.

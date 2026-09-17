@@ -1,4 +1,4 @@
-"""Planned compute costs and identities, kept distinct from execution evidence."""
+"""Compute costs, identities and execution events with explicit accounting units."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from .configs.schemas.topology import (
     Index,
     PositiveInt,
 )
+from .configs.schemas.torus_replay import Cycles
 
 
 class MatrixDimensions(GraphRecord):
@@ -85,9 +86,7 @@ class ComputeWorkloadResult(GraphRecord):
     execution_supported: Literal[False] = False
     completed_job_ids: tuple[()] = ()
     completed_work: Annotated[int, Field(strict=True, ge=0, le=0)] = 0
-    remaining_stages: tuple[Literal["memory_composition"], Literal["buffer_lifecycle"], Literal["compute_runtime"]] = (
-        "memory_composition", "buffer_lifecycle", "compute_runtime",
-    )
+    remaining_stages: tuple[Literal["runtime_admission"]] = ("runtime_admission",)
     plan: ComputePlanRecord
 
     @field_validator("execution_supported", mode="before")
@@ -96,3 +95,77 @@ class ComputeWorkloadResult(GraphRecord):
         if type(value) is not bool:
             raise ValueError("execution support must be a boolean")
         return value
+
+
+ComputeStage = Literal["slot_wait", "reader_start", "inputs_ready", "compute_wait", "operand_start",
+                       "operand_end", "math_start", "math_end", "result_start", "output_ready",
+                       "writer_wait", "writer_start", "writer_complete", "slot_release"]
+ComputeResourceKind = Literal["reader", "compute", "writer"]
+
+
+class ComputeStageEvent(GraphRecord):
+    time_aci_cycles: Cycles
+    job_id: Identifier
+    stream_id: Identifier
+    worker_tile_id: Identifier
+    slot_id: Identifier
+    generation: Index
+    action: ComputeStage
+
+
+class ComputeResourceOwner(GraphRecord):
+    engine_index: Index
+    job_id: Identifier
+    acquired_aci_cycles: Cycles
+
+
+class ComputeResourceState(GraphRecord):
+    worker_tile_id: Identifier
+    kind: ComputeResourceKind
+    capacity: PositiveInt
+    occupied: Index
+    peak_occupied: Index
+    owners: tuple[ComputeResourceOwner, ...]
+
+    @model_validator(mode="after")
+    def conserved(self) -> Self:
+        if (self.occupied != len(self.owners) or not self.occupied <= self.peak_occupied <= self.capacity
+                or len({owner.engine_index for owner in self.owners}) != self.occupied
+                or len({owner.job_id for owner in self.owners}) != self.occupied
+                or any(owner.engine_index >= self.capacity for owner in self.owners)):
+            raise ValueError("compute resource occupancy is not conserved")
+        return self
+
+
+class ComputeResourceEvent(GraphRecord):
+    time_aci_cycles: Cycles
+    worker_tile_id: Identifier
+    kind: ComputeResourceKind
+    action: Literal["acquire", "release"]
+    engine_index: Index
+    job_id: Identifier
+    capacity: PositiveInt
+    occupied: Index
+
+    @model_validator(mode="after")
+    def bounded(self) -> Self:
+        if self.occupied > self.capacity or self.engine_index >= self.capacity:
+            raise ValueError("compute resource event exceeds configured capacity")
+        return self
+
+
+class ComputeWorkAccounting(GraphRecord):
+    planned_useful_work: Index
+    planned_executed_work: Index
+    completed_useful_work: Index
+    completed_executed_work: Index
+    math_busy_aci_cycles: Cycles
+    context_occupied_aci_cycles: Cycles
+
+    @model_validator(mode="after")
+    def bounded(self) -> Self:
+        if (not self.completed_useful_work <= self.completed_executed_work <= self.planned_executed_work
+                or not self.completed_useful_work <= self.planned_useful_work <= self.planned_executed_work
+                or self.math_busy_aci_cycles > self.context_occupied_aci_cycles):
+            raise ValueError("completed compute work or math time exceeds its admitted ownership")
+        return self

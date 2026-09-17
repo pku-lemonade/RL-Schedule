@@ -53,6 +53,7 @@
     "memory_session.py",
     "compute_memory.py",
     "compute_buffers.py",
+    "compute_runtime.py",
     "memory_adapters.py",
     "replay_memory.py"
   ],

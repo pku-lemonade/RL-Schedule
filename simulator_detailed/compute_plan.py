@@ -73,7 +73,7 @@ class ComputePlan:
         return ComputeWorkloadResult(plan=self.revalidate().record)
 
     def require_executable(self) -> None:
-        raise NotImplementedError("a compute plan does not execute arithmetic; a workload coordinator is still required")
+        raise NotImplementedError("a compute plan is not an executor; explicitly admit its lowering with ComputeRuntime")
 
 
 class _Admission:
@@ -194,7 +194,9 @@ class _Admission:
             raise ValueError("compute range exceeds buffer reservation")
         start = buffer.base_address + access.offset_bytes
         alignment = self.config.memory.packet.address_alignment_bytes
-        if start % alignment or access.size_bytes % alignment:
+        # Access lengths may end in a partial service/packet chunk; only the
+        # address must align, just as in addressed-memory admission.
+        if start % alignment:
             raise ValueError("compute range is incompatible with memory alignment")
         return buffer, (buffer.resource_id, start, start + access.size_bytes)
 

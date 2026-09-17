@@ -24,11 +24,11 @@
 
 ## 4. Single-job reader compute writer execution (CD-D02..04, D06, D07, D09)
 
-- [ ] 4.1 Add `compute_runtime.py` composition for one admitted job with one environment, canonical memory owners and finite per-worker compute context; verify operand readiness and output reservation precede compute acquisition, local operand reads precede arithmetic, and result service follows arithmetic.
-- [ ] 4.2 Execute FC/matmul reader and writer operations through the existing addressed-memory session, retaining local-only input/result paths; verify real request/response traffic, route-dependent starts, exact versions and no second legacy LSU/SPM/sink delay for the same service.
-- [ ] 4.3 Export unrounded stage/math/context/resource events and planned versus completed work; independently check useful/storage/network/service bytes, arithmetic duration, result publication, writer completion and shared physical worker identity across fabrics.
-- [ ] 4.4 Implement incomplete snapshots, resumption and coordinated full drain/finalization; compare split-horizon and uninterrupted runs, require pending posted effects/delayed credits to drain, and verify repeated finalization cannot duplicate releases.
-- [ ] 4.5 Run focused single-job/FC/local/remote/runtime tests and existing memory regressions plus strict type/scoped lint/whitespace checks; record remaining multi-item scope and commit before enabling overlap.
+- [x] 4.1 Add `compute_runtime.py` composition for one admitted job with one environment, canonical memory owners and finite per-worker compute context; verify operand readiness and output reservation precede compute acquisition, local operand reads precede arithmetic, and result service follows arithmetic.
+- [x] 4.2 Execute FC/matmul reader and writer operations through the existing addressed-memory session, retaining local-only input/result paths; verify real request/response traffic, route-dependent starts, exact versions and no second legacy LSU/SPM/sink delay for the same service.
+- [x] 4.3 Export unrounded stage/math/context/resource events and planned versus completed work; independently check useful/storage/network/service bytes, arithmetic duration, result publication, writer completion and shared physical worker identity across fabrics.
+- [x] 4.4 Implement incomplete snapshots, resumption and coordinated full drain/finalization; compare split-horizon and uninterrupted runs, require pending posted effects/delayed credits to drain, and verify repeated finalization cannot duplicate releases.
+- [x] 4.5 Run focused single-job/FC/local/remote/runtime tests and existing memory regressions plus strict type/scoped lint/whitespace checks; record remaining multi-item scope and commit before enabling overlap.
 
 ## 5. Bounded overlapping streams and contention (CD-D05..07, D09)
 
