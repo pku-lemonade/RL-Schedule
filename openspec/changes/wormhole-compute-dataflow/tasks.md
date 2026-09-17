@@ -40,11 +40,11 @@
 
 ## 6. Explicit DFG adapter and consumer guards (CD-D01, D08, D09)
 
-- [ ] 6.1 Add `legacy_fc_chain_v1` sidecar admission/import in `compute_adapters.py` for complete LOAD_FEAT/LOAD_WGT -> FC -> STORE chains; verify every node/edge and explicit shape/dtype/address/worker mapping is accounted for, mapper state is unchanged and unsupported nodes/fanout/reductions/missing metadata fail.
-- [ ] 6.2 Compare imported FC plans, costs, traffic and stage behavior with equivalent directly declared workloads, distinguishing source digests; add rejection in legacy `utils/task.py` for its previously empty FC branch and verify the diagnostic directs callers to the supported adapter.
-- [ ] 6.3 Preserve legacy detailed LOAD/STORE/CONV/POOL/SEND/RECV, scratchpad, DMA and failure behavior; run existing custom-mesh timing/fault fixtures and separately verify root Darknet19 mapping/workflow behavior using temporary trace/log destinations without enabling a new legacy mode.
-- [ ] 6.4 Verify workload/result documents are rejected by detailed predictor/embedding before optional Torch/PyG/model work and no new RL runtime path is enabled; record unchanged 7-D runtime, 4-D hardware, mesh/checkpoint and observation/action contracts, including unavailable optional model checks.
-- [ ] 6.5 Run adapter/legacy/consumer regressions plus strict type/scoped lint/whitespace checks; review the intentional legacy FC error and supported adapter subset, then commit before CLI delivery.
+- [x] 6.1 Add `legacy_fc_chain_v1` sidecar admission/import in `compute_adapters.py` for complete LOAD_FEAT/LOAD_WGT -> FC -> STORE chains; verify every node/edge and explicit shape/dtype/address/worker mapping is accounted for, mapper state is unchanged and unsupported nodes/fanout/reductions/missing metadata fail.
+- [x] 6.2 Compare imported FC plans, costs, traffic and stage behavior with equivalent directly declared workloads, distinguishing source digests; add rejection in legacy `utils/task.py` for its previously empty FC branch and verify the diagnostic directs callers to the supported adapter.
+- [x] 6.3 Preserve legacy detailed LOAD/STORE/CONV/POOL/SEND/RECV, scratchpad, DMA and failure behavior; run existing custom-mesh timing/fault fixtures and separately verify root Darknet19 mapping/workflow behavior using temporary trace/log destinations without enabling a new legacy mode.
+- [x] 6.4 Verify workload/result documents are rejected by detailed predictor/embedding before optional Torch/PyG/model work and no new RL runtime path is enabled; record unchanged 7-D runtime, 4-D hardware, mesh/checkpoint and observation/action contracts, including unavailable optional model checks.
+- [x] 6.5 Run adapter/legacy/consumer regressions plus strict type/scoped lint/whitespace checks; review the intentional legacy FC error and supported adapter subset, then commit before CLI delivery.
 
 ## 7. CLI examples, validation evidence and next-child handoff (CD-D01..10)
 

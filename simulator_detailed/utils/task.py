@@ -219,7 +219,11 @@ class Task:
                 logger.debug(f"successfully release space for task {self.index}")
 
             case OperatorType.FC:
-                pass
+                raise NotImplementedError(
+                    "legacy direct FC has no compute execution; use "
+                    "compute_adapters.import_legacy_fc with a legacy_fc_chain_v1 sidecar "
+                    "and ComputeOverlapRuntime"
+                )
 
             case OperatorType.STORE:
                 logger.debug(f"start running task {self.index}")

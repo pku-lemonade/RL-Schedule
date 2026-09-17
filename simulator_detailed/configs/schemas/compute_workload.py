@@ -8,7 +8,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, StrictBool, model_validator
 
 from .memory_replay import MemoryRange, MemorySystemConfig, NonNegative, Positive
-from .topology import GraphRecord, Identifier, Index, PositiveInt, unique
+from .topology import Digest, GraphRecord, Identifier, Index, PositiveInt, unique
 from .torus_replay import TransportEvidence
 
 
@@ -173,11 +173,18 @@ class ComputeStream(GraphRecord):
     jobs: tuple[ComputeJob, ...] = Field(min_length=1)
 
 
+class ComputeImportProvenance(GraphRecord):
+    kind: Literal["legacy_fc_chain_v1"]
+    dfg_sha256: Digest
+    sidecar_sha256: Digest
+
+
 class ComputeWorkload(GraphRecord):
     kind: Literal["compute_workload"]
     schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
     policy: Literal["finite_compute_dataflow_v1"]
     buffer_policy: Literal["fifo_item_slots_v1"]
+    legacy_import: ComputeImportProvenance | None = None
     memory: MemorySystemConfig
     dtypes: tuple[StorageDtype, ...] = Field(min_length=1)
     rates: tuple[ComputeRate, ...] = Field(min_length=1)

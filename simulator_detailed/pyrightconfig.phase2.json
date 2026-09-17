@@ -55,6 +55,7 @@
     "compute_buffers.py",
     "compute_runtime.py",
     "compute_pipeline.py",
+    "compute_adapters.py",
     "memory_adapters.py",
     "replay_memory.py"
   ],
