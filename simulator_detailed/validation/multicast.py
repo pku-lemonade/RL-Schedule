@@ -33,7 +33,7 @@ def _tree(write: Data, graph: Data) -> tuple[set[str], set[str]]:
                    for router in routers.values()}
     attachments = [endpoint for endpoint in rows(graph["attachments"]) if endpoint["fabric_id"] == fabric]
     source = next(endpoint for endpoint in attachments if endpoint["endpoint_id"] == write["source_endpoint_id"])
-    source_coordinate = obj(routers[text(source["router_id"])] ["coordinate"])
+    source_coordinate = obj(routers[text(source["router_id"])]["coordinate"])
     sx, sy = integer(source_coordinate["x"]), integer(source_coordinate["y"])
     rectangle = obj(write["rectangle"])
     start, end = obj(rectangle["start"]), obj(rectangle["end"])

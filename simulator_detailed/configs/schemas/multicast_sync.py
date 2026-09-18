@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, StrictBool, model_validator
+from pydantic import Field, StrictBool, field_validator, model_validator
 
 from .memory_replay import MemoryRange, MemorySystemConfig
 from .topology import Coordinate, GraphRecord, Identifier, Index, PositiveInt, unique
@@ -49,7 +49,9 @@ class MulticastWrite(GraphRecord):
     source_endpoint_id: Identifier
     fabric_id: Index
     source: MemoryRange
-    target_offset_bytes: NonNegativeInt
+    target_offset_bytes: NonNegativeInt = Field(
+        description="Common byte address within each target L1; binding offsets are buffer-relative."
+    )
     size_bytes: PositiveInt
     rectangle: Rectangle
     destinations: tuple[DestinationBinding, ...] = Field(min_length=1)
@@ -65,12 +67,6 @@ class MulticastWrite(GraphRecord):
         if len({item.buffer_id for item in self.destinations}) != len(self.destinations):
             raise ValueError("multicast destination buffers must be unique")
         unique(self.depends_on, "multicast dependency")
-        if self.source.buffer_id in {item.buffer_id for item in self.destinations} and any(
-            item.offset_bytes == self.source.offset_bytes for item in self.destinations
-        ):
-            # Same-buffer source/target overlap is checked with extents by the
-            # compiler; this early check only rejects an ambiguous target offset.
-            raise ValueError("multicast source and target cannot start at one buffer offset")
         return self
 
 
@@ -81,6 +77,13 @@ class ScalarCounter(GraphRecord):
     offset_bytes: NonNegativeInt
     width_bytes: Literal[1, 2, 4, 8]
     initial_value: NonNegativeInt
+
+    @field_validator("width_bytes", mode="before")
+    @classmethod
+    def integer_width(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("scalar width must be an integer, not a boolean or coerced number")
+        return value
 
 
 class ScalarIncrement(GraphRecord):
@@ -119,8 +122,8 @@ class SyncControlConfig(GraphRecord):
     wait_policy: Literal["local_threshold_wait_v1"] = "local_threshold_wait_v1"
     reservation_capacity: PositiveInt
     replication_capacity_flits: PositiveInt
-    reservation_setup_aci_cycles: NonNegative
-    reservation_edge_aci_cycles: NonNegative
+    reservation_setup_aci_cycles: Positive
+    reservation_edge_aci_cycles: Positive
     atomic_native_cycles: Positive
     local_observation_aci_cycles: NonNegative
     evidence: TransportEvidence
@@ -148,7 +151,7 @@ class MulticastSyncWorkload(GraphRecord):
         unique(tuple(w.wait_id for w in self.waits), "scalar wait")
         unique(tuple(c.counter_id for c in self.counters), "scalar counter")
         all_operations = tuple(w.operation_id for w in self.writes) + tuple(i.operation_id for i in self.increments)
-        unique(all_operations, "operation")
+        unique(all_operations + tuple(w.wait_id for w in self.waits), "operation/wait")
         operation_ids = set(all_operations)
         counter_ids = {c.counter_id for c in self.counters}
         for write in self.writes:

@@ -4,7 +4,55 @@
 > of committed prototype work, not proof that their full task scope was met.
 > The [implementation audit](implementation-audit.md) supersedes those completion
 > claims. Shared transport/memory/compute execution and retained resume remain
-> incomplete. The task checklist has been corrected to 2/35 verified.
+> incomplete. The initial correction retained 2/35 tasks; the subsequent tree
+> repair below brings the checklist to 3/35 fully verified.
+
+## Tree and canonical admission repair — 2026-09-18
+
+Task 1.3 is now verified. Recipient resolution uses the selected fabric's
+coordinates, including opposite-fabric mappings. Independently enumerated
+X/Y-major cases cover shared approaches, spines, branches, source inclusion,
+local/row/column trees and transit-only terminal leaves. Parent/child/ejection
+inventory is explicit. Disabled or unresolved workers, missing endpoints,
+duplicate aliases, disabled transit, invalid source entry and wrapping bounds
+are rejected. Common target addresses are physical L1 offsets; bindings may
+use different buffer bases. Source/target overlap is owner-qualified.
+
+Additional Part 1 admission repairs reuse canonical memory binding and
+reservation/service validation, normalize source content without locator paths,
+use integer packet arithmetic, validate finite converted scalar/controller
+costs, and reject modified plan contents before executor admission. Pure profile
+binding now recognizes worker NIU endpoints and checks profile packet geometry
+and aligned 32-bit Wormhole counters. Changed generic dimensions, clocks,
+widths and capacities remain configurable. These profile tests allocate no
+runtime and do not establish a working Wormhole CLI fixture.
+
+Tasks 1.2 and 1.4 remain open: complete mixed hardware/control settings,
+response-path/responder inventories and the mixed access/version/dependency
+compiler still need implementation. No later part is promoted by these tests.
+
+Verification:
+
+* `.venv/bin/python -m unittest discover -s simulator_detailed/tests` —
+  510 discovered, 509 passed, one optional skip in 164.774 seconds.
+* Earlier focused `.venv/bin/python -m unittest discover -s simulator_detailed/tests -p 'test_multicast*.py'`
+  — 45 passed; the full run above also includes seven subsequent admission tests.
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_hardware_profile simulator_detailed.tests.test_torus simulator_detailed.tests.test_memory_packets`
+  — 40 passed.
+* `.venv/bin/pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json`
+  — 0 errors, 0 warnings, 0 informations.
+* The full scoped Ruff command recorded in the preceding verification repair,
+  including new multicast files and predecessor validation/compute scopes — passed.
+* `openspec validate wormhole-multicast-sync --strict --no-interactive` and
+  `git diff --check` — passed.
+
+An initial profile admission test exposed that the existing profile binder
+retains worker NIU attachments as `network`, rather than `compute`. Eligibility
+now checks the physical worker and profile origin while retaining the existing
+graph format. The corrected test and final full suite pass. Earlier lint import
+ordering findings were fixed. Existing root smoke evidence is the separate run
+in the verification-repair entry; it was not rerun for this admission-only change.
+No commits were pushed.
 
 ## Verification repair — 2026-09-18
 

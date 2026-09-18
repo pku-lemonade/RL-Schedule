@@ -2,27 +2,40 @@
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from graphlib import CycleError, TopologicalSorter
-from typing import Literal
+from typing import Annotated, Literal
 
+from pydantic import Field
+
+from .configs.schemas.hardware_profile import HardwareProfileConfig, resolve_parameters
 from .configs.schemas.multicast_sync import (
     MulticastSyncResult,
     MulticastSyncWorkload,
     MulticastWrite,
 )
-from .configs.schemas.topology import CanonicalTopology, GraphRecord, Identifier, Index
+from .configs.schemas.topology import (
+    CanonicalTopology,
+    Digest,
+    GraphRecord,
+    Identifier,
+    Index,
+    PositiveInt,
+)
+from .memory_plan import bind_memory_system, memory_configuration_identity
+from .memory_resources import memory_resource_definitions
 from .multicast_tree import RectangleTreePlan, compile_rectangle_tree
-from .topology import content_digest
+from .topology import content_digest, normalize_topology
 
 
 class MulticastSegmentPlan(GraphRecord):
-    segment_index: int
-    source_offset_bytes: int
-    payload_bytes: int
-    flit_count: int
-    physical_bytes: int
+    segment_index: Index
+    source_offset_bytes: Index
+    payload_bytes: PositiveInt
+    flit_count: PositiveInt
+    physical_bytes: PositiveInt
 
 
 class MulticastWritePlan(GraphRecord):
@@ -30,9 +43,9 @@ class MulticastWritePlan(GraphRecord):
     fabric_id: Index
     source_endpoint_id: Identifier
     completion: Literal["write_posted", "write_acknowledged"]
-    source_useful_bytes: int
-    destination_useful_bytes: int
-    packet_physical_bytes: int
+    source_useful_bytes: PositiveInt
+    destination_useful_bytes: PositiveInt
+    packet_physical_bytes: PositiveInt
     tree: RectangleTreePlan
     segments: tuple[MulticastSegmentPlan, ...]
 
@@ -41,20 +54,20 @@ class ScalarCounterPlan(GraphRecord):
     counter_id: Identifier
     endpoint_id: Identifier
     buffer_id: Identifier
-    offset_bytes: int
-    width_bytes: int
-    initial_value: int
-    increment_count: int
-    final_value: int
+    offset_bytes: Index
+    width_bytes: PositiveInt
+    initial_value: Index
+    increment_count: Index
+    final_value: Index
 
 
 class MulticastSyncPlanRecord(GraphRecord):
     kind: Literal["multicast_sync_plan"] = "multicast_sync_plan"
-    schema_version: int = 1
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)] = 1
     model_revision: Literal["finite_multicast_sync_plan_v1"] = "finite_multicast_sync_plan_v1"
-    workload_sha256: str
-    topology_sha256: str
-    plan_sha256: str
+    workload_sha256: Digest
+    topology_sha256: Digest
+    plan_sha256: Digest
     operation_order: tuple[Identifier, ...]
     writes: tuple[MulticastWritePlan, ...]
     counters: tuple[ScalarCounterPlan, ...]
@@ -70,15 +83,33 @@ class MulticastSyncPlan:
     record: MulticastSyncPlanRecord
 
     @classmethod
+    def from_source(cls, workload: MulticastSyncWorkload, source_document: object) -> MulticastSyncPlan:
+        """Bind the declared graph/profile without allocating runtime resources."""
+        return cls.compile(workload, bind_memory_system(workload.memory, source_document))
+
+    @classmethod
     def compile(
         cls,
         workload: MulticastSyncWorkload,
         topology: CanonicalTopology,
     ) -> MulticastSyncPlan:
         workload = MulticastSyncWorkload.model_validate(workload.model_dump(mode="json"))
-        topology = CanonicalTopology.model_validate(topology.model_dump(mode="json"))
-        if topology.connectivity_state != "complete":
-            raise ValueError("multicast/synchronization planning requires a complete topology")
+        topology = normalize_topology(topology)
+        if workload.memory.source.kind == "hardware_profile":
+            if topology.origin.kind != "hardware_profile" or topology.origin.document_json is None:
+                raise ValueError("profile multicast plan requires its original source document")
+            bound = normalize_topology(bind_memory_system(workload.memory, json.loads(topology.origin.document_json)))
+            if bound != topology:
+                raise ValueError("multicast topology differs from its declared profile binding")
+        else:
+            topology = bind_memory_system(workload.memory, topology.model_dump(mode="json"))
+        definitions = memory_resource_definitions(workload.memory, topology)
+        for definition in definitions:
+            native = workload.control.atomic_native_cycles
+            ratio = definition.timing.config.native_clock_hz / workload.memory.aci_clock_hz
+            duration = native / ratio
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError("unrepresentable scalar native/ACI service duration")
         cls._validate_control(workload)
         cls._validate_memory_fabrics(workload, topology)
         cls._validate_dependencies(workload)
@@ -88,6 +119,9 @@ class MulticastSyncPlan:
         counter_plans = cls._counter_plans(workload, topology)
         operation_order = cls._operation_order(workload)
         workload_json = workload.model_dump(mode="json")
+        # Paths are locators, not hardware or workload identity. The normalized
+        # bound graph separately carries the full immutable source content.
+        workload_json["memory"] = memory_configuration_identity(workload.memory)
         topology_json = topology.model_dump(mode="json")
         workload_sha = content_digest(workload_json)
         topology_sha = content_digest(topology_json)
@@ -115,10 +149,11 @@ class MulticastSyncPlan:
 
     def revalidate(self) -> None:
         rebuilt = self.compile(self.workload, self.topology)
-        if rebuilt.record.plan_sha256 != self.record.plan_sha256:
-            raise ValueError("multicast/synchronization plan digest is not reproducible")
+        if rebuilt.record != self.record:
+            raise ValueError("multicast/synchronization plan differs from its admitted source and configuration")
 
     def planning_result(self) -> MulticastSyncResult:
+        self.revalidate()
         return MulticastSyncResult(
             plan_sha256=self.record.plan_sha256,
             pending_operations=self.record.operation_order,
@@ -181,14 +216,23 @@ class MulticastSyncPlan:
         write: MulticastWrite,
     ) -> MulticastWritePlan:
         tree = compile_rectangle_tree(workload, topology, write)
+        reservation_duration = (workload.control.reservation_setup_aci_cycles
+                                + len(tree.edges) * workload.control.reservation_edge_aci_cycles)
+        if not math.isfinite(reservation_duration):
+            raise ValueError(f"multicast {write.operation_id}: unrepresentable tree reservation duration")
         packet = workload.memory.packet
+        source_buffer = next(buffer for buffer in workload.memory.buffers if buffer.buffer_id == write.source.buffer_id)
+        if (source_buffer.base_address + write.source.offset_bytes) % packet.address_alignment_bytes:
+            raise ValueError(f"multicast {write.operation_id}: source address is not aligned")
+        if write.target_offset_bytes % packet.address_alignment_bytes:
+            raise ValueError(f"multicast {write.operation_id}: target address is not aligned")
         remaining = write.size_bytes
         offset = write.source.offset_bytes
         segments: list[MulticastSegmentPlan] = []
         index = 0
         while remaining:
             payload = min(remaining, packet.max_segment_payload_bytes)
-            flits = packet.header_flits + math.ceil(payload / packet.data_capacity_bytes)
+            flits = packet.header_flits + (payload + packet.data_capacity_bytes - 1) // packet.data_capacity_bytes
             segments.append(
                 MulticastSegmentPlan(
                     segment_index=index,
@@ -221,8 +265,26 @@ class MulticastSyncPlan:
     ) -> tuple[ScalarCounterPlan, ...]:
         resources = {resource.resource_id: resource for resource in topology.resources}
         attachments = {attachment.endpoint_id: attachment for attachment in topology.attachments}
+        routers = {router.key: router for router in topology.routers}
         bindings = {endpoint.endpoint_id: endpoint for endpoint in workload.memory.endpoints}
         buffers = {buffer.buffer_id: buffer for buffer in workload.memory.buffers}
+        wormhole = False
+        if topology.origin.kind == "hardware_profile":
+            if topology.origin.document_json is None:
+                raise ValueError("profile multicast plan requires its original source document")
+            profile = HardwareProfileConfig.model_validate_json(topology.origin.document_json)
+            wormhole = profile.architecture == "wormhole"
+            if wormhole:
+                parameters = resolve_parameters(profile.parameters)
+                required = {"flit_bytes", "header_flits", "max_payload_bytes"}
+                if not required <= parameters.keys():
+                    raise ValueError("Wormhole multicast requires declared packet geometry parameters")
+                packet = workload.memory.packet
+                if (packet.physical_flit_bytes != parameters["flit_bytes"]
+                        or packet.data_capacity_bytes != parameters["flit_bytes"]
+                        or packet.header_flits != parameters["header_flits"]
+                        or packet.max_segment_payload_bytes > parameters["max_payload_bytes"]):
+                    raise ValueError("multicast packet geometry conflicts with the Wormhole profile")
         increments_by_counter: dict[str, int] = {}
         for increment in workload.increments:
             increments_by_counter[increment.counter_id] = increments_by_counter.get(increment.counter_id, 0) + 1
@@ -230,8 +292,18 @@ class MulticastSyncPlan:
             attachment = attachments.get(increment.source_endpoint_id)
             if binding is None or attachment is None or "initiator" not in binding.roles:
                 raise ValueError(f"atomic {increment.operation_id}: source endpoint is not an initiator")
+            source_worker = routers[(attachment.fabric_id, attachment.router_id)].tile_id in topology.enabled_worker_ids
+            worker_role = attachment.role == "compute" or (
+                topology.origin.kind == "hardware_profile" and attachment.role == "network")
+            if (not binding.enabled or attachment.enabled is not True or not attachment.replay_enabled
+                    or not attachment.permissions_resolved or not attachment.inject_port or not source_worker or not worker_role):
+                raise ValueError(f"atomic {increment.operation_id}: source endpoint is unavailable")
             if binding.fabric_id != increment.fabric_id or attachment.fabric_id != increment.fabric_id:
                 raise ValueError(f"atomic {increment.operation_id}: endpoint fabric mismatch")
+            if increment.completion == "atomic_returning" and (
+                "response_sink" not in binding.roles or not attachment.eject_port
+            ):
+                raise ValueError(f"atomic {increment.operation_id}: returning operation requires a response sink")
         result: list[ScalarCounterPlan] = []
         for counter in workload.counters:
             buffer = buffers.get(counter.buffer_id)
@@ -240,12 +312,22 @@ class MulticastSyncPlan:
             resource = resources.get(buffer.resource_id) if buffer is not None else None
             if buffer is None or attachment is None or binding is None or resource is None:
                 raise ValueError(f"counter {counter.counter_id}: endpoint, buffer, or resource is missing")
-            if attachment.role != "compute" or attachment.enabled is not True or attachment.replay_enabled is not True:
+            counter_worker = routers[(attachment.fabric_id, attachment.router_id)].tile_id in topology.enabled_worker_ids
+            worker_role = attachment.role == "compute" or (
+                topology.origin.kind == "hardware_profile" and attachment.role == "network")
+            if (not counter_worker or not worker_role or attachment.enabled is not True or not attachment.replay_enabled
+                    or not binding.enabled or not attachment.permissions_resolved or not attachment.eject_port):
                 raise ValueError(f"counter {counter.counter_id}: endpoint is unavailable")
+            if resource.kind != "local_sram" or buffer.resource_id not in binding.resource_ids:
+                raise ValueError(f"counter {counter.counter_id}: endpoint must expose the counter L1")
             if counter.buffer_id not in buffers or not buffer.writable or not buffer.readable:
                 raise ValueError(f"counter {counter.counter_id}: buffer must be readable and writable")
-            if counter.offset_bytes % counter.width_bytes:
+            if (buffer.base_address + counter.offset_bytes) % counter.width_bytes:
                 raise ValueError(f"counter {counter.counter_id}: offset is not naturally aligned")
+            if wormhole and counter.width_bytes != 4:
+                raise ValueError(f"counter {counter.counter_id}: Wormhole requires aligned 32-bit scalar words")
+            if counter.width_bytes > workload.memory.packet.data_capacity_bytes:
+                raise ValueError(f"counter {counter.counter_id}: scalar does not fit the admitted inline format")
             if counter.offset_bytes + counter.width_bytes > buffer.size_bytes:
                 raise ValueError(f"counter {counter.counter_id}: width exceeds buffer")
             router = next(

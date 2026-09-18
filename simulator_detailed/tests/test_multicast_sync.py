@@ -16,8 +16,8 @@ from simulator_detailed.tests.test_torus import small_graph
 EVIDENCE = {"status": "assumed", "description": "synthetic multicast contract"}
 
 
-def graph_document() -> dict[str, Any]:
-    document = small_graph(3, 2)
+def graph_document(width: int = 3, height: int = 2) -> dict[str, Any]:
+    document = small_graph(width, height)
     document["attachments"] = []
     document["resources"] = []
     enabled = []
@@ -118,8 +118,9 @@ def memory_document(graph: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def workload_document(*, major_axis: str = "x", include_source: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
-    graph = graph_document()
+def workload_document(*, major_axis: str = "x", include_source: bool = True,
+                      width: int = 3, height: int = 2) -> tuple[dict[str, Any], dict[str, Any]]:
+    graph = graph_document(width, height)
     destinations = [
         {
             "endpoint_id": item["endpoint_id"],
@@ -154,7 +155,7 @@ def workload_document(*, major_axis: str = "x", include_source: bool = True) -> 
                 "size_bytes": 96,
                 "rectangle": {
                     "start": {"x": 0, "y": 0},
-                    "end": {"x": 2, "y": 1},
+                    "end": {"x": width - 1, "y": height - 1},
                     "major_axis": major_axis,
                     "include_source": include_source,
                 },
@@ -235,8 +236,10 @@ class MulticastContractTests(unittest.TestCase):
         overlap = copy.deepcopy(document)
         overlap["writes"][0]["target_offset_bytes"] = 0
         overlap["writes"][0]["destinations"][0]["offset_bytes"] = 0
-        with self.assertRaises(ValidationError):
-            MulticastSyncWorkload.model_validate(overlap)
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            MulticastSyncPlan.compile(
+                MulticastSyncWorkload.model_validate(overlap), CanonicalTopology.model_validate(graph_value)
+            )
 
     def test_control_bounds_widths_and_overflow_are_admitted_or_rejected_explicitly(self) -> None:
         document, graph_value = workload_document()
@@ -256,6 +259,8 @@ class MulticastContractTests(unittest.TestCase):
             "max_segment_payload_bytes": 32,
             "address_alignment_bytes": 16,
         })
+        for resource in changed_geometry["memory"]["resources"]:
+            resource["service"].update(service_granule_bytes=16, chunk_bytes=16)
         changed = MulticastSyncPlan.compile(
             MulticastSyncWorkload.model_validate(changed_geometry),
             CanonicalTopology.model_validate(graph_value),

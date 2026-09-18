@@ -5,8 +5,18 @@ not supported by their specified runtime behavior. Parts 1–5 contain useful
 schema, tree and analytical prototypes, but these do not implement the approved
 shared transport/memory/compute design. This correction preserves that design
 and reopens the incomplete tasks instead of reducing their acceptance criteria.
-The reproduced baseline (1.1) and Part 1 check/commit boundary (1.5) are retained:
-**2/35 fully verified tasks**. The validation predecessor remains delivered.
+The correction initially retained the reproduced baseline (1.1) and Part 1
+check/commit boundary (1.5). The subsequent tree-admission repair verifies 1.3:
+**3/35 fully verified tasks**. The validation predecessor remains delivered.
+
+The tree compiler now uses selected-fabric coordinates, validates the common
+physical target address, rejects unavailable workers and duplicate aliases,
+and inventories parent/child/ejection/terminal stages. Admission also reuses
+canonical memory binding and reservation/service checks, normalizes source
+identity without locator paths, rejects forged plan inventories and validates
+profile scalar/packet contracts. These are pure admission improvements, not
+evidence of shared execution. Tasks 1.2 and 1.4 remain open for the complete
+mixed settings/control/route/conflict inventory.
 
 ## Concrete findings
 
@@ -54,8 +64,8 @@ specification is covered by a row below.
 
 | Requirement / scenarios | Current evidence | Remaining implementation/evidence |
 | --- | --- | --- |
-| MS-01: invalid input; changed generic configuration | Partial strict parsing, deterministic plan; CLI error preserves output | Complete mixed admission, native/service bounds, profile restrictions, effective source identity and all configured hardware settings |
-| MS-02: source inclusion; nonworkers; opposite fabric | Partial X/Y tree and inclusion/transit tests | Opposite-fabric physical identity, unavailable workers, aliases, degenerate/local execution, complete address/common-target constraints |
+| MS-01: invalid input; changed generic configuration | Strict parsing, canonical memory/service admission, locator-independent identities, pure profile binding, width checks and forged-plan rejection; CLI error preserves output | Complete mixed hardware/control settings, route and dependency admission |
+| MS-02: source inclusion; nonworkers; opposite fabric | Task 1.3: independently enumerated X/Y trees on both fabrics, common physical address, unavailable workers/aliases, degenerate/local and transit-terminal inventories | Actual local ejection and terminal execution under bounded transport |
 | MS-03: shared prefix; segmented payload | Independent declared-coordinate edge and recipient oracle, including missing segment and duplicate flit corruption | Physical injection/ejection and response traffic; actual per-segment services and visibility |
 | MS-04: capacity-one backpressure; conflicting trees with ordinary traffic | FIFO reservation metadata tests only | Shared links/router stages, finite tokens/replication/descriptor occupancy, fair mixed traffic, directed slowdowns and drain proof |
 | MS-05: posted slow tail; delayed acknowledgement; shared L1 | Prototype useful-byte arithmetic and source/target event records | Existing canonical registry, real service contention, bounded per-segment returns, distinct source/target completion |
@@ -89,7 +99,7 @@ promoted.
 
 ## Next implementation boundary
 
-Repair Part 1 admission, then implement Part 2's composite internal link
+Finish Part 1's mixed admission and response/control inventories, then implement Part 2's composite internal link
 contract on the existing physical serializer/router kernel. Add mixed-traffic
 capacity-one tests that fail against the current metadata-only registry. Only
 then attach multicast effects and scalar RMW work to the existing canonical

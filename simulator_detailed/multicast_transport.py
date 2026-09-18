@@ -165,6 +165,7 @@ class TreeTransportPlan:
 
     @classmethod
     def compile(cls, plan: MulticastSyncPlan) -> TreeTransportPlan:
+        plan.revalidate()
         lanes: list[TreeLaneIdentity] = []
         lane_by_link: dict[tuple[int, str], TreeLaneIdentity] = {}
         writes = plan.record.writes

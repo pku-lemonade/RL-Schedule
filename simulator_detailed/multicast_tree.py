@@ -44,6 +44,17 @@ class TreeRecipient(GraphRecord):
     source_included: bool
 
 
+class TreeNode(GraphRecord):
+    """A routing stage, including leaves that terminate without an ejection."""
+
+    router_id: Identifier
+    coordinate: Coordinate
+    incoming_edge_id: Identifier | None
+    outgoing_edge_ids: tuple[Identifier, ...]
+    recipient_endpoint_id: Identifier | None
+    terminal: bool
+
+
 class RectangleTreePlan(GraphRecord):
     """Canonical route and recipient set for one multicast write."""
 
@@ -55,6 +66,7 @@ class RectangleTreePlan(GraphRecord):
     entry_router_id: Identifier
     recipients: tuple[TreeRecipient, ...]
     edges: tuple[TreeEdge, ...]
+    nodes: tuple[TreeNode, ...]
 
 
 @dataclass(frozen=True)
@@ -65,6 +77,8 @@ class _GraphIndex:
     links: tuple[TopologyLink, ...]
     attachments: dict[str, TopologyAttachment]
     resources: dict[str, TopologyResource]
+    enabled_workers: frozenset[str]
+    profile_backed: bool
 
 
 def _index_graph(graph: CanonicalTopology) -> _GraphIndex:
@@ -79,7 +93,17 @@ def _index_graph(graph: CanonicalTopology) -> _GraphIndex:
         links=graph.links,
         attachments={attachment.endpoint_id: attachment for attachment in graph.attachments},
         resources={resource.resource_id: resource for resource in graph.resources},
+        enabled_workers=frozenset(graph.enabled_worker_ids),
+        profile_backed=graph.origin.kind == "hardware_profile",
     )
+
+
+def _worker_attachment(attachment: TopologyAttachment, graph_index: _GraphIndex) -> bool:
+    router = graph_index.routers[(attachment.fabric_id, attachment.router_id)]
+    # Profile projection keeps NIU attachments tagged "network". Their owner,
+    # worker selection and local SRAM binding establish compute eligibility.
+    return (router.tile_id in graph_index.enabled_workers
+            and (attachment.role == "compute" or (graph_index.profile_backed and attachment.role == "network")))
 
 
 def _endpoint(
@@ -93,11 +117,12 @@ def _endpoint(
     attachment = graph_index.attachments.get(endpoint_id)
     if attachment is None:
         raise ValueError(f"{role} endpoint {endpoint_id}: graph attachment is missing")
-    if attachment.fabric_id != fabric_id or attachment.role != "compute":
+    if attachment.fabric_id != fabric_id or not _worker_attachment(attachment, graph_index):
         raise ValueError(f"{role} endpoint {endpoint_id}: must be a compute attachment on fabric {fabric_id}")
     if attachment.enabled is not True or attachment.replay_enabled is not True:
         raise ValueError(f"{role} endpoint {endpoint_id}: attachment is unavailable")
-    if attachment.permissions_resolved is not True or not attachment.inject_port or not attachment.eject_port:
+    required_port = attachment.inject_port if role == "source" else attachment.eject_port
+    if attachment.permissions_resolved is not True or not required_port:
         raise ValueError(f"{role} endpoint {endpoint_id}: directional permissions are unresolved")
     router = graph_index.routers.get((fabric_id, attachment.router_id))
     if router is None or router.enabled is not True or router.coordinate is None:
@@ -137,11 +162,15 @@ def _buffer(
     resource = graph_index.resources.get(buffer.resource_id)
     if resource is None:
         raise ValueError(f"buffer {buffer_id}: resource {buffer.resource_id} is missing")
+    if resource.kind != "local_sram":
+        raise ValueError(f"buffer {buffer_id}: multicast requires local L1 storage")
+    if buffer.base_address + buffer.size_bytes > resource.capacity_bytes:
+        raise ValueError(f"buffer {buffer_id}: reservation exceeds resource capacity")
     attachment = graph_index.attachments[endpoint_id]
     router = graph_index.routers[(attachment.fabric_id, attachment.router_id)]
     if resource.owner_tile_id != router.tile_id:
         raise ValueError(f"buffer {buffer_id}: resource is not owned by endpoint {endpoint_id}")
-    if buffer.resource_id not in binding.resource_ids:
+    if buffer.resource_id not in binding.resource_ids or buffer.resource_id not in attachment.resource_ids:
         raise ValueError(f"buffer {buffer_id}: endpoint {endpoint_id} does not expose its resource")
     return buffer
 
@@ -156,20 +185,22 @@ def _link(
         raise ValueError("multicast tree requires coordinates on every router")
     if src.fabric_id != fabric_id or dst.fabric_id != fabric_id:
         raise ValueError("multicast tree cannot cross fabrics")
-    link = next(
-        (
-            item
-            for item in graph_index.links
-            if item.fabric_id == fabric_id
-            and item.src_router == src.router_id
-            and item.dst_router == dst.router_id
-            and item.enabled is True
-            and item.wrap is False
-        ),
-        None,
-    )
-    if link is None:
+    if src.enabled is not True or dst.enabled is not True:
+        raise ValueError("multicast tree contains an unavailable transit router")
+    matches = [
+        item
+        for item in graph_index.links
+        if item.fabric_id == fabric_id
+        and item.src_router == src.router_id
+        and item.dst_router == dst.router_id
+        and item.enabled is True
+        and item.wrap is False
+    ]
+    if not matches:
         raise ValueError(f"missing enabled non-wrapping link {src.router_id}->{dst.router_id}")
+    if len(matches) != 1:
+        raise ValueError(f"ambiguous tree link {src.router_id}->{dst.router_id}")
+    link = matches[0]
     return link.link_id, link
 
 
@@ -244,7 +275,7 @@ def compile_rectangle_tree(
     graph_index = _index_graph(graph)
     endpoints = {endpoint.endpoint_id: endpoint for endpoint in workload.memory.endpoints}
     buffers = {buffer.buffer_id: buffer for buffer in workload.memory.buffers}
-    _, source_binding, source_router = _endpoint(
+    source_attachment, source_binding, source_router = _endpoint(
         write.source_endpoint_id, write.fabric_id, graph_index, endpoints, role="source"
     )
     source_buffer = _buffer(
@@ -257,7 +288,9 @@ def compile_rectangle_tree(
         buffers=buffers,
         writable=False,
     )
-    if write.completion == "write_acknowledged" and "response_sink" not in source_binding.roles:
+    if write.completion == "write_acknowledged" and (
+        "response_sink" not in source_binding.roles or not source_attachment.eject_port
+    ):
         raise ValueError("acknowledged multicast source requires a bounded response sink")
     source_coordinate = source_router.coordinate
     if source_coordinate is None:
@@ -270,36 +303,38 @@ def compile_rectangle_tree(
         if source_coordinate.x != start.x or source_coordinate.y > start.y:
             raise ValueError("y-major tree source must be on the start column at or before the corner")
 
-    worker_tiles = {
-        tile.tile_id: tile
-        for tile in graph.tiles
-        if tile.tile_id in graph.enabled_worker_ids
-        and start.x <= tile.x <= end.x
-        and start.y <= tile.y <= end.y
-    }
-    if not worker_tiles:
-        raise ValueError("multicast rectangle contains no enabled workers")
+    worker_routers = [
+        router for router in graph.routers
+        if router.fabric_id == write.fabric_id and router.coordinate is not None
+        and start.x <= router.coordinate.x <= end.x
+        and start.y <= router.coordinate.y <= end.y
+        and graph_index.tiles[router.tile_id].role == "worker"
+    ]
     expected: list[tuple[TopologyTile, TopologyAttachment]] = []
-    for tile in sorted(worker_tiles.values(), key=lambda item: (item.y, item.x, item.tile_id)):
-        router = graph_index.routers_by_coordinate.get((write.fabric_id, tile.x, tile.y))
-        if router is None or router.tile_id != tile.tile_id:
-            raise ValueError(f"worker {tile.tile_id}: fabric router is missing or mismatched")
-        attachment = next(
-            (
-                item
-                for item in graph.attachments
-                if item.fabric_id == write.fabric_id
-                and item.router_id == router.router_id
-                and item.role == "compute"
-            ),
-            None,
-        )
-        if attachment is None:
+    for router in sorted(worker_routers, key=lambda item: (
+        item.coordinate.y if item.coordinate else 0,
+        item.coordinate.x if item.coordinate else 0, item.router_id
+    )):
+        tile = graph_index.tiles[router.tile_id]
+        if tile.tile_id not in graph.enabled_worker_ids:
+            raise ValueError(f"worker {tile.tile_id}: compute availability is disabled or unresolved")
+        attachments = [
+            item
+            for item in graph.attachments
+            if item.fabric_id == write.fabric_id
+            and item.router_id == router.router_id
+            and _worker_attachment(item, graph_index)
+        ]
+        if not attachments:
             raise ValueError(f"worker {tile.tile_id}: compute attachment is missing")
-        expected.append((tile, attachment))
+        if len(attachments) != 1:
+            raise ValueError(f"worker {tile.tile_id}: duplicate compute aliases on selected fabric")
+        expected.append((tile, attachments[0]))
     expected_endpoint_ids = {attachment.endpoint_id for _, attachment in expected}
     if not write.rectangle.include_source:
         expected_endpoint_ids.discard(write.source_endpoint_id)
+    if not expected_endpoint_ids:
+        raise ValueError("multicast rectangle has no recipients after source exclusion")
     expected_recipients = [
         (tile, attachment)
         for tile, attachment in expected
@@ -322,8 +357,8 @@ def compile_rectangle_tree(
         _, target_binding, _ = _endpoint(
             destination.endpoint_id, write.fabric_id, graph_index, endpoints, role="target"
         )
-        if destination.offset_bytes != write.target_offset_bytes:
-            raise ValueError(f"destination {destination.endpoint_id}: offset differs from target_offset_bytes")
+        if write.completion == "write_acknowledged" and not attachment.inject_port:
+            raise ValueError(f"destination {destination.endpoint_id}: acknowledgement injection permission is missing")
         target_buffer = _buffer(
             destination.buffer_id,
             destination.offset_bytes,
@@ -334,18 +369,21 @@ def compile_rectangle_tree(
             buffers=buffers,
             writable=True,
         )
-        if target_buffer.buffer_id == source_buffer.buffer_id:
-            source_end = write.source.offset_bytes + write.size_bytes
-            target_end = destination.offset_bytes + write.size_bytes
-            if write.source.offset_bytes < target_end and destination.offset_bytes < source_end:
+        target_address = target_buffer.base_address + destination.offset_bytes
+        if target_address != write.target_offset_bytes:
+            raise ValueError(f"destination {destination.endpoint_id}: address differs from common target address")
+        if target_buffer.resource_id == source_buffer.resource_id:
+            source_address = source_buffer.base_address + write.source.offset_bytes
+            if source_address < target_address + write.size_bytes and target_address < source_address + write.size_bytes:
                 raise ValueError("multicast source and destination ranges overlap")
         router = graph_index.routers[(write.fabric_id, attachment.router_id)]
+        assert router.coordinate is not None  # _endpoint checked the selected router
         recipients.append(
             TreeRecipient(
                 endpoint_id=destination.endpoint_id,
                 tile_id=tile.tile_id,
                 router_id=router.router_id,
-                coordinate=Coordinate(x=tile.x, y=tile.y),
+                coordinate=router.coordinate,
                 buffer_id=target_buffer.buffer_id,
                 offset_bytes=destination.offset_bytes,
                 source_included=destination.endpoint_id == write.source_endpoint_id,
@@ -422,6 +460,26 @@ def compile_rectangle_tree(
                 seen_links=seen_links,
             )
 
+    incoming: dict[str, str] = {}
+    outgoing: dict[str, list[str]] = {source_router.router_id: []}
+    for edge in edges:
+        if edge.dst_router in incoming or edge.dst_router == source_router.router_id:
+            raise ValueError("multicast tree reconverges or returns to its root")
+        incoming[edge.dst_router] = edge.edge_id
+        outgoing.setdefault(edge.src_router, []).append(edge.edge_id)
+        outgoing.setdefault(edge.dst_router, [])
+    local_ejections = {recipient.router_id: recipient.endpoint_id for recipient in recipients}
+    nodes: list[TreeNode] = []
+    for router_id, children in outgoing.items():
+        router = graph_index.routers[(write.fabric_id, router_id)]
+        assert router.coordinate is not None
+        endpoint_id = local_ejections.get(router_id)
+        nodes.append(TreeNode(
+            router_id=router_id, coordinate=router.coordinate,
+            incoming_edge_id=incoming.get(router_id), outgoing_edge_ids=tuple(children),
+            recipient_endpoint_id=endpoint_id, terminal=not children and endpoint_id is None,
+        ))
+
     return RectangleTreePlan(
         policy="corner_rectangle_tree_v1",
         operation_id=write.operation_id,
@@ -431,4 +489,5 @@ def compile_rectangle_tree(
         entry_router_id=entry_router.router_id,
         recipients=tuple(recipients),
         edges=tuple(edges),
+        nodes=tuple(nodes),
     )

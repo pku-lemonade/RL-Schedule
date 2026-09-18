@@ -94,6 +94,7 @@ class ScalarExecutor:
 
     @classmethod
     def compile(cls, plan: MulticastSyncPlan) -> ScalarExecutor:
+        plan.revalidate()
         cls._validate(plan)
         return cls(plan=plan)
 

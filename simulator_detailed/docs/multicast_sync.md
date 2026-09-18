@@ -6,6 +6,22 @@ runtime required by the approved design. See the
 [implementation audit](../../openspec/changes/wormhole-multicast-sync/implementation-audit.md)
 for the reopened tasks and exact limitations.
 
+Tree admission uses coordinates on the selected fabric, including reversed
+fabric mappings. `target_offset_bytes` is the common byte address within each
+recipient's physical L1; each destination binding's `offset_bytes` is relative
+to its buffer, so `base_address + offset_bytes` must equal that common address.
+Different buffer bases are allowed. Source overlap is checked on the physical
+resource, including distinct buffer aliases. Nonworker leaves have explicit
+terminal stages in the plan; they are not destinations. An unavailable worker
+inside the rectangle is an admission error.
+
+Pure planning also checks canonical memory capacity, nonoverlapping reservations,
+service geometry and native-clock conversion. Effective identities include
+normalized source content and omit source-file locator paths. The Python
+`MulticastSyncPlan.from_source` admission API binds profiles and checks their
+declared packet geometry plus Wormhole's aligned 32-bit scalar contract. This
+does not enable profile execution in the prototype CLI.
+
 Inspect the generic projection with:
 
 ```sh
