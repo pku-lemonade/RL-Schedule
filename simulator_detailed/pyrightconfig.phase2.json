@@ -57,6 +57,7 @@
     "memory_session.py",
     "multicast_tree.py",
     "multicast_plan.py",
+    "multicast_transport.py",
     "compute_memory.py",
     "compute_buffers.py",
     "compute_runtime.py",

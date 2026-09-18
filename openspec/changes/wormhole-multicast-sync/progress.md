@@ -38,3 +38,19 @@ Part 1 verification:
 
 All runtime transport allocation and legacy multicast fields remain untouched;
 later parts add capabilities behind these new versioned contracts.
+
+## Part 2 (tasks 2.1–2.5)
+
+Part 2 adds the opt-in composite lane registry, tree/flit identities, FIFO
+all-or-none reservations, deterministic cut-through branch accounting and
+resumable transport snapshots. Reservation release is recorded only after the
+tree drain event; an interrupted result retains the reservation owner in its
+snapshot. The registry keeps request, response and multicast lane classes on
+one physical serializer identity and does not alter legacy envelopes.
+
+Verification:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_multicast_transport -v` — 4 passed.
+* Affected topology/torus/packet and multicast tests — passed.
+* Strict Pyright and scoped Ruff — passed.
+* `git diff --check` and strict OpenSpec validation — passed.
