@@ -53,6 +53,23 @@ Verification:
 * `.venv/bin/python -m unittest simulator_detailed.tests.test_multicast_transport -v` — 4 passed.
 * Affected topology/torus/packet and multicast tests — passed.
 * Strict Pyright and scoped Ruff — passed.
+
+## Part 5 (tasks 5.1–5.5)
+
+Part 5 adds a typed finite pipeline composition over one multicast plan and
+session. Stages bind concrete input/output buffers, slot generations and local
+waits; rounds enforce increasing thresholds and a complete operation/stage/wait
+dependency DAG. The generic two-round fixture reuses a collector slot only
+after each local wait and produces a final counter value of two. JSON fixtures
+are stored under `simulator_detailed/configs/multicast_workloads/`, with a
+separate canonical topology fixture and an explicitly assumed Wormhole profile
+fixture.
+
+Verification:
+
+* Pipeline tests — 2 passed; multicast memory/scalar/transport tests — passed.
+* Existing compute and memory runtime regressions — passed.
+* Strict Pyright and scoped Ruff — passed.
 * `git diff --check` and strict OpenSpec validation — passed.
 
 ## Part 3 (tasks 3.1–3.5)

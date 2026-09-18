@@ -123,7 +123,13 @@ class ScalarExecutor:
             if any(operation not in operation_ids for operation in wait.producer_operations + wait.data_ready_after):
                 raise ValueError(f"wait {wait.wait_id}: unknown producer")
 
-    def run(self, *, cycle_limit: float | None = None, snapshot: ScalarSnapshot | None = None) -> ScalarExecutionResult:
+    def run(
+        self,
+        *,
+        cycle_limit: float | None = None,
+        snapshot: ScalarSnapshot | None = None,
+        external_completed: tuple[str, ...] = (),
+    ) -> ScalarExecutionResult:
         if cycle_limit is not None and cycle_limit < 0:
             raise ValueError("cycle limit must be non-negative")
         workload = self.plan.workload
@@ -143,7 +149,9 @@ class ScalarExecutor:
             )
             for counter in workload.counters
         }
-        completed_operations: set[str] = set(snapshot.completed_operations) if snapshot else set()
+        completed_operations: set[str] = set(external_completed)
+        if snapshot is not None:
+            completed_operations.update(snapshot.completed_operations)
         completed_waits: set[str] = set(snapshot.completed_waits) if snapshot else set()
         pending_waits = set(snapshot.pending_waits) if snapshot else {
             wait.wait_id for wait in workload.waits
@@ -220,7 +228,8 @@ class ScalarExecutor:
                 )
                 wait_records.append(self._wait_record(wait, state, observations, "incomplete", data_ready, None, reason))
 
-        complete = len(completed_operations) == len(workload.increments) and not pending_waits - completed_waits
+        increment_ids = {increment.operation_id for increment in workload.increments}
+        complete = increment_ids <= completed_operations and not pending_waits - completed_waits
         pending = tuple(sorted(pending_waits - completed_waits))
         return ScalarExecutionResult(
             status="complete" if complete else "incomplete",
@@ -240,8 +249,8 @@ class ScalarExecutor:
             ),
         )
 
-    def resume(self, result: ScalarExecutionResult) -> ScalarExecutionResult:
-        return self.run(snapshot=result.snapshot)
+    def resume(self, result: ScalarExecutionResult, *, external_completed: tuple[str, ...] = ()) -> ScalarExecutionResult:
+        return self.run(snapshot=result.snapshot, external_completed=external_completed)
 
     @staticmethod
     def _event(sequence: int, elapsed: float, action: ScalarAction, operation_id: str | None,

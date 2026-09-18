@@ -1,0 +1,530 @@
+{
+  "asic_id": "synthetic",
+  "attachments": [
+    {
+      "eject_port": "local",
+      "enabled": true,
+      "endpoint_id": "ep-t0_0",
+      "fabric_id": 0,
+      "inject_port": "local",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "r-t0_0"
+      ],
+      "role": "compute",
+      "router_id": "t0_0"
+    },
+    {
+      "eject_port": "local",
+      "enabled": true,
+      "endpoint_id": "ep-t1_0",
+      "fabric_id": 0,
+      "inject_port": "local",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "r-t1_0"
+      ],
+      "role": "compute",
+      "router_id": "t1_0"
+    },
+    {
+      "eject_port": "local",
+      "enabled": true,
+      "endpoint_id": "ep-t0_1",
+      "fabric_id": 0,
+      "inject_port": "local",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "r-t0_1"
+      ],
+      "role": "compute",
+      "router_id": "t0_1"
+    },
+    {
+      "eject_port": "local",
+      "enabled": true,
+      "endpoint_id": "ep-t1_1",
+      "fabric_id": 0,
+      "inject_port": "local",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "r-t1_1"
+      ],
+      "role": "compute",
+      "router_id": "t1_1"
+    },
+    {
+      "eject_port": "local",
+      "enabled": true,
+      "endpoint_id": "ep-t2_1",
+      "fabric_id": 0,
+      "inject_port": "local",
+      "permissions_resolved": true,
+      "replay_enabled": true,
+      "resource_ids": [
+        "r-t2_1"
+      ],
+      "role": "compute",
+      "router_id": "t2_1"
+    }
+  ],
+  "connectivity_state": "complete",
+  "enabled_worker_ids": [
+    "t0_0",
+    "t1_0",
+    "t0_1",
+    "t1_1",
+    "t2_1"
+  ],
+  "fabrics": [
+    {
+      "extent": {
+        "height": 2,
+        "width": 3
+      },
+      "fabric_id": 0,
+      "routing_policy": "dimension_order_xy",
+      "topology_policy": "torus_2d"
+    }
+  ],
+  "kind": "canonical_topology",
+  "links": [
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t1_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t0_0/x+",
+      "src_port": "x+",
+      "src_router": "t0_0",
+      "wrap": false
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t0_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t0_0/y+",
+      "src_port": "y+",
+      "src_router": "t0_0",
+      "wrap": false
+    },
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t2_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t1_0/x+",
+      "src_port": "x+",
+      "src_router": "t1_0",
+      "wrap": false
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t1_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t1_0/y+",
+      "src_port": "y+",
+      "src_router": "t1_0",
+      "wrap": false
+    },
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t0_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t2_0/x+",
+      "src_port": "x+",
+      "src_router": "t2_0",
+      "wrap": true
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t2_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t2_0/y+",
+      "src_port": "y+",
+      "src_router": "t2_0",
+      "wrap": false
+    },
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t1_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t0_1/x+",
+      "src_port": "x+",
+      "src_router": "t0_1",
+      "wrap": false
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t0_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t0_1/y+",
+      "src_port": "y+",
+      "src_router": "t0_1",
+      "wrap": true
+    },
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t2_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t1_1/x+",
+      "src_port": "x+",
+      "src_router": "t1_1",
+      "wrap": false
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t1_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t1_1/y+",
+      "src_port": "y+",
+      "src_router": "t1_1",
+      "wrap": true
+    },
+    {
+      "direction": "right",
+      "dst_port": "x-",
+      "dst_router": "t0_1",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t2_1/x+",
+      "src_port": "x+",
+      "src_router": "t2_1",
+      "wrap": true
+    },
+    {
+      "direction": "down",
+      "dst_port": "y-",
+      "dst_router": "t2_0",
+      "enabled": true,
+      "fabric_id": 0,
+      "link_id": "t2_1/y+",
+      "src_port": "y+",
+      "src_router": "t2_1",
+      "wrap": true
+    }
+  ],
+  "logical_workers": [
+    {
+      "logical_x": 0,
+      "logical_y": 0,
+      "tile_id": "t0_0",
+      "worker_index": 0
+    },
+    {
+      "logical_x": 1,
+      "logical_y": 0,
+      "tile_id": "t1_0",
+      "worker_index": 1
+    },
+    {
+      "logical_x": 0,
+      "logical_y": 1,
+      "tile_id": "t0_1",
+      "worker_index": 2
+    },
+    {
+      "logical_x": 1,
+      "logical_y": 1,
+      "tile_id": "t1_1",
+      "worker_index": 3
+    },
+    {
+      "logical_x": 2,
+      "logical_y": 1,
+      "tile_id": "t2_1",
+      "worker_index": 4
+    }
+  ],
+  "origin": {
+    "kind": "synthetic"
+  },
+  "resources": [
+    {
+      "capacity_bytes": 4096,
+      "kind": "local_sram",
+      "owner_tile_id": "t0_0",
+      "resource_id": "r-t0_0"
+    },
+    {
+      "capacity_bytes": 4096,
+      "kind": "local_sram",
+      "owner_tile_id": "t1_0",
+      "resource_id": "r-t1_0"
+    },
+    {
+      "capacity_bytes": 4096,
+      "kind": "local_sram",
+      "owner_tile_id": "t0_1",
+      "resource_id": "r-t0_1"
+    },
+    {
+      "capacity_bytes": 4096,
+      "kind": "local_sram",
+      "owner_tile_id": "t1_1",
+      "resource_id": "r-t1_1"
+    },
+    {
+      "capacity_bytes": 4096,
+      "kind": "local_sram",
+      "owner_tile_id": "t2_1",
+      "resource_id": "r-t2_1"
+    }
+  ],
+  "routers": [
+    {
+      "coordinate": {
+        "x": 0,
+        "y": 0
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t0_0",
+      "tile_id": "t0_0"
+    },
+    {
+      "coordinate": {
+        "x": 1,
+        "y": 0
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t1_0",
+      "tile_id": "t1_0"
+    },
+    {
+      "coordinate": {
+        "x": 2,
+        "y": 0
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t2_0",
+      "tile_id": "t2_0"
+    },
+    {
+      "coordinate": {
+        "x": 0,
+        "y": 1
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t0_1",
+      "tile_id": "t0_1"
+    },
+    {
+      "coordinate": {
+        "x": 1,
+        "y": 1
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t1_1",
+      "tile_id": "t1_1"
+    },
+    {
+      "coordinate": {
+        "x": 2,
+        "y": 1
+      },
+      "enabled": true,
+      "fabric_id": 0,
+      "ports": [
+        {
+          "kind": "network",
+          "port_id": "x+"
+        },
+        {
+          "kind": "network",
+          "port_id": "x-"
+        },
+        {
+          "kind": "network",
+          "port_id": "y+"
+        },
+        {
+          "kind": "network",
+          "port_id": "y-"
+        },
+        {
+          "kind": "local",
+          "port_id": "local"
+        }
+      ],
+      "router_id": "t2_1",
+      "tile_id": "t2_1"
+    }
+  ],
+  "schema_version": 1,
+  "tiles": [
+    {
+      "role": "worker",
+      "tile_id": "t0_0",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "role": "worker",
+      "tile_id": "t1_0",
+      "x": 1,
+      "y": 0
+    },
+    {
+      "role": "transit",
+      "tile_id": "t2_0",
+      "x": 2,
+      "y": 0
+    },
+    {
+      "role": "worker",
+      "tile_id": "t0_1",
+      "x": 0,
+      "y": 1
+    },
+    {
+      "role": "worker",
+      "tile_id": "t1_1",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "role": "worker",
+      "tile_id": "t2_1",
+      "x": 2,
+      "y": 1
+    }
+  ],
+  "topology_id": "small-3x2"
+}

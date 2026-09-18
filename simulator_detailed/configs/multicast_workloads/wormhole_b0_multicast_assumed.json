@@ -1,0 +1,325 @@
+{
+  "control": {
+    "atomic_native_cycles": 5.0,
+    "evidence": {
+      "description": "synthetic multicast contract",
+      "status": "assumed"
+    },
+    "local_observation_aci_cycles": 1.0,
+    "replication_capacity_flits": 4,
+    "reservation_capacity": 2,
+    "reservation_edge_aci_cycles": 1.0,
+    "reservation_setup_aci_cycles": 1.0
+  },
+  "kind": "multicast_sync_workload",
+  "memory": {
+    "aci_clock_hz": 500000000.0,
+    "buffers": [
+      {
+        "base_address": 0,
+        "buffer_id": "b-ep-t0_0",
+        "initially_ready": true,
+        "readable": true,
+        "resource_id": "r-t0_0",
+        "size_bytes": 1024,
+        "writable": true
+      },
+      {
+        "base_address": 0,
+        "buffer_id": "b-ep-t1_0",
+        "initially_ready": false,
+        "readable": true,
+        "resource_id": "r-t1_0",
+        "size_bytes": 1024,
+        "writable": true
+      },
+      {
+        "base_address": 0,
+        "buffer_id": "b-ep-t0_1",
+        "initially_ready": false,
+        "readable": true,
+        "resource_id": "r-t0_1",
+        "size_bytes": 1024,
+        "writable": true
+      },
+      {
+        "base_address": 0,
+        "buffer_id": "b-ep-t1_1",
+        "initially_ready": false,
+        "readable": true,
+        "resource_id": "r-t1_1",
+        "size_bytes": 1024,
+        "writable": true
+      },
+      {
+        "base_address": 0,
+        "buffer_id": "b-ep-t2_1",
+        "initially_ready": false,
+        "readable": true,
+        "resource_id": "r-t2_1",
+        "size_bytes": 1024,
+        "writable": true
+      }
+    ],
+    "endpoint_queue_capacity_packets": 2,
+    "endpoint_staging_capacity_flits": 4,
+    "endpoints": [
+      {
+        "endpoint_id": "ep-t0_0",
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "fabric_id": 0,
+        "resource_ids": [
+          "r-t0_0"
+        ],
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "router_id": "t0_0"
+      },
+      {
+        "endpoint_id": "ep-t1_0",
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "fabric_id": 0,
+        "resource_ids": [
+          "r-t1_0"
+        ],
+        "roles": [
+          "target"
+        ],
+        "router_id": "t1_0"
+      },
+      {
+        "endpoint_id": "ep-t0_1",
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "fabric_id": 0,
+        "resource_ids": [
+          "r-t0_1"
+        ],
+        "roles": [
+          "target"
+        ],
+        "router_id": "t0_1"
+      },
+      {
+        "endpoint_id": "ep-t1_1",
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "fabric_id": 0,
+        "resource_ids": [
+          "r-t1_1"
+        ],
+        "roles": [
+          "target"
+        ],
+        "router_id": "t1_1"
+      },
+      {
+        "endpoint_id": "ep-t2_1",
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "fabric_id": 0,
+        "resource_ids": [
+          "r-t2_1"
+        ],
+        "roles": [
+          "target"
+        ],
+        "router_id": "t2_1"
+      }
+    ],
+    "fabrics": [
+      0
+    ],
+    "issue_latency_aci_cycles": 1.0,
+    "max_aci_cycles": 10000.0,
+    "max_outstanding_segments": 2,
+    "packet": {
+      "address_alignment_bytes": 32,
+      "data_capacity_bytes": 32,
+      "evidence": {
+        "description": "synthetic multicast contract",
+        "status": "assumed"
+      },
+      "header_flits": 1,
+      "max_segment_payload_bytes": 64,
+      "physical_flit_bytes": 32
+    },
+    "resources": [
+      {
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "resource_id": "r-t0_0",
+        "service": {
+          "bytes_per_cycle": 32.0,
+          "chunk_bytes": 32,
+          "evidence": {
+            "description": "synthetic multicast contract",
+            "status": "assumed"
+          },
+          "fixed_latency_cycles": 1.0,
+          "native_clock_hz": 1000000000.0,
+          "policy": "aggregate_shared_rw_v1",
+          "queue_capacity": 4,
+          "service_granule_bytes": 32
+        }
+      },
+      {
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "resource_id": "r-t1_0",
+        "service": {
+          "bytes_per_cycle": 32.0,
+          "chunk_bytes": 32,
+          "evidence": {
+            "description": "synthetic multicast contract",
+            "status": "assumed"
+          },
+          "fixed_latency_cycles": 1.0,
+          "native_clock_hz": 1000000000.0,
+          "policy": "aggregate_shared_rw_v1",
+          "queue_capacity": 4,
+          "service_granule_bytes": 32
+        }
+      },
+      {
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "resource_id": "r-t0_1",
+        "service": {
+          "bytes_per_cycle": 32.0,
+          "chunk_bytes": 32,
+          "evidence": {
+            "description": "synthetic multicast contract",
+            "status": "assumed"
+          },
+          "fixed_latency_cycles": 1.0,
+          "native_clock_hz": 1000000000.0,
+          "policy": "aggregate_shared_rw_v1",
+          "queue_capacity": 4,
+          "service_granule_bytes": 32
+        }
+      },
+      {
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "resource_id": "r-t1_1",
+        "service": {
+          "bytes_per_cycle": 32.0,
+          "chunk_bytes": 32,
+          "evidence": {
+            "description": "synthetic multicast contract",
+            "status": "assumed"
+          },
+          "fixed_latency_cycles": 1.0,
+          "native_clock_hz": 1000000000.0,
+          "policy": "aggregate_shared_rw_v1",
+          "queue_capacity": 4,
+          "service_granule_bytes": 32
+        }
+      },
+      {
+        "evidence": {
+          "description": "synthetic multicast contract",
+          "status": "assumed"
+        },
+        "resource_id": "r-t2_1",
+        "service": {
+          "bytes_per_cycle": 32.0,
+          "chunk_bytes": 32,
+          "evidence": {
+            "description": "synthetic multicast contract",
+            "status": "assumed"
+          },
+          "fixed_latency_cycles": 1.0,
+          "native_clock_hz": 1000000000.0,
+          "policy": "aggregate_shared_rw_v1",
+          "queue_capacity": 4,
+          "service_granule_bytes": 32
+        }
+      }
+    ],
+    "source": {
+      "kind": "hardware_profile",
+      "profile_path": "configs/profiles/wormhole_b0_n150_assumed.json"
+    }
+  },
+  "model_revision": "finite_multicast_sync_v1",
+  "schema_version": 1,
+  "writes": [
+    {
+      "completion": "write_acknowledged",
+      "destinations": [
+        {
+          "buffer_id": "b-ep-t0_0",
+          "endpoint_id": "ep-t0_0",
+          "offset_bytes": 128
+        },
+        {
+          "buffer_id": "b-ep-t1_0",
+          "endpoint_id": "ep-t1_0",
+          "offset_bytes": 128
+        },
+        {
+          "buffer_id": "b-ep-t0_1",
+          "endpoint_id": "ep-t0_1",
+          "offset_bytes": 128
+        },
+        {
+          "buffer_id": "b-ep-t1_1",
+          "endpoint_id": "ep-t1_1",
+          "offset_bytes": 128
+        },
+        {
+          "buffer_id": "b-ep-t2_1",
+          "endpoint_id": "ep-t2_1",
+          "offset_bytes": 128
+        }
+      ],
+      "fabric_id": 0,
+      "operation_id": "broadcast",
+      "rectangle": {
+        "end": {
+          "x": 2,
+          "y": 1
+        },
+        "include_source": true,
+        "major_axis": "x",
+        "start": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "size_bytes": 96,
+      "source": {
+        "buffer_id": "b-ep-t0_0",
+        "offset_bytes": 0,
+        "size_bytes": 96
+      },
+      "source_endpoint_id": "ep-t0_0",
+      "target_offset_bytes": 128
+    }
+  ]
+}
