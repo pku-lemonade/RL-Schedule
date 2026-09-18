@@ -170,3 +170,44 @@ records their delivery. Report/documentation/output files do not hash themselves
 Progress after this commit: **5/35 tasks complete**. Next part: **2.1–2.5**, public
 result adapters, normalization and independent event audits. No Part 2 runtime
 implementation is included here, and no push was performed.
+
+## Part 2 — adapters, observations and independent audits
+
+Tasks 2.1–2.5 completed. Six named adapters use existing public admission
+boundaries and preserve raw result schemas and canonical result hashes. Memory
+and compute support snapshots followed by resumption on the same runtime.
+Normalization exposes exact counters, scoped identities, addressed publication
+effects, per-subject causal edges, service/engine intervals, routes, clock domains
+and explicit metric windows. Incomplete results have only partial metrics.
+Tensor values remain unsupported. Clock conversion uses exact rational arithmetic.
+Explicit one-to-one mappings compare addressed effects and partial-order reachability
+without demanding an incidental event-list order.
+
+Independent audits derive modular routes, flit counts and byte extents, memory
+granule/service cost, matrix/block/storage work and native/ACI durations from
+admitted configurations. They replay descriptor, slot/generation, engine and
+credit transitions, check shared physical service and publication charges, and
+require drained operations/effects/resources for complete runs. Equal-time credit
+events are checked as a group because public exports sort simultaneous events by
+fields; each token still requires reserve/release/return causality. No producer
+routing, costing or accounting helper is called by these audits. Dynamic compute
+memory operations are consumed from its session export; compute shapes and stage
+prerequisites are separately checked against the admitted compute configuration.
+
+Validation on this host:
+
+- Adapter/oracle suite: **22 tests, 22 passed, 0 failures/errors/skips** (14.859s).
+  Includes direct/wrapped equality, generic and Wormhole geometries/widths/clocks,
+  local-only and pending traffic, exact large counters, partial orders, resume,
+  corrupt hops/flits/packet sets/shared service, unpaid posted publication,
+  descriptor/slot/credit release, generation and premature compute stages.
+- Affected group (adapters before the final credit test, compute overlap/CLI,
+  memory CLI/runtime, torus routing/transport): **87 tests, 87 passed**, no skips
+  (64.806s). Existing independent constant-stage **21/14** and integrated
+  **45/33** oracles remain; direct result equality is explicitly a compatibility
+  check, not an independent correctness expectation.
+- Strict Pyright: **0 errors, 0 warnings**; scoped Ruff on validation/schema/tests
+  and `git diff --check`: **passed** after the final edits.
+
+No runtime mechanisms, hardware constants, replay formats or legacy consumers
+changed. No external functional execution or silicon timing was validated.

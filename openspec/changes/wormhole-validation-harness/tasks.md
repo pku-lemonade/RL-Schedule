@@ -8,11 +8,11 @@
 
 ## 2. Observation normalization and independent audits (VA-D04, D05, D10)
 
-- [ ] 2.1 Add named inspection/topology-v1/torus-v2/memory/compute adapters using public admission/result boundaries; verify direct versus wrapped result identities/events, local versus remote paths, planned versus completed work and incomplete/pending semantics without changing existing replay formats.
-- [ ] 2.2 Normalize supported identities, addressed effects, causal edges, resource/stage intervals and unit-tagged metrics while retaining raw result hashes; verify exact large counters, explicit identifier mappings, clock conversion, unsupported observables and equivalent partial orders with differently interleaved independent events.
-- [ ] 2.3 Implement independent route/packet/service audits from declared inputs and exported events, selectively extracting pure existing test helpers without importing test classes; verify at least two geometries/widths/clocks, boundary-size arithmetic and detection of corrupted hops, missing/duplicated packets and duplicated alias bandwidth.
-- [ ] 2.4 Implement ownership/generation/capacity, compute work/stage and drain audits; retain independent 21/14 and integrated 45/33 examples, then verify corrupted slot/descriptor release, premature math/publication, uncharged posted effects and false complete status are detected.
-- [ ] 2.5 Run focused normalization/oracle and affected torus/memory/compute regression tests plus strict type/scoped lint/whitespace checks; document which expectations are independent versus compatibility snapshots and commit before benchmark orchestration.
+- [x] 2.1 Add named inspection/topology-v1/torus-v2/memory/compute adapters using public admission/result boundaries; verify direct versus wrapped result identities/events, local versus remote paths, planned versus completed work and incomplete/pending semantics without changing existing replay formats.
+- [x] 2.2 Normalize supported identities, addressed effects, causal edges, resource/stage intervals and unit-tagged metrics while retaining raw result hashes; verify exact large counters, explicit identifier mappings, clock conversion, unsupported observables and equivalent partial orders with differently interleaved independent events.
+- [x] 2.3 Implement independent route/packet/service audits from declared inputs and exported events, selectively extracting pure existing test helpers without importing test classes; verify at least two geometries/widths/clocks, boundary-size arithmetic and detection of corrupted hops, missing/duplicated packets and duplicated alias bandwidth.
+- [x] 2.4 Implement ownership/generation/capacity, compute work/stage and drain audits; retain independent 21/14 and integrated 45/33 examples, then verify corrupted slot/descriptor release, premature math/publication, uncharged posted effects and false complete status are detected.
+- [x] 2.5 Run focused normalization/oracle and affected torus/memory/compute regression tests plus strict type/scoped lint/whitespace checks; document which expectations are independent versus compatibility snapshots and commit before benchmark orchestration.
 
 ## 3. Finite benchmark runner and regression gates (VA-D01, D02, D06, D10)
 
