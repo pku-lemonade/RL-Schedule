@@ -72,3 +72,19 @@ Verification:
 * Multicast contract, transport and memory tests — 14 passed.
 * Affected memory packet/session/service, topology, torus and DMA regressions — passed.
 * Strict Pyright, scoped Ruff, `git diff --check` and strict OpenSpec validation — passed.
+
+## Part 4 (tasks 4.1–4.5)
+
+Part 4 adds the addressed scalar projection. Counters are initialized as exact
+integers, naturally aligned and non-overlapping; only monotonic increment by
+one is admitted, with width-specific overflow checks. The executor records one
+indivisible linearization/effect, one physical request flit, and an optional
+return flit carrying the previous value. Local waits charge observations and
+require both threshold and declared data prerequisites without retaining a
+transport reservation.
+
+Verification:
+
+* Scalar counter/wait tests — 4 passed.
+* Multicast contract, transport and memory tests — passed.
+* Strict Pyright and scoped Ruff — passed.

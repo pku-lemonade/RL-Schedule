@@ -59,6 +59,7 @@
     "multicast_plan.py",
     "multicast_transport.py",
     "multicast_memory.py",
+    "multicast_scalar.py",
     "compute_memory.py",
     "compute_buffers.py",
     "compute_runtime.py",
