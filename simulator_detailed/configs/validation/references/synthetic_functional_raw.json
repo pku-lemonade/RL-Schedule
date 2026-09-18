@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "execution": "complete",
+  "clocks": [
+    {
+      "domain_id": "aci",
+      "hz": {
+        "state": "known",
+        "value": 500000000
+      }
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "buffer",
+      "role": "endpoint"
+    },
+    {
+      "entity_id": "resource",
+      "role": "resource"
+    },
+    {
+      "entity_id": "operation",
+      "role": "transfer"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "submitted",
+      "action": "submission",
+      "subject_id": "operation",
+      "time": null
+    },
+    {
+      "event_id": "completed",
+      "action": "complete",
+      "subject_id": "operation",
+      "time": null
+    }
+  ],
+  "effects": [
+    {
+      "effect_id": "write-33",
+      "destination_id": "buffer",
+      "resource_id": "resource",
+      "offset_bytes": 0,
+      "size_bytes": 33,
+      "count": 1,
+      "visibility_event": "completed"
+    }
+  ],
+  "causal_edges": [
+    {
+      "before": "submitted",
+      "after": "completed"
+    }
+  ],
+  "routes": [],
+  "intervals": [],
+  "metrics": [],
+  "pending": [],
+  "missing": []
+}

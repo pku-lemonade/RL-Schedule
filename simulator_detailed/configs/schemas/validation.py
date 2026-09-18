@@ -350,11 +350,52 @@ class ReferenceProvenance(ValidationRecord):
     def source_identity(self) -> Self:
         if self.revision.state != "known" and self.snapshot_sha256.state != "known":
             raise ValueError("reference requires an immutable revision or snapshot identity")
-        if self.producer == "ttsim" and self.classification == "hardware_capture":
+        if "ttsim" in self.producer.casefold() and self.classification == "hardware_capture":
             raise ValueError("ttsim is not a silicon timing source")
+        if "synthetic" in self.producer.casefold() and self.classification != "synthetic":
+            raise ValueError("synthetic producer cannot claim external evidence")
         unique(self.original_units, "original unit")
         unique(self.normalized_units, "normalized unit")
         return self
+
+
+class IdentifierMapping(ValidationRecord):
+    reference: Identifier
+    simulator: Identifier
+
+
+class ProfilerSelection(ValidationRecord):
+    device: Text
+    core_x: Index
+    core_y: Index
+    risc: Identifier
+    zone: Identifier
+    source_file: Text
+    source_line: Index
+    clock_domain: Identifier
+    metric_id: Identifier
+    boundary: Identifier
+    run_ids: tuple[Index, ...] = Field(min_length=1)
+    warmup_run_ids: tuple[Index, ...] = ()
+    aggregation: Literal["none", "mean", "median"]
+
+    @model_validator(mode="after")
+    def finite_samples(self) -> Self:
+        unique(self.run_ids, "profiler run")
+        unique(self.warmup_run_ids, "profiler warmup")
+        if not set(self.warmup_run_ids) < set(self.run_ids):
+            raise ValueError("warmups must be a proper subset of selected runs")
+        if self.aggregation == "none" and len(self.run_ids) - len(self.warmup_run_ids) != 1:
+            raise ValueError("unaggregated profiler metric requires one retained run")
+        return self
+
+
+class SampleStatistics(ValidationRecord):
+    sample_count: PositiveInt
+    durations_cycles: tuple[Index, ...] = Field(min_length=1)
+    minimum_cycles: Index
+    maximum_cycles: Index
+    mean_absolute_deviation_cycles: NonNegative
 
 
 class ValidationReference(ValidationRecord):
@@ -365,12 +406,16 @@ class ValidationReference(ValidationRecord):
     provenance: ReferenceProvenance
     conditions: ReferenceConditions
     observations: NormalizedObservations | None
+    profiler: ProfilerSelection | None = None
+    sample_statistics: SampleStatistics | None = None
 
     @model_validator(mode="after")
     def raw_identity(self) -> Self:
         if (self.observations is not None and self.observations.source_result_sha256
                 != self.provenance.raw_artifact.sha256):
             raise ValueError("reference observations must identify their raw artifact")
+        if self.format == "normalized_functional_v1" and (self.profiler is not None or self.sample_statistics is not None):
+            raise ValueError("functional reference cannot carry CSV extraction options")
         return self
 
 
@@ -396,11 +441,17 @@ class CheckSelection(ValidationRecord):
     requirements: tuple[Identifier, ...] = Field(min_length=1)
     reference_id: Identifier | None = None
     metrics: tuple[MetricPolicy, ...] = ()
+    entity_mappings: tuple[IdentifierMapping, ...] = ()
+    event_mappings: tuple[IdentifierMapping, ...] = ()
+    clock_mappings: tuple[IdentifierMapping, ...] = ()
 
     @model_validator(mode="after")
     def policy(self) -> Self:
         unique(self.requirements, "requirement binding")
         unique(tuple(m.metric_id for m in self.metrics), "metric policy")
+        for mapping in (self.entity_mappings, self.event_mappings, self.clock_mappings):
+            unique(tuple(m.reference for m in mapping), "reference mapping")
+            unique(tuple(m.simulator for m in mapping), "simulator mapping")
         if self.check in ("functional_reference", "silicon_timing") and self.reference_id is None:
             raise ValueError("reference comparisons require an explicit reference binding")
         if self.check in ("metrics", "silicon_timing") and not self.metrics:
@@ -421,6 +472,7 @@ class ValidationCase(ValidationRecord):
     expected_execution: ExecutionState
     checks: tuple[CheckSelection, ...] = Field(min_length=1)
     resume_at_aci_cycles: tuple[Positive, ...] = ()
+    conditions: ReferenceConditions | None = None
 
     @model_validator(mode="after")
     def finite_execution(self) -> Self:

@@ -24,11 +24,11 @@
 
 ## 4. Reference import and comparison admission (VA-D02..04, D07)
 
-- [ ] 4.1 Implement normalized functional-reference ingestion with explicit producer/raw/extractor provenance and endpoint/address/causal mappings; verify matching observable effects can pass despite independent event-order differences, mismatched effects fail and missing numerical observations remain unsupported.
-- [ ] 4.2 Implement the pinned device-profiler CSV subset and sidecar parser with exact integer subtraction, unambiguous same-domain zone pairing, explicit warm-ups/repetitions and mean/median aggregation; test nested/ambiguous or missing pairs, unsupported formats/phases, frequency/architecture contradictions and counters above floating-point integer precision.
-- [ ] 4.3 Implement comparison admission for profile/layout/clock/workload/software/instrumentation/window/unit/aggregation compatibility; verify missing metadata, cross-core timestamp subtraction, unmatched kernel/host work and incompatible device captures produce explicit blocked comparisons without guessed defaults.
-- [ ] 4.4 Add clearly labeled synthetic functional/CSV fixtures and negative provenance/metadata fixtures, plus a documented contract for supplying real captures; verify synthetic data, the documentation's Grayskull example and ttsim timing cannot become measured Wormhole evidence, and no vendor execution/network download occurs implicitly.
-- [ ] 4.5 Run focused importer/comparison tests, inherited offline suites and strict type/scoped lint/whitespace checks; record source/extractor identities and unavailable real external coverage, then commit before calibration.
+- [x] 4.1 Implement normalized functional-reference ingestion with explicit producer/raw/extractor provenance and endpoint/address/causal mappings; verify matching observable effects can pass despite independent event-order differences, mismatched effects fail and missing numerical observations remain unsupported.
+- [x] 4.2 Implement the pinned device-profiler CSV subset and sidecar parser with exact integer subtraction, unambiguous same-domain zone pairing, explicit warm-ups/repetitions and mean/median aggregation; test nested/ambiguous or missing pairs, unsupported formats/phases, frequency/architecture contradictions and counters above floating-point integer precision.
+- [x] 4.3 Implement comparison admission for profile/layout/clock/workload/software/instrumentation/window/unit/aggregation compatibility; verify missing metadata, cross-core timestamp subtraction, unmatched kernel/host work and incompatible device captures produce explicit blocked comparisons without guessed defaults.
+- [x] 4.4 Add clearly labeled synthetic functional/CSV fixtures and negative provenance/metadata fixtures, plus a documented contract for supplying real captures; verify synthetic data, the documentation's Grayskull example and ttsim timing cannot become measured Wormhole evidence, and no vendor execution/network download occurs implicitly.
+- [x] 4.5 Run focused importer/comparison tests, inherited offline suites and strict type/scoped lint/whitespace checks; record source/extractor identities and unavailable real external coverage, then commit before calibration.
 
 ## 5. Bounded calibration and held-out evaluation (VA-D03, D07, D08)
 

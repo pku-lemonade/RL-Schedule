@@ -252,3 +252,49 @@ Actual validation:
 The root smoke command is registered but its actual execution is reserved for
 the consolidated audit. The two historical root remap limitations remain
 recorded and are not counted as passes. No vendor launcher or network path exists.
+
+## Part 4 — reference extraction and comparison admission
+
+Tasks 4.1–4.5 completed. `wormhole_reference_import` extractor version **1**
+verifies raw hashes and supports normalized functional JSON plus the pinned
+`tt_metal_device_profiler_csv_v1` subset. Embedded extracted observations and
+statistics must agree with the raw bytes. The public profiler documentation was
+inspected again on 2026-09-18; its metadata/header columns match the pinned subset.
+The design's earlier documentation hash and ttsim README commit remain source
+context, not execution evidence. No vendor software or capture was downloaded/run.
+
+CSV pairing requires one selected device/core/RISC/zone/source-file/source-line/run;
+integer subtraction precedes conversion, timer IDs need not match, repeated/nested
+pairs and unsupported fields/phases/stat samples fail. Explicit warmups and
+none/mean/median reducers retain exact durations, sample count, extrema and mean
+absolute deviation. The synthetic counters exceed 2^60. The 25/27/29 samples yield
+mean/median 27, with a separate excluded 100-cycle warmup. A single model run does
+not silently match a repeated measurement aggregate.
+
+Functional comparison uses one-to-one entity/event mappings, exact range/count
+coverage (independent of chunk partition), physical ownership, mapped counters,
+visibility and causal reachability. Timing admission requires complete device,
+profile/layout/workload/mapping/software/firmware/instrumentation/window metadata.
+Model fields must agree with admitted inputs. Units, domains, frequencies and
+aggregation are checked; seconds conversion is explicit and rational. Missing or
+incompatible evidence is blocked; actual admitted discrepancies fail. Synthetic
+producer labels and ttsim cannot be promoted to silicon provenance. Supplied
+origin is explicitly unauthenticated.
+
+Checked-in hand-specified fixtures cover a 33-byte local effect and profiler
+repetitions; negative fixtures cover bad hashes, Grayskull/Wormhole contradiction
+and unknown metadata. Their README documents real-capture requirements. A runnable
+synthetic functional suite passes only the model-invariant tier.
+
+Actual validation:
+
+- Importer/comparison suite: **22/22 passed**, no skips (1.865s), including
+  changed effects, independent event order, missing pairs, cross-core pairing,
+  contradictory clocks/architecture, missing metadata and unsupported tensor values.
+- Combined importer/contracts/outcomes/adapters/offline-runner group before the
+  last three importer cases: **94/94 passed**, no skips (55.913s). This includes
+  all 19 offline catalog cases and optional-vs-required missing-reference behavior.
+- Strict Pyright **0 errors/warnings**, scoped Ruff and whitespace **passed**.
+
+No real functional reference, numerical execution or silicon timing was supplied
+or validated. Successful import is parsing/integrity evidence, not model accuracy.

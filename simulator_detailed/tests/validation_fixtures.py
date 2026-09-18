@@ -41,7 +41,7 @@ def reference_document(classification="synthetic"):
         "kind": "validation_reference", "schema_version": 1, "reference_id": "reference",
         "format": "normalized_functional_v1",
         "provenance": {
-            "classification": classification, "producer": "synthetic_fixture",
+            "classification": classification, "producer": "synthetic_fixture" if classification == "synthetic" else "test_declared_external_producer",
             "source_url": unknown(), "revision": unknown(),
             "snapshot_sha256": {"state": "known", "value": HASH},
             "raw_artifact": {"path": "capture.json", "sha256": HASH},

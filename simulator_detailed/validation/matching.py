@@ -16,11 +16,22 @@ def functional_match(actual: NormalizedObservations, reference: NormalizedObserv
     for source, target in entities.items():
         require(source in reference_entities and target in actual_entities, "mapping contains unknown entity")
         require(reference_entities[source].role == actual_entities[target].role, "mapping changes entity role")
+        owner = reference_entities[source].physical_owner
+        if owner is not None:
+            require(entities.get(owner) == actual_entities[target].physical_owner, "mapping changes physical resource owner")
     needed = {identity for effect in reference.effects for identity in (effect.destination_id, effect.resource_id)}
     require(needed <= set(entities), "missing explicit effect entity mapping")
     require(bool(reference.effects), "reference has no supported addressed effects")
-    expected = Counter((entities[e.destination_id], entities[e.resource_id], e.offset_bytes, e.size_bytes, e.count) for e in reference.effects)
-    observed = Counter((e.destination_id, e.resource_id, e.offset_bytes, e.size_bytes, e.count) for e in actual.effects)
+    def coverage(observations: NormalizedObservations, mapping: Mapping[str, str]) -> dict[tuple[str, str], tuple[tuple[int, int], ...]]:
+        deltas: dict[tuple[str, str], Counter[int]] = defaultdict(Counter)
+        for effect in observations.effects:
+            destination, resource = mapping[effect.destination_id], mapping[effect.resource_id]
+            changes = deltas[(destination, resource)]
+            changes[effect.offset_bytes] += effect.count
+            changes[effect.offset_bytes + effect.size_bytes] -= effect.count
+        return {identity: tuple(sorted((position, delta) for position, delta in changes.items() if delta)) for identity, changes in deltas.items()}
+    expected = coverage(reference, entities)
+    observed = coverage(actual, {identity: identity for identity in actual_entities})
     require(expected == observed, "addressed effects differ")
     reference_events = {e.event_id: e for e in reference.events}
     actual_events = {e.event_id: e for e in actual.events}
@@ -32,14 +43,28 @@ def functional_match(actual: NormalizedObservations, reference: NormalizedObserv
         require(source in reference_events and target in actual_events, "mapping contains unknown event")
         left, right = reference_events[source], actual_events[target]
         require(left.action == right.action and entities.get(left.subject_id) == right.subject_id, "mapped event semantics differ")
+        for counter in left.counters:
+            require(counter in right.counters, "mapped event counters differ")
     successors: dict[str, set[str]] = defaultdict(set)
     for edge in actual.causal_edges:
         successors[edge.before].add(edge.after)
-    for edge in reference.causal_edges:
-        pending, visited = [events[edge.before]], set[str]()
+    def reachable(start: str) -> set[str]:
+        pending, visited = [start], set[str]()
         while pending:
             current = pending.pop()
             if current not in visited:
                 visited.add(current)
                 pending.extend(successors[current])
-        require(events[edge.after] in visited, "required causal relation is absent")
+        return visited
+
+    for edge in reference.causal_edges:
+        require(events[edge.after] in reachable(events[edge.before]), "required causal relation is absent")
+    for expected_effect in reference.effects:
+        if expected_effect.visibility_event is None:
+            continue
+        visible = events[expected_effect.visibility_event]
+        for effect in actual.effects:
+            if ((effect.destination_id, effect.resource_id) == (entities[expected_effect.destination_id], entities[expected_effect.resource_id])
+                    and effect.offset_bytes < expected_effect.offset_bytes + expected_effect.size_bytes
+                    and expected_effect.offset_bytes < effect.offset_bytes + effect.size_bytes):
+                require(effect.visibility_event is not None and visible in reachable(effect.visibility_event), "effect not published before mapped visibility event")

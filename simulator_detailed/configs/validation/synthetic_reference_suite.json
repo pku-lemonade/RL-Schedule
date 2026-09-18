@@ -1,0 +1,149 @@
+{
+  "kind": "validation_suite",
+  "schema_version": 1,
+  "suite_id": "synthetic_functional_adapter_demo",
+  "max_cases": 1,
+  "references": [
+    {
+      "reference_id": "synthetic_functional",
+      "document": {
+        "path": "references/synthetic_functional.json",
+        "sha256": "36cb9158da13c352e0f0cd8fcea3c3771e64a1652082cc000990fd5e2459420e"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "local",
+      "adapter": "memory_replay_v1",
+      "input_path": "memory_local.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 10000
+      },
+      "expected_execution": "complete",
+      "conditions": {
+        "architecture": {
+          "state": "known",
+          "value": "synthetic"
+        },
+        "profile_version": {
+          "state": "known",
+          "value": "canonical_topology_v1"
+        },
+        "enabled_layout": {
+          "state": "known",
+          "value": {
+            "text": "{\"enabled_worker_ids\":[\"t0_0\",\"t0_1\",\"t0_2\",\"t1_0\",\"t1_1\",\"t1_2\",\"t2_0\",\"t2_1\"]}"
+          }
+        },
+        "workload": {
+          "state": "known",
+          "value": {
+            "text": "{\"aci_clock_hz\":500000000.0,\"buffers\":[{\"base_address\":0,\"buffer_id\":\"local\",\"initially_ready\":true,\"producer_operation_id\":null,\"readable\":true,\"resource_id\":\"l1-a\",\"size_bytes\":16384,\"writable\":true},{\"base_address\":0,\"buffer_id\":\"remote\",\"initially_ready\":false,\"producer_operation_id\":null,\"readable\":true,\"resource_id\":\"dram\",\"size_bytes\":16384,\"writable\":true}],\"endpoint_queue_capacity_packets\":1,\"endpoint_staging_capacity_flits\":1,\"endpoints\":[{\"eject_port\":null,\"enabled\":true,\"endpoint_id\":\"src0\",\"fabric_id\":0,\"inject_port\":null,\"resource_ids\":[\"l1-a\"],\"roles\":[\"initiator\",\"target\",\"response_sink\"],\"router_id\":\"t0_0\"},{\"eject_port\":null,\"enabled\":true,\"endpoint_id\":\"ram0\",\"fabric_id\":0,\"inject_port\":null,\"resource_ids\":[\"dram\"],\"roles\":[\"target\"],\"router_id\":\"t2_2\"},{\"eject_port\":null,\"enabled\":true,\"endpoint_id\":\"src1\",\"fabric_id\":1,\"inject_port\":null,\"resource_ids\":[\"l1-a\"],\"roles\":[\"initiator\",\"target\",\"response_sink\"],\"router_id\":\"t0_0\"},{\"eject_port\":null,\"enabled\":true,\"endpoint_id\":\"ram1\",\"fabric_id\":1,\"inject_port\":null,\"resource_ids\":[\"dram\"],\"roles\":[\"target\"],\"router_id\":\"t2_2\"}],\"fabrics\":[0,1],\"issue_latency_aci_cycles\":1.0,\"kind\":\"memory_replay\",\"max_outstanding_segments\":2,\"model_revision\":\"addressed_memory_v1\",\"operations\":[{\"depends_on\":[],\"destination\":{\"buffer_id\":\"local\",\"offset_bytes\":0,\"size_bytes\":33},\"destination_ready_after\":[],\"fabric_id\":null,\"fence_fabrics\":[],\"fence_mode\":null,\"fence_operations\":[],\"initiator_id\":\"src0\",\"kind\":\"local_write\",\"operation_id\":\"produce\",\"source\":null,\"source_version\":null,\"start_aci_cycles\":0.0}],\"packet\":{\"address_alignment_bytes\":4,\"data_capacity_bytes\":8,\"header_flits\":2,\"max_segment_payload_bytes\":24,\"physical_flit_bytes\":16},\"resources\":[{\"capacity_override_bytes\":null,\"resource_id\":\"dram\",\"service\":{\"chunk_bytes\":4,\"native_clock_hz\":250000000.0,\"policy\":\"aggregate_shared_rw_v1\",\"queue_capacity\":2,\"service_granule_bytes\":4}},{\"capacity_override_bytes\":null,\"resource_id\":\"l1-a\",\"service\":{\"chunk_bytes\":4,\"native_clock_hz\":250000000.0,\"policy\":\"aggregate_shared_rw_v1\",\"queue_capacity\":2,\"service_granule_bytes\":4}}],\"routing\":[{\"dateline\":{\"x\":0,\"y\":0},\"fabric_id\":0,\"link_default\":{\"enabled\":true},\"router_default\":{\"enabled\":true},\"routing_policy\":\"dimension_order_xy\",\"topology_policy\":\"torus_2d_positive\"},{\"dateline\":{\"x\":0,\"y\":0},\"fabric_id\":1,\"link_default\":{\"enabled\":true},\"router_default\":{\"enabled\":true},\"routing_policy\":\"dimension_order_yx\",\"topology_policy\":\"torus_2d_positive\"}],\"schema_version\":1,\"source\":{\"kind\":\"canonical_graph\"}}"
+          }
+        },
+        "mapping": {
+          "state": "known",
+          "value": {
+            "text": "{\"attachments\":[{\"eject_port\":\"local\",\"enabled\":true,\"endpoint_id\":\"ram0\",\"fabric_id\":0,\"inject_port\":\"local\",\"legacy_binding\":null,\"permissions_resolved\":true,\"replay_enabled\":true,\"resource_ids\":[\"dram\"],\"role\":\"network\",\"router_id\":\"t2_2\"},{\"eject_port\":\"local\",\"enabled\":true,\"endpoint_id\":\"ram1\",\"fabric_id\":1,\"inject_port\":\"local\",\"legacy_binding\":null,\"permissions_resolved\":true,\"replay_enabled\":true,\"resource_ids\":[\"dram\"],\"role\":\"network\",\"router_id\":\"t2_2\"},{\"eject_port\":\"local\",\"enabled\":true,\"endpoint_id\":\"src0\",\"fabric_id\":0,\"inject_port\":\"local\",\"legacy_binding\":null,\"permissions_resolved\":true,\"replay_enabled\":true,\"resource_ids\":[\"l1-a\"],\"role\":\"compute\",\"router_id\":\"t0_0\"},{\"eject_port\":\"local\",\"enabled\":true,\"endpoint_id\":\"src1\",\"fabric_id\":1,\"inject_port\":\"local\",\"legacy_binding\":null,\"permissions_resolved\":true,\"replay_enabled\":true,\"resource_ids\":[\"l1-a\"],\"role\":\"compute\",\"router_id\":\"t0_0\"}],\"resources\":[{\"capacity_bytes\":65536,\"evidence_path\":null,\"kind\":\"dram\",\"owner_tile_id\":null,\"resource_id\":\"dram\",\"source_parameter\":null},{\"capacity_bytes\":65536,\"evidence_path\":null,\"kind\":\"local_sram\",\"owner_tile_id\":\"t0_0\",\"resource_id\":\"l1-a\",\"source_parameter\":null}]}"
+          }
+        },
+        "device": {
+          "state": "known",
+          "value": "synthetic-model"
+        },
+        "device_scope": {
+          "state": "known",
+          "value": "model_identity"
+        },
+        "clocks": {
+          "state": "known",
+          "value": [
+            {
+              "domain_id": "aci",
+              "hz": {
+                "state": "known",
+                "value": 500000000
+              }
+            }
+          ]
+        },
+        "software": {
+          "state": "known",
+          "value": "synthetic-fixture-v1"
+        },
+        "firmware": {
+          "state": "known",
+          "value": "synthetic-none"
+        },
+        "instrumentation": {
+          "state": "known",
+          "value": {
+            "text": "{\"producer\":\"handwritten synthetic arithmetic\"}"
+          }
+        },
+        "measurement": {
+          "state": "known",
+          "value": {
+            "boundary": "simulation_start_to_snapshot",
+            "start": {
+              "value": 0,
+              "unit": "cycles",
+              "clock_domain": "aci"
+            },
+            "end": {
+              "value": 27,
+              "unit": "cycles",
+              "clock_domain": "aci"
+            },
+            "excluded_warmups": [],
+            "repetitions": 1,
+            "aggregation": "none"
+          }
+        },
+        "capture_group": {
+          "state": "known",
+          "value": "synthetic-functional-local-33"
+        }
+      },
+      "checks": [
+        {
+          "check_id": "functional_adapter",
+          "check": "functional_reference",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D04",
+            "VA-D07"
+          ],
+          "reference_id": "synthetic_functional",
+          "entity_mappings": [
+            {
+              "reference": "buffer",
+              "simulator": "endpoint:[\"buffer\",\"local\"]"
+            },
+            {
+              "reference": "resource",
+              "simulator": "resource:\"l1-a\""
+            },
+            {
+              "reference": "operation",
+              "simulator": "transfer:\"produce\""
+            }
+          ],
+          "event_mappings": [
+            {
+              "reference": "submitted",
+              "simulator": "[\"lifecycle\",\"transfer:\\\"produce\\\"\",\"submission\"]:0"
+            },
+            {
+              "reference": "completed",
+              "simulator": "[\"lifecycle\",\"transfer:\\\"produce\\\"\",\"complete\"]:0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

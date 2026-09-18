@@ -100,11 +100,14 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
 
     session = obj(raw["memory_session"]) if "memory_session" in raw else raw
     previous: dict[str, str] = {}
+    lifecycle_ids: dict[tuple[str, str], str] = {}
     for group, role, field in (("stages", "job", "job_id"), ("lifecycle", "transfer", "operation_id")):
         source = raw if group == "stages" else session
         for row in rows(source.get(group, [])):
             subject = entity(role, row[field])
             identifier = event(group, row, subject)
+            if group == "lifecycle":
+                lifecycle_ids[(text(row["operation_id"]), text(row["action"]))] = identifier
             # Per-subject orders are meaningful; independent subjects have no invented edges.
             if subject in previous:
                 edges.append(CausalEdge(before=previous[subject], after=identifier))
@@ -112,11 +115,17 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     for index, row in enumerate(rows(session.get("ownership_trace", []))):
         resource = entity("resource", row["resource_id"])
         subject = entity("endpoint", ["buffer", row["buffer_id"]])
+        entities[subject] = entities[subject].model_copy(update={"physical_owner": resource})
         identifier = event("ownership", row, subject)
         if row["action"] == "publish" and integer(row["size_bytes"]) > 0:
             effects.append(AddressedEffect(effect_id=f"publish:{index}", destination_id=subject,
                                            resource_id=resource, offset_bytes=integer(row["address"]),
                                            size_bytes=integer(row["size_bytes"]), count=1, visibility_event=identifier))
+            version = row.get("version")
+            if isinstance(version, dict) and version.get("producer_id") is not None:
+                ready = lifecycle_ids.get((text(version["producer_id"]), "destination_ready"))
+                if ready is not None:
+                    edges.append(CausalEdge(before=identifier, after=ready))
     for row in rows(session.get("chunks", [])):
         resource = entity("resource", row["resource_id"])
         owner = entity("transfer", row["client_id"])
