@@ -29,6 +29,7 @@ class MulticastWritePlan(GraphRecord):
     operation_id: Identifier
     fabric_id: Index
     source_endpoint_id: Identifier
+    completion: Literal["write_posted", "write_acknowledged"]
     source_useful_bytes: int
     destination_useful_bytes: int
     packet_physical_bytes: int
@@ -205,6 +206,7 @@ class MulticastSyncPlan:
             operation_id=write.operation_id,
             fabric_id=write.fabric_id,
             source_endpoint_id=write.source_endpoint_id,
+            completion=write.completion,
             source_useful_bytes=write.size_bytes,
             destination_useful_bytes=write.size_bytes * len(tree.recipients),
             packet_physical_bytes=packet_bytes,

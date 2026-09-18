@@ -257,6 +257,8 @@ def compile_rectangle_tree(
         buffers=buffers,
         writable=False,
     )
+    if write.completion == "write_acknowledged" and "response_sink" not in source_binding.roles:
+        raise ValueError("acknowledged multicast source requires a bounded response sink")
     source_coordinate = source_router.coordinate
     if source_coordinate is None:
         raise ValueError("source router must have a coordinate")

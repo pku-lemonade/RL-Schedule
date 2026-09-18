@@ -54,3 +54,21 @@ Verification:
 * Affected topology/torus/packet and multicast tests — passed.
 * Strict Pyright and scoped Ruff — passed.
 * `git diff --check` and strict OpenSpec validation — passed.
+
+## Part 3 (tasks 3.1–3.5)
+
+Part 3 attaches tree recipients to the existing addressed-memory buffers and
+resource/service records through a side-effect-free executor. It performs one
+source read, one bounded service charge for each admitted recipient and marks a
+destination ready only after the complete segmented extent is written. Posted
+and acknowledged completion are distinct: acknowledged operations emit one
+bounded header-only return packet per recipient and segment after destination
+service, and require the existing response-sink role. Interrupted execution
+does not publish readiness or versions; resuming a completed result is
+idempotent.
+
+Verification:
+
+* Multicast contract, transport and memory tests — 14 passed.
+* Affected memory packet/session/service, topology, torus and DMA regressions — passed.
+* Strict Pyright, scoped Ruff, `git diff --check` and strict OpenSpec validation — passed.
