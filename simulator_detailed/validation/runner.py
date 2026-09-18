@@ -31,6 +31,7 @@ from .identity import (
 from .normalize import execution, normalize
 from .outcomes import aggregate_status, tier_status
 from .references import import_reference
+from .reporting import case_capabilities, requirement_coverage
 
 
 @dataclass(frozen=True)
@@ -157,8 +158,11 @@ def run_suite(path: Path) -> ValidationReport:
     gates = tuple(run_gate(gate) for gate in admitted.document.gates)
     checks = tuple(check for case in cases for check in case.checks) + gates
     return ValidationReport(kind="validation_report", schema_version=1, suite_sha256=bytes_digest(path.read_bytes()),
-                            status=aggregate_status(checks), cases=cases, gate_checks=gates, coverage=(),
+                            status=aggregate_status(checks), cases=cases, gate_checks=gates,
+                            coverage=requirement_coverage(admitted.document, cases, gates),
+                            case_capabilities=tuple(case_capabilities(source, case) for source, case in zip(admitted.cases, cases, strict=True)),
                             references=tuple(r[1] for r in admitted.references.values() if not isinstance(r, str)),
+                            reference_documents=tuple(r[0] for r in admitted.references.values() if not isinstance(r, str)),
                             capabilities=("finite_offline_validation_v1",),
                             assumptions=("Configured rates, clocks and capacities are explicit model inputs.",),
                             limitations=("No tensor values, multicast or synchronization validation.", "No authenticated device origin or measured timing without compatible supplied captures.",

@@ -12,7 +12,9 @@ explicit reads/writes, shared memory service, local clients and ordering.
 [Finite compute workloads](compute_dataflow.md) execute configured FC/matmul
 costs with transaction-backed readers/writers and bounded overlapping streams.
 Numerical/kernel execution, general Wormhole workloads and silicon timing
-calibration remain unavailable.
+calibration remain unvalidated. The [validation harness](validation.md) adds
+independent offline audits, explicit reference import and synthetic bounded
+calibration demonstrations.
 
 - [Configuration](config.md)
 - [Hardware profile inspection and current Wormhole limits](hardware_profile.md)
@@ -20,6 +22,7 @@ calibration remain unavailable.
 - [Version-2 torus transport, examples and limitations](torus_transport.md)
 - [Addressed memory replay, accounting and limits](memory_transactions.md)
 - [Finite compute workloads, examples and compatibility](compute_dataflow.md)
+- [Validation, evidence tiers, reference import and calibration](validation.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

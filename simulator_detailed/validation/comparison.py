@@ -114,10 +114,17 @@ def tolerance_pass(actual: Fraction, reference: Fraction, policy: MetricPolicy) 
     return abs(actual - reference) <= tolerance
 
 
+def metric_error_summary(actual: Fraction, reference: Fraction) -> str:
+    relative = str(abs(actual - reference) / abs(reference)) if reference else "undefined (zero reference)"
+    return (f"actual={actual}; reference={reference}; signed_error={actual - reference}; "
+            f"absolute_error={abs(actual - reference)}; relative_error={relative}")
+
+
 def compare(selection: CheckSelection, admitted: Admission, conditions: ReferenceConditions | None,
             actual: NormalizedObservations, reference: ValidationReference, evidence: EvidenceReference) -> CheckResult:
     tier = selection.tier
     timing = selection.check in ("metrics", "silicon_timing")
+    details: list[str] = []
     try:
         classification = reference.provenance.classification
         if tier == "silicon_timing" and classification != "hardware_capture":
@@ -143,7 +150,9 @@ def compare(selection: CheckSelection, admitted: Admission, conditions: Referenc
                         if declared_clock is None or declared_clock.hz.state != "known" or declared_clock.hz != clock.hz:
                             raise IncompatibleReference("declared clocks contradict observed clock domains/frequencies")
                 left, right = metric_pair(actual, expected, policy, {m.reference: m.simulator for m in selection.clock_mappings})
-                require(tolerance_pass(left, right, policy), f"{policy.metric_id} outside declared tolerance: actual={left}, reference={right}")
+                detail = f"{policy.metric_id}: {metric_error_summary(left, right)}"
+                require(tolerance_pass(left, right, policy), f"{detail}; outside declared tolerance")
+                details.append(detail)
         else:
             functional_match(actual, expected, {m.reference: m.simulator for m in selection.entity_mappings},
                              {m.reference: m.simulator for m in selection.event_mappings})
@@ -154,5 +163,5 @@ def compare(selection: CheckSelection, admitted: Admission, conditions: Referenc
         return CheckResult(check_id=selection.check_id, required=selection.required, tier=tier, outcome="fail", executed=True,
                            reason=str(exc), observation_ids=(actual.observation_id,), evidence=(evidence,), comparison_admitted=True)
     return CheckResult(check_id=selection.check_id, required=selection.required, tier=tier, outcome="pass", executed=True,
-                       reason="admitted observable comparison passed; supplied origin is not authenticated", observation_ids=(actual.observation_id,),
+                       reason="admitted observable comparison passed; supplied origin is not authenticated" + ("; " + "; ".join(details) if details else ""), observation_ids=(actual.observation_id,),
                        evidence=(evidence,), comparison_admitted=True)

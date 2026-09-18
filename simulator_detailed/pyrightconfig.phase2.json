@@ -13,6 +13,7 @@
     "configs/schemas/compute_workload.py",
     "configs/schemas/validation.py",
     "validation",
+    "validate_wormhole.py",
     "compute_records.py",
     "compute_cost.py",
     "compute_plan.py",

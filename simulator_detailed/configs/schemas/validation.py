@@ -712,6 +712,18 @@ class RequirementCoverage(ValidationRecord):
         return self
 
 
+class CaseCapabilities(ValidationRecord):
+    case_id: Identifier
+    architecture: Metadata[str]
+    profile_version: Metadata[str]
+    enabled_mechanisms: tuple[Identifier, ...]
+    clocks: tuple[ClockDomain, ...]
+    effective_plan_sha256: Digest
+    simulation_fault_experiment: bool
+    assumptions: tuple[Text, ...]
+    unsupported: tuple[Identifier, ...]
+
+
 class ValidationReport(ValidationRecord):
     kind: Literal["validation_report"]
     schema_version: Version
@@ -720,12 +732,14 @@ class ValidationReport(ValidationRecord):
     cases: tuple[CaseResult, ...] = Field(min_length=1)
     gate_checks: tuple[CheckResult, ...] = ()
     references: tuple[EvidenceReference, ...] = ()
+    reference_documents: tuple[ValidationReference, ...] = ()
     coverage: tuple[RequirementCoverage, ...]
     capabilities: tuple[Identifier, ...]
     assumptions: tuple[Text, ...]
     limitations: tuple[Text, ...]
     functional_reference: EvidenceStatus
     silicon_timing: EvidenceStatus
+    case_capabilities: tuple[CaseCapabilities, ...] = ()
     diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
 
     @model_validator(mode="after")
@@ -734,6 +748,11 @@ class ValidationReport(ValidationRecord):
         unique(tuple(c.check_id for c in self.gate_checks), "gate check")
         unique(tuple(r.reference_id for r in self.references), "report reference")
         unique(tuple(c.requirement_id for c in self.coverage), "coverage requirement")
+        unique(tuple(c.case_id for c in self.case_capabilities), "capability case")
+        for capability in self.case_capabilities:
+            case = next((c for c in self.cases if c.case_id == capability.case_id), None)
+            if case is None or case.identity is None or case.identity.effective_plan_sha256 != capability.effective_plan_sha256:
+                raise ValueError("capabilities require the matching admitted case identity")
         checks = tuple(c for case in self.cases for c in case.checks) + self.gate_checks
         if not any(c.required for c in checks):
             raise ValueError("report requires required checks")
@@ -743,6 +762,11 @@ class ValidationReport(ValidationRecord):
                 or self.silicon_timing != tier_status(checks, "silicon_timing")):
             raise ValueError("report claims disagree with actual evidence tiers")
         references = {r.reference_id: r for r in self.references}
+        unique(tuple(r.reference_id for r in self.reference_documents), "imported reference document")
+        for reference in self.reference_documents:
+            evidence = references.get(reference.reference_id)
+            if evidence is None or evidence.classification != reference.provenance.classification:
+                raise ValueError("imported reference provenance disagrees with report evidence")
         for check in checks:
             if any(references.get(e.reference_id) != e for e in check.evidence):
                 raise ValueError("check evidence disagrees with report reference identity/classification")

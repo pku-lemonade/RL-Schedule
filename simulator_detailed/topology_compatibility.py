@@ -11,6 +11,13 @@ from .topology import Topology, content_digest, topology_from_legacy
 from .utils.definitions import NoCChannel
 
 CONSUMERS = frozenset({"detailed_predictor", "detailed_encoder"})
+VALIDATION_KINDS = frozenset({"validation_suite", "validation_reference", "validation_report", "calibration_plan", "calibration_result"})
+
+
+def reject_validation_document(value: object) -> None:
+    kind = cast(Mapping[str, object], value).get("kind") if isinstance(value, Mapping) else getattr(value, "kind", None)
+    if isinstance(kind, str) and kind in VALIDATION_KINDS:
+        raise TypeError(f"{kind} is validation evidence, not a legacy topology or event stream")
 
 
 def require_legacy_topology(topology: object, consumer: str,
@@ -40,6 +47,7 @@ def require_legacy_topology(topology: object, consumer: str,
 
 def legacy_event_rows(document: object, stream: str) -> list[dict[str, object]]:
     """Accept existing trace wrappers/lists, reject versioned graph/replay events."""
+    reject_validation_document(document)
     if stream not in {"compute", "communication"}:
         raise ValueError(f"unknown legacy event stream {stream!r}")
     if isinstance(document, Mapping):
@@ -73,6 +81,7 @@ def legacy_coordinates(topology: Topology) -> dict[tuple[int, int], tuple[int, i
 
 def require_legacy_nocs(value: object) -> tuple[dict[NoCChannel, NoC], Topology]:
     """Validate actual encoder runtime objects before optional tensor operations."""
+    reject_validation_document(value)
     if not isinstance(value, Mapping) or not value:
         raise TypeError("detailed encoder requires a nonempty mapping of legacy NoC instances")
     nocs: dict[NoCChannel, NoC] = {}

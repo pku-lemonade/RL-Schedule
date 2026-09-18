@@ -334,3 +334,47 @@ Actual validation:
 Both examples remain **synthetic demonstrations**; no measured calibration or
 real functional/silicon validation is claimed. Original hardware geometry,
 clocks, capacities, mappings and nonselected rates remain configurable and intact.
+
+## Part 6 — CLI, scoped reports and consumer boundaries
+
+Tasks 6.1–6.5 completed. `validate_wormhole.py` exposes mutually exclusive suite,
+reference-import and calibration modes, JSON stdout, stderr diagnostics and
+0/1/2/3 outcomes. Serialization precedes same-directory atomic replacement;
+invalid inputs preserve prior output, missing directories are not created, and
+output cannot replace any declared input/reference (including hard-link aliases).
+Nested assets resolve from their declaring document even from another cwd.
+
+Reports retain imported provenance/raw hashes, effective per-case capabilities,
+plan/source/result/observation identities, configured fault-experiment labels,
+unsupported mechanisms and scoped check-to-requirement links. Runtime coverage
+never infers entire requirement completion from a selected subset of checks.
+Parent VA-01..07 links and pending multicast/synchronization entries are explicit;
+committed coverage references are withheld for dirty/unknown source. Metric
+diagnostics include exact rational signed/absolute errors and relative errors
+only when the reference is nonzero. Synthetic evidence remains model-only.
+
+Shared legacy guards explicitly reject all five validation document kinds as
+typed records or JSON. Fresh-interpreter tests exercise actual public predictor
+and encoder functions while making any Torch/PyG import an assertion failure.
+Existing runtime, replay, feature, checkpoint and root RL implementations were
+not changed. `docs/validation.md` documents the runnable contracts and limits.
+
+Actual validation:
+
+- CLI/compute-consumer/memory-consumer group: **34 discovered, 33 passed,
+  0 failures/errors, 1 optional Torch/PyG skip** (16.444s). The CLI/guard module
+  contains **13** tests covering all modes/codes, atomic failure, raw/input alias
+  protection, absent directories, another cwd, fault labels and claim boundaries.
+- All **six documented CLI examples** executed successfully with parseable JSON
+  matching their temporary output files. Offline catalog: **19 cases, 123 passed
+  model checks**, 0 failed checks, optional ML gate blocked. Imports report
+  parsing/integrity only; both calibrations report synthetic demonstrations.
+- Final full detailed discovery after report refinements: **455 discovered,
+  454 passed, 0 failures/errors, 1 optional Torch/PyG skip** (155.396s). This
+  includes all new modules and existing timing/digest/compatibility regressions.
+- Strict Pyright **0 errors/warnings**, updated harness scoped Ruff, predecessor
+  compute scoped Ruff and whitespace checks **passed**.
+
+No vendor/network execution, real external comparison, silicon calibration or
+new root remap validation is claimed. Root Darknet19 execution and the final
+requirement-to-evidence handoff follow in the consolidated audit.

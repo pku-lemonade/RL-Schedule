@@ -48,7 +48,8 @@ def gate_command(gate: GateName) -> list[str]:
     if gate == "strict_pyright":
         return [sys.executable, "-m", "pyright", "--pythonpath", sys.executable, "--project", "simulator_detailed/pyrightconfig.phase2.json"]
     if gate == "scoped_ruff":
-        return [sys.executable, "-m", "ruff", "check", "simulator_detailed/validation", "simulator_detailed/configs/schemas/validation.py",
+        return [sys.executable, "-m", "ruff", "check", "simulator_detailed/validation", "simulator_detailed/validate_wormhole.py",
+                "simulator_detailed/topology_compatibility.py", "simulator_detailed/configs/schemas/validation.py", "simulator_detailed/tests/validation_fixtures.py",
                 *[str(p.relative_to(ROOT)) for p in sorted((ROOT / "simulator_detailed/tests").glob("test_validation*.py"))]]
     if gate == "root_darknet19_smoke":
         return [sys.executable, "-c", ROOT_SMOKE]

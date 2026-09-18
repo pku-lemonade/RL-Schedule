@@ -40,11 +40,11 @@
 
 ## 6. Report CLI, capability boundaries and documentation (VA-D01..04, D09..11)
 
-- [ ] 6.1 Add `validate_wormhole.py` with mutually exclusive suite/import/calibration modes, JSON stdout and diagnostic stderr, exit codes 0/1/2/3 and atomic optional output; verify each mode, relative paths from another working directory, no implicit directories/network access and unchanged existing replay CLI conventions.
-- [ ] 6.2 Implement report generation with check/observation/source identities, effective profile/capabilities/assumptions, explicit unavailable tiers and requirement coverage; verify optional external absence permits offline success while required absence returns incomplete, and fault experiments stay labeled simulation evidence.
-- [ ] 6.3 Add legacy consumer guards for all new document kinds where applicable, before optional ML/model imports; run public predictor/embedding guard tests and verify current legacy feature/graph/model/RL contracts and existing replay timing/digest fixtures remain unchanged.
-- [ ] 6.4 Add runnable offline, reference-import and calibration examples plus `docs/validation.md` explaining metrics, evidence tiers, external capture requirements and limitations; verify every documented command against checked-in assets with temporary output destinations and label all generated synthetic references accurately.
-- [ ] 6.5 Run focused CLI/report/consumer/example tests and relevant compatibility regressions plus strict type/scoped lint/whitespace checks; inspect parseable output and failure diagnostics, update progress evidence and commit before the consolidated audit.
+- [x] 6.1 Add `validate_wormhole.py` with mutually exclusive suite/import/calibration modes, JSON stdout and diagnostic stderr, exit codes 0/1/2/3 and atomic optional output; verify each mode, relative paths from another working directory, no implicit directories/network access and unchanged existing replay CLI conventions.
+- [x] 6.2 Implement report generation with check/observation/source identities, effective profile/capabilities/assumptions, explicit unavailable tiers and requirement coverage; verify optional external absence permits offline success while required absence returns incomplete, and fault experiments stay labeled simulation evidence.
+- [x] 6.3 Add legacy consumer guards for all new document kinds where applicable, before optional ML/model imports; run public predictor/embedding guard tests and verify current legacy feature/graph/model/RL contracts and existing replay timing/digest fixtures remain unchanged.
+- [x] 6.4 Add runnable offline, reference-import and calibration examples plus `docs/validation.md` explaining metrics, evidence tiers, external capture requirements and limitations; verify every documented command against checked-in assets with temporary output destinations and label all generated synthetic references accurately.
+- [x] 6.5 Run focused CLI/report/consumer/example tests and relevant compatibility regressions plus strict type/scoped lint/whitespace checks; inspect parseable output and failure diagnostics, update progress evidence and commit before the consolidated audit.
 
 ## 7. Consolidated validation and next-child handoff (VA-D01..11)
 

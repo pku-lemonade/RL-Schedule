@@ -34,6 +34,7 @@ from .comparison import (
     IncompatibleReference,
     admit_conditions,
     compare,
+    metric_error_summary,
     metric_pair,
     model_metadata,
     tolerance_pass,
@@ -199,7 +200,7 @@ def _fit_candidate(plan: CalibrationPlan, fit: tuple[CalibrationInput, ...], val
                 errors += weight * error
                 weights += weight
                 checks.append(CheckResult(check_id=f"{item.case.case_id}:{metric.metric_id}:fit_loss", required=True, tier="model_invariant", outcome="pass",
-                                           executed=True, reason=f"fit observation admitted; actual={actual}; reference={expected}; scaled absolute error={error}",
+                                           executed=True, reason=f"fit observation admitted; {metric_error_summary(actual, expected)}; scaled absolute error={error}",
                                            observation_ids=(observation.observation_id,), evidence=(item.evidence,), comparison_admitted=True))
         loss = float(errors / weights)
         require(math.isfinite(loss), "unrepresentable fit loss")
