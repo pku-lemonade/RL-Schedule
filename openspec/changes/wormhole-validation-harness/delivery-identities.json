@@ -1,0 +1,1302 @@
+{
+  "kind": "wormhole_validation_delivery_manifest",
+  "schema_version": 1,
+  "collection_note": "Collected on the Part 6 commit plus the explicitly recorded Part 7 audit fixes. Source manifests identify exact final bytes, independent of the subsequent documentation/commit identity. This manifest is excluded from its own source/input sets.",
+  "detailed_source": {
+    "revision": {
+      "state": "known",
+      "value": "736a39601271f25ba371b9f251a316f991e29e97",
+      "reason": null
+    },
+    "dirty": {
+      "state": "known",
+      "value": true,
+      "reason": null
+    },
+    "files": [
+      {
+        "logical_path": "simulator_detailed/__init__.py",
+        "sha256": "ee7ae4358b2ee9c19da25e145ee16765ca5103f117716c71e9aa0e4183a7472e",
+        "size_bytes": 2038
+      },
+      {
+        "logical_path": "simulator_detailed/architecture.py",
+        "sha256": "44d03f221e6dc45178f023c545851f5180d5882890c62b1b59f7c8d80f3fc65c",
+        "size_bytes": 12371
+      },
+      {
+        "logical_path": "simulator_detailed/benchmark_workloads.py",
+        "sha256": "f6e14aa97153f4d69f659d536b3860ace64367e43ae0ffc8840b1f3eeee9914d",
+        "size_bytes": 18158
+      },
+      {
+        "logical_path": "simulator_detailed/command_coordination.py",
+        "sha256": "64035ceb224afec4a09986b52699e2e17856cc4f361e64066356c2e499c833e6",
+        "size_bytes": 14145
+      },
+      {
+        "logical_path": "simulator_detailed/compute_adapters.py",
+        "sha256": "a1c232a7ef8a656199924662bfdf7ffdb3684fa3389ff58c0f024033657cb53d",
+        "size_bytes": 7818
+      },
+      {
+        "logical_path": "simulator_detailed/compute_buffers.py",
+        "sha256": "6bcdcbf497ee2cd3f761ad2b1aadeb1000df1a3f9c66385529a527a6b7d95ac0",
+        "size_bytes": 14108
+      },
+      {
+        "logical_path": "simulator_detailed/compute_cost.py",
+        "sha256": "6c712a7eef415996d9bec12b3100c6f28673c28bc742c864d05819b8a80a6199",
+        "size_bytes": 5341
+      },
+      {
+        "logical_path": "simulator_detailed/compute_memory.py",
+        "sha256": "c07c0a8d37d642b3b2479cdc80719f66254f4fe0d535d95df21edf34a19048e8",
+        "size_bytes": 12631
+      },
+      {
+        "logical_path": "simulator_detailed/compute_pipeline.py",
+        "sha256": "3e085ad81e155b72c04d1e7838da65e7b6217bb88109c5dc69a57e8867a6ffaf",
+        "size_bytes": 5197
+      },
+      {
+        "logical_path": "simulator_detailed/compute_plan.py",
+        "sha256": "738b308c0ef2ae27be7987919e23bdcbbb61273eef7f341f4286f6b393c8937f",
+        "size_bytes": 15654
+      },
+      {
+        "logical_path": "simulator_detailed/compute_records.py",
+        "sha256": "b80989889b6c7dae420a96f5af612673f196e72904c7be7a922dfe42a402c4f4",
+        "size_bytes": 5708
+      },
+      {
+        "logical_path": "simulator_detailed/compute_runtime.py",
+        "sha256": "4f5926b4249396cc2910f3b7f52a71b171d3efaaceb3e257be9399293060f776",
+        "size_bytes": 22037
+      },
+      {
+        "logical_path": "simulator_detailed/configs/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/arch_config.py",
+        "sha256": "db631c82897bf48156faea2a1294afd6b889f7f08cad1a35c37962dcd015e2a7",
+        "size_bytes": 13110
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/compute_workload.py",
+        "sha256": "115ba6bfd2b6c4b2661c7af83495aed360b5445a19baee2935bc375e2f330747",
+        "size_bytes": 6516
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/failure_configs.py",
+        "sha256": "634bd1ff704a32aff6ee618c50cf64a7a07753822f9bb0d7840b780a033bf84a",
+        "size_bytes": 1576
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/hardware_profile.py",
+        "sha256": "7fa18d18ca261ac9df017047d3283c0f16f58c0b2a17cc416e032e94e35c9d93",
+        "size_bytes": 16939
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/mapping_config.py",
+        "sha256": "802d94d0846b01d652b77424a2db7a7e3a7c27654dab2296b1760efdaf9d4ff6",
+        "size_bytes": 1069
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/memory_replay.py",
+        "sha256": "3255599e98481e65644153b05066ccf3bd90470493d68ea25f93275759ececd1",
+        "size_bytes": 13077
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/topology.py",
+        "sha256": "e7d393a219b99c317c59047acbe0733d9cb447972620cf6cb2a861f7c547818d",
+        "size_bytes": 16538
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/torus_replay.py",
+        "sha256": "8bcb0044a6794b6562f6c9cd099efc14474c7fedb33732afa7215156102d2240",
+        "size_bytes": 18172
+      },
+      {
+        "logical_path": "simulator_detailed/configs/schemas/validation.py",
+        "sha256": "79c91d9de59e12679a03cdb1b3c798145aa3bc1b251ecd330c3526d222f0155a",
+        "size_bytes": 43716
+      },
+      {
+        "logical_path": "simulator_detailed/core.py",
+        "sha256": "5a19ce0511896dbf9aa3d2c520c706d4daa894e15ec263993ea247ff2eda78c6",
+        "size_bytes": 17210
+      },
+      {
+        "logical_path": "simulator_detailed/distribution.py",
+        "sha256": "412226098df9b3fa37a1114d4dbcef411089f602c878f1c917e1e91f6c02ba34",
+        "size_bytes": 2699
+      },
+      {
+        "logical_path": "simulator_detailed/dma_endpoint.py",
+        "sha256": "1d8bbcc8b8b56d36bbc712424db9e9594928ce245570b8b31dbf1ff5ffb96afb",
+        "size_bytes": 27103
+      },
+      {
+        "logical_path": "simulator_detailed/embedding/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/embedding/_hardware_embedding.py",
+        "sha256": "dd03fea498864e7eaa12b7c19410832459b7f3b32ec6dc01d9fa187f21dcf1a8",
+        "size_bytes": 819
+      },
+      {
+        "logical_path": "simulator_detailed/embedding/action_decoder.py",
+        "sha256": "f319bc600033deace85bfb4a577905c52b6a13aa3669e6c2b342c1b2224cdb02",
+        "size_bytes": 2633
+      },
+      {
+        "logical_path": "simulator_detailed/embedding/hw_encoder.py",
+        "sha256": "c15b000f9b51b0a063404a28b57abb3cbe623a69fa08d6954519367c2b12a9d1",
+        "size_bytes": 2877
+      },
+      {
+        "logical_path": "simulator_detailed/endpoint_registry.py",
+        "sha256": "44583848007136b9ff573ca83be43090faf1b36380815d81250771e7abe67736",
+        "size_bytes": 5460
+      },
+      {
+        "logical_path": "simulator_detailed/hardware_profile.py",
+        "sha256": "5149e6b79096ffe7d16ddb72bf73ca84aeeed1d30fe32fcc73b989b80cfcb532",
+        "size_bytes": 18081
+      },
+      {
+        "logical_path": "simulator_detailed/inspect_profile.py",
+        "sha256": "19fb0d44a6755de87fe28d75b6cd53fdd02b54f4947ff69a6a97384a20c69e50",
+        "size_bytes": 1017
+      },
+      {
+        "logical_path": "simulator_detailed/memory_adapters.py",
+        "sha256": "de5aa2197f0772edda0082e935e412888b286bce66457e8fb394b80a57f3bd5f",
+        "size_bytes": 10735
+      },
+      {
+        "logical_path": "simulator_detailed/memory_execution.py",
+        "sha256": "700f46b5e9909a0af23ff06cbfbfa971a30a8b9569faa0fb988ba2a6fdd40705",
+        "size_bytes": 11896
+      },
+      {
+        "logical_path": "simulator_detailed/memory_ordering.py",
+        "sha256": "ca3c578eca27a6ef78da5540625c0c4079e07654a020e60e4b8684e7bd5128ec",
+        "size_bytes": 12226
+      },
+      {
+        "logical_path": "simulator_detailed/memory_packets.py",
+        "sha256": "a4fe5b9674fa04bc65dbfdce344c495e3402ed52b1840c12d74fbc775100d56e",
+        "size_bytes": 11131
+      },
+      {
+        "logical_path": "simulator_detailed/memory_plan.py",
+        "sha256": "0e7eefa1fa903af8d7b5d7a7d7632417c12cc04425f6f2749184fda5e6084cd5",
+        "size_bytes": 8256
+      },
+      {
+        "logical_path": "simulator_detailed/memory_records.py",
+        "sha256": "a0bba41d6ceccea3db4834c466d219ef354a5928611818fa6ab7dbeca7efbcbd",
+        "size_bytes": 8846
+      },
+      {
+        "logical_path": "simulator_detailed/memory_resources.py",
+        "sha256": "b1db70cb6a730409164c5a049f0a078f3b40071e6cc60378ffd3226096061f7d",
+        "size_bytes": 20128
+      },
+      {
+        "logical_path": "simulator_detailed/memory_routes.py",
+        "sha256": "ed541e10e92dede4ec8c808ae175e04e9eed5747490627f1972b7ca4c73b90e9",
+        "size_bytes": 5847
+      },
+      {
+        "logical_path": "simulator_detailed/memory_runtime.py",
+        "sha256": "f92fdcbe0b7fa4e7315876661158ec084d6c27b8e34efaba5f50ceda0d4357d9",
+        "size_bytes": 39480
+      },
+      {
+        "logical_path": "simulator_detailed/memory_service.py",
+        "sha256": "fcb4224263cfd96f948612f7b4d89bb1dc7f342881a180995b448255de57b919",
+        "size_bytes": 8419
+      },
+      {
+        "logical_path": "simulator_detailed/memory_session.py",
+        "sha256": "4c58c3f69a3bd56b85019a699f672726049babba98e0640aefb0034ddbb9f08b",
+        "size_bytes": 6455
+      },
+      {
+        "logical_path": "simulator_detailed/memory_transport.py",
+        "sha256": "ccf1748d2f58ce7379a496b5e0cbd78b59608a61d4298d80ef3e7de2253b6c55",
+        "size_bytes": 11100
+      },
+      {
+        "logical_path": "simulator_detailed/noc.py",
+        "sha256": "dde6e8b81e6f19e97ab7a9371c7aae2e19b571d35debfa32a16bb42c01eed8c8",
+        "size_bytes": 34284
+      },
+      {
+        "logical_path": "simulator_detailed/packet_runtime.py",
+        "sha256": "fce2991818877576094eced26d87ece58d5e674be25f495620d3b4c6f3c6b78a",
+        "size_bytes": 18896
+      },
+      {
+        "logical_path": "simulator_detailed/packet_transport.py",
+        "sha256": "e7b42202d4152a31e648474d14e9ac2367ca693b5d99581118d0f5ffe93175be",
+        "size_bytes": 6621
+      },
+      {
+        "logical_path": "simulator_detailed/pe_channel.py",
+        "sha256": "010b2abc191e87b2b50cdcffdfac90e8d481e2fc0935edd376c6c9ec7083cbaf",
+        "size_bytes": 23861
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/data_loader.py",
+        "sha256": "2476427bc91cc400443570816f87a5f218a669960ea616e7dcffe923c6d188c5",
+        "size_bytes": 25481
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/model_hetero.py",
+        "sha256": "32c29e2814b7a3f34072a9d8bd6bb009895fea4f15c8150d7e53994fe3646da4",
+        "size_bytes": 7599
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/predict.py",
+        "sha256": "a22a0034f32e64cd04fc0cf2529b1e59d87a33c1f8f89e4c2bf75a5da3302ea9",
+        "size_bytes": 4155
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/predictor.py",
+        "sha256": "9450f824f4a8cdfd547af7ddd135d0b095be04a5d789631b6b97178275b0748e",
+        "size_bytes": 20230
+      },
+      {
+        "logical_path": "simulator_detailed/predictor/topology.py",
+        "sha256": "9db6707928d9b38d76be60ea33c7dfe4d536d75b10b4d7eb8afbcc7d28d18e62",
+        "size_bytes": 5388
+      },
+      {
+        "logical_path": "simulator_detailed/replay_compute.py",
+        "sha256": "3272e088d7ec1e933736aa7191ae2d122a538301e692787337e05d5eccb4ddd3",
+        "size_bytes": 2154
+      },
+      {
+        "logical_path": "simulator_detailed/replay_memory.py",
+        "sha256": "32aa8f88980a58bc4fab99345601fecb4182f25b7256b97594427c353cf05f34",
+        "size_bytes": 1888
+      },
+      {
+        "logical_path": "simulator_detailed/replay_topology.py",
+        "sha256": "2169ec058b874a2804987c97f94219b98ab236f128ea4ebf542880760dd72f9a",
+        "size_bytes": 3227
+      },
+      {
+        "logical_path": "simulator_detailed/routing.py",
+        "sha256": "226a47ca779d4888fc16dfedff8061683127a494fa3c3fc505ffcfb851db7cab",
+        "size_bytes": 11256
+      },
+      {
+        "logical_path": "simulator_detailed/run.py",
+        "sha256": "c5e2f9b8cac6ff4bcc8456b2407b2f1b5a52edb79bb553afc4000a3b4b82ca5f",
+        "size_bytes": 13704
+      },
+      {
+        "logical_path": "simulator_detailed/tests/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_adapters.py",
+        "sha256": "7e1d08b348a5e84a83b8d5c30552587766f61a500e1992c9804d521c5024d61d",
+        "size_bytes": 10920
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_buffers.py",
+        "sha256": "58050bf91ee5034feb6f609f86a016038a6d58d0997e67daeeb9e2d9440f6170",
+        "size_bytes": 15671
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_cli.py",
+        "sha256": "0e357ccf5f5b326b58c335022a5233ee56147dc056d296492d53829abe388920",
+        "size_bytes": 15673
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_contracts.py",
+        "sha256": "d1a1262ab6945c5790d66ab6ef5c13a8378542da8f30725ea2e57f03b3bdd0e5",
+        "size_bytes": 26254
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_memory.py",
+        "sha256": "1430a3454905876e9dd14051d8e6220e51d94ecd888d47797d8d3f48c37d11a3",
+        "size_bytes": 5769
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_overlap.py",
+        "sha256": "08ff2be9eab1cb7dc1abf636e04c2a3340e5c222bdd85786d161c654848bad22",
+        "size_bytes": 23366
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_compute_runtime.py",
+        "sha256": "bcdc4e930a3e491df2f6c06570c8aa4919569c6bf2b1249f3a5f88f6f27f7061",
+        "size_bytes": 22108
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_hardware_profile.py",
+        "sha256": "d9282219899c6eac903311d07ab6335e049e8c180e444584261efe06c2f071d4",
+        "size_bytes": 35101
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_adapters.py",
+        "sha256": "543b9d6df941859d38156dbdca4bdeafdfc97ca9da095b5076742652cf37ec72",
+        "size_bytes": 26389
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_cli.py",
+        "sha256": "de9daff78ebf82ae8baa033e6ae0ddb25aaeef474f6efc4974bd1cf98e67f4a6",
+        "size_bytes": 15069
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_contracts.py",
+        "sha256": "e12bfe9a5037c03f9e5cad6aed9539102f0031b533fc13f48c651c7c44d232b9",
+        "size_bytes": 7837
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_ordering.py",
+        "sha256": "3051f4a35e49cd75feccb4c087d0f07ee1d60e27e3c7bfed286b651b8fdc24ab",
+        "size_bytes": 22776
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_packets.py",
+        "sha256": "3a29a74f9afa4cd397e187a7a7c934656e0599bff41ac846627160f4f8c89fee",
+        "size_bytes": 19036
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_resources.py",
+        "sha256": "bd38a60edefbf0ae12a21fc497dbbb61e9e4598b94e19316ac77ecc9fba0421e",
+        "size_bytes": 20429
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_runtime.py",
+        "sha256": "a06461bcaab9a5093f70851fb59d1b2c03269551dda04ac2c3d8a64c50ae7810",
+        "size_bytes": 28605
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_memory_session.py",
+        "sha256": "a07b52e0fb393d40faad8be3119e392a38c0939abcb5c3a59afef97a7bc82aa8",
+        "size_bytes": 16409
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_packet_runtime.py",
+        "sha256": "db8af0e6c8208fe67f1d23b351d46211a882a3582bbd6bf1b860429a26d15f64",
+        "size_bytes": 22106
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_phase2_noc.py",
+        "sha256": "06d8d81138679dab2462d0b507312c5e54266f8f853eb90835230c6524610fe5",
+        "size_bytes": 32749
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_phase3_dma.py",
+        "sha256": "090398003093b27a09aaca9475c848981afd76385d9ba067fc33da4fa793e1ba",
+        "size_bytes": 13083
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology.py",
+        "sha256": "b0987773e843b5ea66c2444f1d07b1eec32565d403cb8f4fa146156e8a84999b",
+        "size_bytes": 6587
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology_adapters.py",
+        "sha256": "442935fc91035a3d6a0ccff1095e4559ab4946047604cffce92032f83a3db4f2",
+        "size_bytes": 5853
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology_baseline.py",
+        "sha256": "12dc6188d285f05bc755c00558233c420e7946827fc0a8841cebe4c1fba1f9ea",
+        "size_bytes": 2837
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology_consumers.py",
+        "sha256": "24cdacda1f6cb6505adcb8cd4940ea5e3dff32cfcfbf9b20f461cf5b763f294d",
+        "size_bytes": 8378
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology_replay.py",
+        "sha256": "4e5ecb423bf597af3ff0a45637281f5f7e63cbd31cba74caa609bd7dbda8e71e",
+        "size_bytes": 15804
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_topology_transport.py",
+        "sha256": "c63d6d451509acef98e96c03811e205f2a9d5c3a1606439965e066fbd10a047b",
+        "size_bytes": 10046
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_torus.py",
+        "sha256": "d8282a3d151a2e9cfff4dbb3fdd00cc1b431d9ef065a7b561bd0eeea9224f318",
+        "size_bytes": 12656
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_torus_cli.py",
+        "sha256": "5f4e0a3e80225f397f4b2be52b14cbe264965acd794f5517f3e04ed90e517e9f",
+        "size_bytes": 5235
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_torus_contract.py",
+        "sha256": "710c05f1dd2502867d0035561d8ac52a56a9d6beb4291a17ac7ecc5bb5dd609a",
+        "size_bytes": 27884
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_torus_transport.py",
+        "sha256": "41846f74da98bf62a9bb528ab01f502c1cb36afbe16236833752555b134fd1bf",
+        "size_bytes": 15353
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_adapters.py",
+        "sha256": "a35159e7fa0ea16c8e66f0a35b3a4de1c8ca7eccfaa299236a7f3aede019d6e1",
+        "size_bytes": 12801
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_calibration.py",
+        "sha256": "45c21dcd4b717764b3d4c5127acb53c15e8776e21cfd56e7602ee10eedbde685",
+        "size_bytes": 12821
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_cli.py",
+        "sha256": "002fb3d0a7621af723974e99b759bd205b851a341573cbbcbd5e137bd6bf3ca9",
+        "size_bytes": 11704
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_contracts.py",
+        "sha256": "6210c2d7fb3c130baaf2597e3f5f839d67cd293c0106e22c44c05b2b3b8fb63d",
+        "size_bytes": 16919
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_identity.py",
+        "sha256": "9e8c6360c456ab4c635d92177166ea2a0a5497b04af78c42cc2405c2b16672a5",
+        "size_bytes": 10317
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_outcomes.py",
+        "sha256": "a50199e93747cf6aa208a6d7e06bb707324200cc6f3c741a8dd24cef59b89090",
+        "size_bytes": 10527
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_references.py",
+        "sha256": "3bad55d807871a603ce2cae772959c42431565e02cf038fa786e84c1ee5fabcf",
+        "size_bytes": 13125
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_validation_runner.py",
+        "sha256": "9593ca09637fd60c222d1dfd6ae3ac51c1c30bda88966ef725c694d504e9e316",
+        "size_bytes": 6436
+      },
+      {
+        "logical_path": "simulator_detailed/tests/test_virtual_channel.py",
+        "sha256": "61b9ca29621b9911fd29c5799f3ea061450c23be736293999f14235aaec7a765",
+        "size_bytes": 20825
+      },
+      {
+        "logical_path": "simulator_detailed/tests/validation_fixtures.py",
+        "sha256": "f37f82afef5ddc4c046c8af9dc7a2eb855f90f8df0ca0d62b2f3720bc7621689",
+        "size_bytes": 7651
+      },
+      {
+        "logical_path": "simulator_detailed/topology.py",
+        "sha256": "50971f99e775e23c476d95c070c6c8e9684396ca68693213341eee6be7cf3c40",
+        "size_bytes": 12692
+      },
+      {
+        "logical_path": "simulator_detailed/topology_compatibility.py",
+        "sha256": "1e05ca712d177e732ccaf07697d82fc5043a2938555c1a5d520039a4e71f28d4",
+        "size_bytes": 6447
+      },
+      {
+        "logical_path": "simulator_detailed/torus.py",
+        "sha256": "20409c5564b51744cec270da3f1d9b2ad7f88eca6b793844dc169a1b5d410d68",
+        "size_bytes": 27059
+      },
+      {
+        "logical_path": "simulator_detailed/torus_contract.py",
+        "sha256": "2e2aafb40533546525b4566b1d1377b322f6b839e4190fde5a4b8a2cbac86f2d",
+        "size_bytes": 13755
+      },
+      {
+        "logical_path": "simulator_detailed/torus_dependencies.py",
+        "sha256": "dea59262495b4bdb884c9e40b46effde515782a822853b39b79d77bf8b200fb0",
+        "size_bytes": 7544
+      },
+      {
+        "logical_path": "simulator_detailed/torus_records.py",
+        "sha256": "62af07a829334f04a2fbdb8bb3a80081f7f4ed295f30d865dbf27bc7c0c230d5",
+        "size_bytes": 11673
+      },
+      {
+        "logical_path": "simulator_detailed/torus_transport.py",
+        "sha256": "134bb85f2f528cd96410b75f0fd562216c21a0f1328ec4a6b0e04d6d18abecff",
+        "size_bytes": 20162
+      },
+      {
+        "logical_path": "simulator_detailed/tracing.py",
+        "sha256": "2f3854db7356504d1bd4184122703904394bfdd6000d457b67947d4ead75bded",
+        "size_bytes": 7020
+      },
+      {
+        "logical_path": "simulator_detailed/transport.py",
+        "sha256": "a296867773c76e8740ecee1c67618d339932846f93e9cedf6d9a7d1754ab5cfa",
+        "size_bytes": 20574
+      },
+      {
+        "logical_path": "simulator_detailed/utils/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "simulator_detailed/utils/definitions.py",
+        "sha256": "01a00e5bf0abdfa4948e977a7ccf73e8d2db48efd528393469e5139fd98ab9a8",
+        "size_bytes": 24405
+      },
+      {
+        "logical_path": "simulator_detailed/utils/dfg.py",
+        "sha256": "d1e6e1ce31c5826bafa7150f648eb7cd896d96799ffb89c9c2a7ddf3dbf75c71",
+        "size_bytes": 5111
+      },
+      {
+        "logical_path": "simulator_detailed/utils/mapper.py",
+        "sha256": "65e885870e547ad0f032a5666278b3a06e0192717eccc6110142c7ddece13945",
+        "size_bytes": 46074
+      },
+      {
+        "logical_path": "simulator_detailed/utils/mapper_old.py",
+        "sha256": "c0ed9418fd53e1355da74705a679bc4ae8060bed085f3551c9f61f14d1046deb",
+        "size_bytes": 17872
+      },
+      {
+        "logical_path": "simulator_detailed/utils/task.py",
+        "sha256": "d343e910439cb74b00e283a023ca93dd50f0fc648b76bad4f8e82f2d5bb7beeb",
+        "size_bytes": 12673
+      },
+      {
+        "logical_path": "simulator_detailed/utils/timing_logger.py",
+        "sha256": "e1b252fa776f07426522b0de569125975dbffd7eafc914df62da0b5a99223d96",
+        "size_bytes": 1505
+      },
+      {
+        "logical_path": "simulator_detailed/validate_wormhole.py",
+        "sha256": "52590aad5cf2194f77d0e889a61c1c751040a00e762b42a01604fbb3f9c5ffd8",
+        "size_bytes": 4769
+      },
+      {
+        "logical_path": "simulator_detailed/validation/__init__.py",
+        "sha256": "70682ea0c7dc22aa87f5bcfb9b576c22d0b70f69b247fbffd15c1fc6dc5453f4",
+        "size_bytes": 83
+      },
+      {
+        "logical_path": "simulator_detailed/validation/adapters.py",
+        "sha256": "5f4faced586f2ab31cf60a2b35b6e25e22fbdcb652a6bd15886b014484cf0628",
+        "size_bytes": 5128
+      },
+      {
+        "logical_path": "simulator_detailed/validation/audits.py",
+        "sha256": "7d80b035b14d8b8012f938752b21437ed952bb60908fbe1174ddfe10a35edb64",
+        "size_bytes": 34872
+      },
+      {
+        "logical_path": "simulator_detailed/validation/calibration.py",
+        "sha256": "f007b6bb9029bddd4153f2a97a247f4a69e3f467dbf0d25bd9de9326993f991d",
+        "size_bytes": 18779
+      },
+      {
+        "logical_path": "simulator_detailed/validation/comparison.py",
+        "sha256": "fdefef5a241fa2cfe3120b7c1e2a9c5c9833b9bfb0b0e08808fa1f5dc6c8f898",
+        "size_bytes": 10589
+      },
+      {
+        "logical_path": "simulator_detailed/validation/data.py",
+        "sha256": "7203c1ebc828dfd310790541d35e023f571ebfbfb252f190fdd24bc3f9835ade",
+        "size_bytes": 1372
+      },
+      {
+        "logical_path": "simulator_detailed/validation/gate_worker.py",
+        "sha256": "b63bee1b6437b2f5e4e41f83429560d2e0cf819dcb1b7c687c9f2d184665009d",
+        "size_bytes": 1232
+      },
+      {
+        "logical_path": "simulator_detailed/validation/gates.py",
+        "sha256": "75f3828e101eb8a66f4cabae355576d627c4c8e4776614516f93fb23c5b2de61",
+        "size_bytes": 4949
+      },
+      {
+        "logical_path": "simulator_detailed/validation/identity.py",
+        "sha256": "62a7822fc61b5246f38e1fb4ba3377c1872550ffbacbab1ab0536ec2bbeb9ef0",
+        "size_bytes": 8022
+      },
+      {
+        "logical_path": "simulator_detailed/validation/matching.py",
+        "sha256": "786373102e49603db894898f570d4fbc395a18fda474afe31fc9992ffd77270a",
+        "size_bytes": 4675
+      },
+      {
+        "logical_path": "simulator_detailed/validation/normalize.py",
+        "sha256": "04b5b107ba99e54475eeae610ed3ab4eb0f6c77be05bc1b93d8a3c1cc1a4ef18",
+        "size_bytes": 12513
+      },
+      {
+        "logical_path": "simulator_detailed/validation/outcomes.py",
+        "sha256": "f96902b0fea8dd5517a68f394c26d48d20a69f2fa9bb5662340feceba93773b2",
+        "size_bytes": 1955
+      },
+      {
+        "logical_path": "simulator_detailed/validation/references.py",
+        "sha256": "3e71f8cfc67feea2ee4d73a87e72bbf73d47d0389a66753ef1d162fdbcef0e81",
+        "size_bytes": 9309
+      },
+      {
+        "logical_path": "simulator_detailed/validation/reporting.py",
+        "sha256": "f96959cecc6b33ea04eaa60d2521f02e3d71a448e071f659de92d049df12df93",
+        "size_bytes": 5200
+      },
+      {
+        "logical_path": "simulator_detailed/validation/runner.py",
+        "sha256": "1999f7edf56a176e025b2e23944ee3155e36fc2786c367fcceb8f7cbb772cd48",
+        "size_bytes": 10397
+      },
+      {
+        "logical_path": "simulator_detailed/validation/worker.py",
+        "sha256": "98801cfe3c3b96c0910da04002da736cff08983873d29123f317124499c8c3f4",
+        "size_bytes": 547
+      },
+      {
+        "logical_path": "simulator_detailed/virtual_channel.py",
+        "sha256": "543679e785825405697e4aac1026b8e9aa96d2b3124d993abceec2d0c4a75bb5",
+        "size_bytes": 24086
+      }
+    ],
+    "bundle_sha256": "e88588c8fb20399b19f38799d0ee59ce84baaa13f42fb3d80c50230e3a7ba526"
+  },
+  "root_source": {
+    "revision": {
+      "state": "known",
+      "value": "736a39601271f25ba371b9f251a316f991e29e97",
+      "reason": null
+    },
+    "dirty": {
+      "state": "known",
+      "value": false,
+      "reason": null
+    },
+    "files": [
+      {
+        "logical_path": "configs/schemas/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "configs/schemas/arch_config.py",
+        "sha256": "d8edb417872d44adebd4c8e95f9ae621a016f282b1c7470364b87b710b5cef8f",
+        "size_bytes": 804
+      },
+      {
+        "logical_path": "configs/schemas/failure_configs.py",
+        "sha256": "40e606ebf641935778152375d95a7ac731a1fb971cde30fbb50298697107819d",
+        "size_bytes": 683
+      },
+      {
+        "logical_path": "configs/schemas/mapping_config.py",
+        "sha256": "84fe38d7a9564a49d4267a29bf0c5d8009f2dd510dc8adef5644f7e87c87a63d",
+        "size_bytes": 1150
+      },
+      {
+        "logical_path": "simulator/__init__.py",
+        "sha256": "b3f27e870a57aa6976940ab306277944ba434574733052be3efdfa8c3367aedb",
+        "size_bytes": 88
+      },
+      {
+        "logical_path": "simulator/architecture.py",
+        "sha256": "8b5069ce3a3eeaa9143a836f22aa1f3f5701df02faeff1fdd3df4ba50aef6d4a",
+        "size_bytes": 5133
+      },
+      {
+        "logical_path": "simulator/core.py",
+        "sha256": "1bca62c5bbdbfe714dd971a58df7b97a89d9d86fa18c75bda5c49e16793103d5",
+        "size_bytes": 11372
+      },
+      {
+        "logical_path": "simulator/distribution.py",
+        "sha256": "412226098df9b3fa37a1114d4dbcef411089f602c878f1c917e1e91f6c02ba34",
+        "size_bytes": 2699
+      },
+      {
+        "logical_path": "simulator/noc.py",
+        "sha256": "7da3355134db0935e6f9f73eca143430cee3c332262fcf475f26bf1c7da49951",
+        "size_bytes": 22127
+      },
+      {
+        "logical_path": "simulator/run.py",
+        "sha256": "233ec57a2d9c83c330f9c2ce3c3c4e6ec5530e31797198d9c6838c3d1de6bba9",
+        "size_bytes": 10748
+      },
+      {
+        "logical_path": "simulator/tracing.py",
+        "sha256": "49c4ad63d483ee4ced5b7c1a95270320fb44af332dc9b230db536dd67ca76ba2",
+        "size_bytes": 3028
+      },
+      {
+        "logical_path": "utils/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "logical_path": "utils/definitions.py",
+        "sha256": "89df39ea86c272f3d47310f3d582b3d66e3c7013c6e4c5b8bfd36dd515ca93c1",
+        "size_bytes": 2600
+      },
+      {
+        "logical_path": "utils/dfg.py",
+        "sha256": "8d602cbbe4a2932e203215ff77705a58bf703d9a34dc21d0c47014b764b2fa9e",
+        "size_bytes": 4079
+      },
+      {
+        "logical_path": "utils/mapper.py",
+        "sha256": "75cbaeb186f72d9a309b96130cae317c128e86f1026fc3cced7f25e718a667df",
+        "size_bytes": 45527
+      },
+      {
+        "logical_path": "utils/mapper_old.py",
+        "sha256": "f8d307b08010ecf6f7e520080b729f3e14443d98d10dead7b049ff3c23fbc982",
+        "size_bytes": 17174
+      },
+      {
+        "logical_path": "utils/task.py",
+        "sha256": "c13092cb1b81b4c911dcf86d5f105ddf94d811d4b969bbd83227b7c192332241",
+        "size_bytes": 8913
+      },
+      {
+        "logical_path": "utils/timing_logger.py",
+        "sha256": "a498dfafb9c192160dc4f55bad6505e0de50693ac990adee3b07e8fc274eafcd",
+        "size_bytes": 1489
+      }
+    ],
+    "bundle_sha256": "271593ce005c95b560891f90944945b2da4384ef4f39051c3fcb334d51c28b39"
+  },
+  "environment": {
+    "python_version": "3.12.12",
+    "python_implementation": "CPython",
+    "system": "Linux",
+    "release": "6.1.0-35-amd64",
+    "machine": "x86_64",
+    "dependencies": [
+      {
+        "name": "annotated-types",
+        "version": {
+          "state": "known",
+          "value": "0.8.0",
+          "reason": null
+        }
+      },
+      {
+        "name": "nodeenv",
+        "version": {
+          "state": "known",
+          "value": "1.10.0",
+          "reason": null
+        }
+      },
+      {
+        "name": "numpy",
+        "version": {
+          "state": "known",
+          "value": "2.5.3",
+          "reason": null
+        }
+      },
+      {
+        "name": "pydantic",
+        "version": {
+          "state": "known",
+          "value": "2.13.5",
+          "reason": null
+        }
+      },
+      {
+        "name": "pydantic-core",
+        "version": {
+          "state": "known",
+          "value": "2.46.5",
+          "reason": null
+        }
+      },
+      {
+        "name": "pyright",
+        "version": {
+          "state": "known",
+          "value": "1.1.414",
+          "reason": null
+        }
+      },
+      {
+        "name": "ruff",
+        "version": {
+          "state": "known",
+          "value": "0.16.7",
+          "reason": null
+        }
+      },
+      {
+        "name": "scipy",
+        "version": {
+          "state": "known",
+          "value": "1.18.1",
+          "reason": null
+        }
+      },
+      {
+        "name": "simpy",
+        "version": {
+          "state": "known",
+          "value": "4.1.2",
+          "reason": null
+        }
+      },
+      {
+        "name": "typing-extensions",
+        "version": {
+          "state": "known",
+          "value": "4.16.0",
+          "reason": null
+        }
+      },
+      {
+        "name": "typing-inspection",
+        "version": {
+          "state": "known",
+          "value": "0.4.4",
+          "reason": null
+        }
+      }
+    ]
+  },
+  "inputs": [
+    {
+      "path": "configs/instances/gemini4_4.json",
+      "sha256": "5ef646c7cf43fc0f4866217c1b7d2c25c4fffd4af0960817bb18a70a32607a69",
+      "size_bytes": 487
+    },
+    {
+      "path": "configs/instances/normal.json",
+      "sha256": "86f1c5abf7b199fd4c48b70987626451d2939531e03df411fa4137afae17bd34",
+      "size_bytes": 75
+    },
+    {
+      "path": "simulator_detailed/configs/compute_workloads/streaming_depth1.json",
+      "sha256": "8b12a32d469b531f545e8602c77b42f58c1edd26657f362f8ca7ce35bcbd913d",
+      "size_bytes": 17603
+    },
+    {
+      "path": "simulator_detailed/configs/compute_workloads/streaming_depth2.json",
+      "sha256": "03b09015a4db24f40e29985d84dcfe8e24d4d2a1dfeac48363cf1f6adf6e58d9",
+      "size_bytes": 18034
+    },
+    {
+      "path": "simulator_detailed/configs/compute_workloads/wormhole_bf16_matmul.json",
+      "sha256": "fce1f057bd9da45cd0242c3f81bb2bfc86b856cb452040a54ef3a580823b8cf6",
+      "size_bytes": 88113
+    },
+    {
+      "path": "simulator_detailed/configs/memory_replays/generic_incomplete.json",
+      "sha256": "83998cb1c4e6b6fa1c1dc0ef2f9bd5b445af19c527afafe8780ef75ee1a1eccb",
+      "size_bytes": 12361
+    },
+    {
+      "path": "simulator_detailed/configs/memory_replays/generic_ordered.json",
+      "sha256": "417ba4953ef12a20bd3d13d74bedd8910cd83ce4e3c9085382eb591cfaede043",
+      "size_bytes": 12364
+    },
+    {
+      "path": "simulator_detailed/configs/memory_replays/wormhole_ordered.json",
+      "sha256": "65fad11bbde9cf5394ec082510b24b5e42618e21d44e0f06e5e26f1b0033a5a3",
+      "size_bytes": 83144
+    },
+    {
+      "path": "simulator_detailed/configs/profiles/wormhole_b0_n150_assumed.json",
+      "sha256": "a959592f39b257091c509d95abde6842e10e08d84123fde6788ed55372429b9d",
+      "size_bytes": 104327
+    },
+    {
+      "path": "simulator_detailed/configs/replays/heterogeneous_unicast.json",
+      "sha256": "5c2b11861fb41f8d112909e197d7d63770ff2b430225fa56c18f3f52f6e44c8a",
+      "size_bytes": 3363
+    },
+    {
+      "path": "simulator_detailed/configs/replays/wormhole_transport_v2.json",
+      "sha256": "8774d3c3949940e1ed5684ee332ca52689197ad1cf81e959481a6a8b1cd67994",
+      "size_bytes": 15375
+    },
+    {
+      "path": "simulator_detailed/configs/topologies/heterogeneous_example.json",
+      "sha256": "0e4ff7ebd31feb8458b75d827a62794df1c0a72793f529a79d8f9b6741a1bc97",
+      "size_bytes": 7419
+    },
+    {
+      "path": "simulator_detailed/configs/topologies/memory_small.json",
+      "sha256": "98126ffea777b9dc764ed4179344a896d2d4a8c8b6d3b095dde0c417125dbba6",
+      "size_bytes": 22845
+    },
+    {
+      "path": "simulator_detailed/configs/topologies/torus_small_v2.json",
+      "sha256": "6afb9057b7e852645be5fb26f5a0fa4edbf6ed1178c53aa9e5bd8480781f7b16",
+      "size_bytes": 8561
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_fit.json",
+      "sha256": "3d563ea79896cf55fa52de30ec02bc3dfe672df91db72066c92a8eb6598de7ae",
+      "size_bytes": 14116
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_fit_raw.json",
+      "sha256": "32d0b1633e9e6c8afa51ccaced83e960ce8777733e879ce25c5956504870445d",
+      "size_bytes": 1266
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_fit_reference.json",
+      "sha256": "94684acdd307da1dd11d364338420bf0ee4fd73bf1313d21cce9b9baa6587d5f",
+      "size_bytes": 8701
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_heldout.json",
+      "sha256": "19a206b5b2813d1b55be9690526ec88764c9bcd4e00bdefc7a804f035ad5faef",
+      "size_bytes": 14116
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_heldout_raw.json",
+      "sha256": "1fc7b7925659aefc84d1e6c410539622dbcc539955c2e9ea597c07895e7a8454",
+      "size_bytes": 1274
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_heldout_reference.json",
+      "sha256": "77d60a0d62c40a4698a9de35f3d15fd84fdd43ec3ff7c50fac9f20da3ab10a29",
+      "size_bytes": 8713
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/compute_plan.json",
+      "sha256": "df63f2a5e39e03a01aa5db7f6fd36bfb3ecf4c3abe724cff04626d7051108244",
+      "size_bytes": 18395
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_fit.json",
+      "sha256": "385389c5c8dfda957c43ae8b5ecf13a9771ea5733b98df68252d74f09b1f7956",
+      "size_bytes": 10200
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_fit_raw.json",
+      "sha256": "6fa13a6038fbecb6f36eff80524841a2fc80be58d144feb02ebd733ea7a8ce4a",
+      "size_bytes": 1264
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_fit_reference.json",
+      "sha256": "cba3b316773b7358d8d75d2e79fae0a05d38debcae558c47c6e94469c088c4f1",
+      "size_bytes": 7043
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_heldout.json",
+      "sha256": "47e3c6d5c00b786b80a9f13810817a73a7dc9c793cc43aaf14a19af238c8ab50",
+      "size_bytes": 10200
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_heldout_raw.json",
+      "sha256": "6513c62171194ed365b209d316e632240b772c67ef3851877b4d1bb2fe05455e",
+      "size_bytes": 1272
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_heldout_reference.json",
+      "sha256": "9ffd6fe0d4da2026add0dffa5d222add4fcd8fdc5e4a1f8caf2c85a17e494b69",
+      "size_bytes": 7055
+    },
+    {
+      "path": "simulator_detailed/configs/validation/calibration/memory_plan.json",
+      "sha256": "93e74033eedcc66fe8000de1011bf2f3f5ffd8facebb53e29c0a8a37e94cd458",
+      "size_bytes": 15061
+    },
+    {
+      "path": "simulator_detailed/configs/validation/compute_shared_engine.json",
+      "sha256": "65efbe06fa81c5b271a4b4a7102310d99563bf83483ad0e903fa07159d521acc",
+      "size_bytes": 24300
+    },
+    {
+      "path": "simulator_detailed/configs/validation/finite_throughput.json",
+      "sha256": "01442798c7b8a6212ea9846a4a9900158bc5d5e32d37e7a0608392c960001366",
+      "size_bytes": 10099
+    },
+    {
+      "path": "simulator_detailed/configs/validation/idle_latency.json",
+      "sha256": "54e5905337aa91a6a4b64d21ff373c07119fea6dbf71300b5842bef33f2d9edb",
+      "size_bytes": 8383
+    },
+    {
+      "path": "simulator_detailed/configs/validation/local_latency.json",
+      "sha256": "fc7ecaa598b32d52864b5889da54a7df1944269e319678b22ca8532406cdc4bb",
+      "size_bytes": 8376
+    },
+    {
+      "path": "simulator_detailed/configs/validation/memory_local.json",
+      "sha256": "657e46661dab0a0da2e8c57b27b24dd4b0a6eb3b69de3b76afb49cf966357138",
+      "size_bytes": 10197
+    },
+    {
+      "path": "simulator_detailed/configs/validation/offline.json",
+      "sha256": "3e17ba0f21ff9ee3a7d4c07f98bd2d1d0017596a2e55b406fcd2800f8b72ee7b",
+      "size_bytes": 33509
+    },
+    {
+      "path": "simulator_detailed/configs/validation/one_hop_latency.json",
+      "sha256": "c370fa85aa9cfe35ccd0d70da7c9cfb2f1cf87d597745c7123241fce0c735b3c",
+      "size_bytes": 8369
+    },
+    {
+      "path": "simulator_detailed/configs/validation/one_hop_latency_graph.json",
+      "sha256": "bbc5caeca87a8a2126ba094124df16d42394e54408bce482b8a243873e1a633b",
+      "size_bytes": 8561
+    },
+    {
+      "path": "simulator_detailed/configs/validation/packet_boundaries.json",
+      "sha256": "2e6d5a2dc637cfed46c03ef41392d7575930fc63801ecad2f5d61c88031978c1",
+      "size_bytes": 9840
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/negative_grayskull.csv",
+      "sha256": "049bdca07ef0409b9b477596d58a74d51f3b6e38fe5851873913fc14cc74ac8b",
+      "size_bytes": 834
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/negative_grayskull.json",
+      "sha256": "1ce663947a2d9b6804d112aa693c462d0c1c7a13a6cd5e5e0331a8a9af7e2724",
+      "size_bytes": 7463
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/negative_hash.json",
+      "sha256": "dcb1f9e638409fa28567231166e84a3854cb930b5fdbd1076de10f1bfe5e67dc",
+      "size_bytes": 7028
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/negative_unknown_metadata.json",
+      "sha256": "2127a080b8d802ccbd55ce8d7552767a274682b4de2235918ba41b2979eef161",
+      "size_bytes": 7053
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/synthetic_functional.json",
+      "sha256": "36cb9158da13c352e0f0cd8fcea3c3771e64a1652082cc000990fd5e2459420e",
+      "size_bytes": 7028
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/synthetic_functional_raw.json",
+      "sha256": "d257d6916e534e0d5fad8d0e27cb6ac764be50c52838b3d4eecb7b8bee526a71",
+      "size_bytes": 1093
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/synthetic_profiler.csv",
+      "sha256": "7aedae787b904518f2cb2299b4ef00cb38c3c23c3be730f4ead1cb7bc2e9417f",
+      "size_bytes": 843
+    },
+    {
+      "path": "simulator_detailed/configs/validation/references/synthetic_profiler.json",
+      "sha256": "ed474802496a005721d3f21b24469864445e0a6f0aca59a1294e24ec4c1139f7",
+      "size_bytes": 7464
+    },
+    {
+      "path": "simulator_detailed/configs/validation/shared_link_backpressure.json",
+      "sha256": "5e5a9219246738f236998f322fece34a5984ed6657aa0f534564751b706a4f9e",
+      "size_bytes": 8897
+    },
+    {
+      "path": "simulator_detailed/configs/validation/synthetic_reference_suite.json",
+      "sha256": "3cd9d2f2b9b50ee23d25d53c131de204ca4bfd26fee5c367d8701060ab6cec60",
+      "size_bytes": 8139
+    },
+    {
+      "path": "simulator_detailed/configs/validation/wrap_latency.json",
+      "sha256": "0d8405cf522ff9e291db7822e55299ba11a76f500fda2dfc4ac0120325015f9e",
+      "size_bytes": 8366
+    },
+    {
+      "path": "simulator_detailed/configs/validation/wrap_latency_graph.json",
+      "sha256": "6afb9057b7e852645be5fb26f5a0fa4edbf6ed1178c53aa9e5bd8480781f7b16",
+      "size_bytes": 8561
+    },
+    {
+      "path": "workloads/darknet19-4-4.json",
+      "sha256": "73bb6178749129263725a47be0c8d246c84cc10f5a786f5e1eec9b55264cc2a9",
+      "size_bytes": 458445
+    }
+  ],
+  "root_smoke": {
+    "check_id": "root_darknet19",
+    "required": true,
+    "outcome": "pass",
+    "tier": "model_invariant",
+    "reason": "exit=0; {\"completed_nodes\": 37888, \"cores\": 16, \"links\": 48, \"windows\": 11, \"json_roundtrip\": true}\n",
+    "executed": true,
+    "observation_ids": [],
+    "evidence": [],
+    "comparison_admitted": false
+  },
+  "legacy_cli_results": [
+    {
+      "name": "topology_v1",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "simulator_detailed.replay_topology",
+        "--replay",
+        "simulator_detailed/configs/replays/heterogeneous_unicast.json"
+      ],
+      "exit": 0,
+      "kind": "topology_replay_result",
+      "schema_version": 1,
+      "status": "complete",
+      "result_sha256": "182a31e1a3a7b2b33ff1f2b729ede8fe8c02cf289ccae000ee51ef32d488c2fb"
+    },
+    {
+      "name": "torus_v2",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "simulator_detailed.replay_topology",
+        "--replay",
+        "simulator_detailed/configs/replays/torus_small_v2.json"
+      ],
+      "exit": 0,
+      "kind": "topology_replay_result",
+      "schema_version": 2,
+      "status": "complete",
+      "result_sha256": "a6b234f506240bb2b9e5c92d6810cdff2942492aaa3680b642aa7e96a6b9b549"
+    },
+    {
+      "name": "memory_v1",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "simulator_detailed.replay_memory",
+        "--replay",
+        "simulator_detailed/configs/memory_replays/generic_ordered.json"
+      ],
+      "exit": 0,
+      "kind": "memory_replay_result",
+      "schema_version": 1,
+      "status": "complete",
+      "result_sha256": "2138bc3d12fae670c590a66c0120d5c2538b6de7bbd2c16d824f7eca5a29b698"
+    },
+    {
+      "name": "compute_v1",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "simulator_detailed.replay_compute",
+        "--workload",
+        "simulator_detailed/configs/compute_workloads/streaming_depth2.json"
+      ],
+      "exit": 0,
+      "kind": "compute_workload_result",
+      "schema_version": 1,
+      "status": "complete",
+      "result_sha256": "a2a1ebc1589325c6180f9e984f856734a8e0588956b191d6c1f18e0b11cd4cdd"
+    }
+  ],
+  "scope": {
+    "functional_reference": "unvalidated",
+    "silicon_timing": "unvalidated",
+    "calibration": "synthetic_demonstration",
+    "multicast": "pending",
+    "synchronization": "pending",
+    "optional_ml": "blocked"
+  },
+  "validation_results": {
+    "full_unittest": {
+      "command": ".venv/bin/python -m unittest discover -s simulator_detailed/tests",
+      "discovered": 458,
+      "passed": 457,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 1,
+      "seconds": 157.371,
+      "skip_reason": "optional Torch/PyG are unavailable; no substitute tensor execution"
+    },
+    "focused_audits": {
+      "discovered": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 14.964
+    },
+    "strict_pyright": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "harness_ruff": "pass",
+    "predecessor_compute_ruff": "pass",
+    "strict_openspec": "pass",
+    "whitespace": "pass",
+    "offline_catalog": {
+      "cases": 19,
+      "passed_model_checks": 123,
+      "failed_checks": 0,
+      "optional_ml": "blocked"
+    }
+  },
+  "cli_examples": [
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --suite simulator_detailed/configs/validation/offline.json --output /tmp/wormhole-offline.json",
+      "exit": 0,
+      "kind": "validation_report",
+      "status": "pass",
+      "diagnostic": "Suite pass; functional=unvalidated; silicon=unvalidated."
+    },
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --suite simulator_detailed/configs/validation/synthetic_reference_suite.json --output /tmp/wormhole-functional-demo.json",
+      "exit": 0,
+      "kind": "validation_report",
+      "status": "pass",
+      "diagnostic": "Suite pass; functional=unvalidated; silicon=unvalidated."
+    },
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --import-reference simulator_detailed/configs/validation/references/synthetic_functional.json --output /tmp/wormhole-functional-import.json",
+      "exit": 0,
+      "kind": "validation_reference",
+      "status": null,
+      "diagnostic": "Reference imported; this is parsing/integrity evidence, not model validation."
+    },
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --import-reference simulator_detailed/configs/validation/references/synthetic_profiler.json --output /tmp/wormhole-profiler-import.json",
+      "exit": 0,
+      "kind": "validation_reference",
+      "status": null,
+      "diagnostic": "Reference imported; this is parsing/integrity evidence, not model validation."
+    },
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --calibrate simulator_detailed/configs/validation/calibration/memory_plan.json --output /tmp/wormhole-memory-calibration.json",
+      "exit": 0,
+      "kind": "calibration_result",
+      "status": "pass",
+      "diagnostic": "Calibration pass; evidence scope=synthetic_demonstration."
+    },
+    {
+      "command": ".venv/bin/python -m simulator_detailed.validate_wormhole --calibrate simulator_detailed/configs/validation/calibration/compute_plan.json --output /tmp/wormhole-compute-calibration.json",
+      "exit": 0,
+      "kind": "calibration_result",
+      "status": "pass",
+      "diagnostic": "Calibration pass; evidence scope=synthetic_demonstration."
+    }
+  ]
+}

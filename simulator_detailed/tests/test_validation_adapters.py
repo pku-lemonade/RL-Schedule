@@ -170,6 +170,37 @@ class AdapterTests(unittest.TestCase):
             effect["time_aci_cycles"] = 0
         self.corrupted("memory", "memory_service", mutate)
 
+    def test_self_consistent_exported_rate_cannot_replace_admitted_input(self):
+        def mutate(raw):
+            session = raw["memory_session"]
+            config = json.loads(session["plan"]["configuration_json"])
+            resource = config["resources"][0]
+            service = resource["service"]
+            service["bytes_per_cycle"] *= 2
+            session["plan"]["configuration_json"] = json.dumps(config)
+            # Keep exported costs internally consistent with the forged faster rate.
+            # Only comparison with admitted inputs exposes the wrong model here.
+            for chunk in session["chunks"]:
+                if chunk["resource_id"] == resource["resource_id"]:
+                    chunk["native_cycles"] = service["fixed_latency_cycles"] + chunk["serviced_bytes"] / service["bytes_per_cycle"]
+                    chunk["service_aci_cycles"] = chunk["native_cycles"] * config["aci_clock_hz"] / service["native_clock_hz"]
+                    chunk["end_aci_cycles"] = chunk["start_aci_cycles"] + chunk["service_aci_cycles"]
+        self.corrupted("compute", "memory_service", mutate)
+
+    def test_compute_cannot_omit_declared_memory_prerequisite(self):
+        def mutate(raw):
+            operations = raw["memory_session"]["operations"]
+            operations.remove(next(op for op in operations if json.loads(op["operation_id"])[-1] == "operand_a"))
+        self.corrupted("compute", "compute_work", mutate)
+
+    def test_compute_cannot_omit_job_with_consistent_partial_totals(self):
+        def mutate(raw):
+            cost = raw["plan"]["jobs"].pop()["cost"]
+            for scope in ("planned", "completed"):
+                raw["work"][scope + "_useful_work"] -= cost["useful_work"]
+                raw["work"][scope + "_executed_work"] -= cost["executed_work"]
+        self.corrupted("compute", "compute_work", mutate)
+
     def test_descriptor_release_corruption(self):
         self.corrupted("memory", "ownership", lambda r: r["descriptor_trace"].append(next(e for e in r["descriptor_trace"] if e["action"] == "release")))
 

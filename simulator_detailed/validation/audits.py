@@ -22,7 +22,11 @@ def memory_view(admitted: Admission, raw: Data) -> tuple[Data, Data]:
     if "memory_session" in raw:
         session = obj(raw["memory_session"])
         # Dynamic memory operations are exported by the admitted compute session.
-        return session, parse(text(obj(session["plan"])["configuration_json"]))
+        config = parse(text(obj(session["plan"])["configuration_json"]))
+        declared = obj(admitted.configuration["memory"])
+        require(all(config.get(field) == value for field, value in declared.items()),
+                "exported memory settings differ from admitted input")
+        return session, config
     if "memory_resources" in raw:
         return raw, admitted.configuration
     raise UnsupportedAudit("addressed memory observations unavailable")
@@ -431,10 +435,24 @@ def compute_audit(admitted: Admission, raw: Data) -> None:
         raise UnsupportedAudit("compute stage observations unavailable")
     config = admitted.configuration
     jobs = {text(j["job_id"]): j for s in rows(config["streams"]) for j in rows(s["jobs"])}
+    job_workers = {text(j["job_id"]): text(s["worker_tile_id"]) for s in rows(config["streams"]) for j in rows(s["jobs"])}
     rates = {text(r["rate_id"]): r for r in rows(config["rates"])}
     workers = {text(w["tile_id"]): w for w in rows(config["workers"])}
     dtypes = {text(d["dtype_id"]): integer(d["bytes_per_element"]) for d in rows(config["dtypes"])}
-    memory_operations = {text(o["operation_id"]): o for o in rows(obj(raw["memory_session"])["operations"])}
+    operation_rows = rows(obj(raw["memory_session"])["operations"])
+    memory_operations = {text(o["operation_id"]): o for o in operation_rows}
+    expected_operations: set[str] = set()
+    for job_id, job in jobs.items():
+        roles = ["operand_a", "operand_b", "result"]
+        roles += ["read_" + operand for operand in ("a", "b") if obj(job[operand])["mode"] == "remote"]
+        if obj(job["output"])["mode"] != "local":
+            roles.append("write")
+        expected_operations.update(key(["compute", job_id, role]) for role in roles)
+    require(set(memory_operations) == expected_operations and len(operation_rows) == len(expected_operations),
+            "compute memory operations differ from declared jobs")
+    plans = rows(obj(raw["plan"])["jobs"])
+    require({text(p["job_id"]) for p in plans} == set(jobs) and len(plans) == len(jobs),
+            "exported compute jobs differ from admitted input")
     stages: dict[str, dict[str, float]] = defaultdict(dict)
     for event in rows(raw["stages"]):
         job, action = text(event["job_id"]), text(event["action"])
@@ -444,10 +462,16 @@ def compute_audit(admitted: Admission, raw: Data) -> None:
         stages[job][action] = float(number(event["time_aci_cycles"]))
     planned_useful = planned_padded = completed_useful = completed_padded = 0
     sequence = ("reader_start", "inputs_ready", "operand_start", "operand_end", "math_start", "math_end", "result_start", "output_ready", "writer_start", "writer_complete", "slot_release")
-    for plan in rows(obj(raw["plan"])["jobs"]):
+    for plan in plans:
         job = text(plan["job_id"])
         operation, cost = obj(jobs[job]["operation"]), obj(plan["cost"])
+        require(plan["worker_tile_id"] == job_workers[job], "compute worker differs from declared stream")
         rate = rates[text(cost["rate_id"])]
+        require(cost["rate_id"] in array(workers[job_workers[job]]["rate_ids"]), "compute rate not enabled by declared worker")
+        expected_key = {"operation": operation["kind"], "accumulator_precision": operation["accumulator_precision"],
+                        "fidelity": operation["fidelity"], "layout": obj(operation["a"])["layout"],
+                        **{operand + "_dtype": obj(operation[operand])["dtype"] for operand in ("a", "b", "c")}}
+        require(rate["key"] == expected_key, "compute rate key differs from declared operation")
         shape = [integer(v) for v in array(obj(operation["a"])["shape"])]
         batch, m, k = shape
         n = integer(array(obj(operation["c"])["shape"])[-1])

@@ -378,3 +378,57 @@ Actual validation:
 No vendor/network execution, real external comparison, silicon calibration or
 new root remap validation is claimed. Root Darknet19 execution and the final
 requirement-to-evidence handoff follow in the consolidated audit.
+
+## Part 7 — consolidated audit and next-child handoff
+
+Tasks 7.1–7.5 completed. The final audit checked source-derived oracles, fault
+sensitivity, finite resources/drain, comparison metadata and split/claim rules.
+It found an independence gap in compute service auditing: exported session
+settings could become their own expectations. The audit now binds those settings
+to admitted inputs, checks declared job/memory-operation membership and verifies
+worker/rate selection. Three corruption cases retain internally plausible costs
+or totals while forging service rates or dropping prerequisites/jobs. These are
+covered by the final full run, not merely documented as future checks.
+
+Actual final validation on the final Python/input bytes:
+
+- Full detailed discovery: **458 discovered, 457 passed, 0 failures/errors,
+  1 optional Torch/PyG skip** (157.371s). The pre-audit committed Part 6 rerun also
+  passed **454/455**, with the same one skip (156.353s); the final run adds the
+  three new corruption tests. No skipped check is counted as passed.
+- Focused adapter/oracle suite: **26/26 passed**, no skips (14.964s). Independent
+  predecessor **21/14** and integrated **45/33** pipeline schedules still pass.
+- Strict Pyright: **0 errors/warnings**. Harness and predecessor compute scoped
+  Ruff, strict OpenSpec validation and whitespace: **passed**. All new Python
+  modules and the CLI are included in the strict project.
+- All **six documented CLI modes/examples** passed with schema-valid JSON and
+  stdout/file equality. After audit fixes, both suites and both calibrations were
+  rerun successfully; reference-import code/fixtures remained unchanged. Offline
+  catalog: **19 cases, 123 passed model checks**, optional ML gate blocked, both
+  real external tiers unvalidated. Imports/fits remain explicitly synthetic.
+- Four existing replay CLI executions: topology v1, torus v2, memory v1 and
+  compute v1 all returned **0/complete**. Exact commands/result digests are in
+  `delivery-identities.json`; existing detailed regression fixtures also passed.
+- **Actual separate root Darknet19 smoke passed**: **37,888 nodes completed**,
+  **16 cores, 48 links, 11 windows**, `Trace` JSON round trip. It used the root
+  mapper/architecture/tracing classes and temporary trace/timing files. No new
+  stochastic timing fixture was introduced. Historical remap failures remain
+  unmodified, not rerun or counted as passes.
+- Verified **134 detailed Python source files**, **18 root-smoke Python files**
+  and **50 input/capture byte hashes** against the delivery manifest. Its recorded
+  source base is `736a396` plus these Part 7 audit changes; exact final file bytes
+  are retained independently of the subsequent commit/documentation identity.
+
+`delivery.md` maps all VA-D01..11 and parent VA-01..07 to executed evidence,
+separates analytical oracles from compatibility snapshots, records reference
+extractor/source identities, and explicitly retains unsupported/unvalidated
+mechanisms. The next-child handoff specifies multicast replication/destination/
+shared-prefix/backpressure and scalar ordering/service/liveness questions without
+implementing them. `WORMHOLE_HANDOFF.md` now points to this completed child.
+
+The umbrella tasks/specs and tracked OpenSpec config, root simulator/config/utils,
+predictor/embedding and RL implementation were checked against `ea0115a` and are
+unchanged. Root RL actions remain four-coordinate; detailed features remain
+7-D runtime/4-D hardware. Optional tensor inference/checkpoints/training, actual
+ttsim/functional captures and measured silicon calibration remain unavailable.
+No umbrella sync/archive, next-child implementation or push was performed.

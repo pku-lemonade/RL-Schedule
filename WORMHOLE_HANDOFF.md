@@ -1,16 +1,15 @@
 # Wormhole simulator handoff
 
-Prepared on 2026-09-17 for continuing this work on another machine. Paths in this document are relative to the repository root; the old local checkout path is not a runtime requirement.
+Prepared on 2026-09-17 for continuing this work on another machine; delivery status updated on 2026-09-18. Paths in this document are relative to the repository root; the old local checkout path is not a runtime requirement.
 
 ## Resume point
 
 - Repository: `git@github.com:pku-lemonade/RL-Schedule.git` (HTTPS alternative: `https://github.com/pku-lemonade/RL-Schedule.git`).
 - Working branch: **`feiyang-dev`**.
 - Latest planning commit before this handoff: **`7af97842c879a82a77af79596192eb5de2cb25d9`**, `docs: plan Wormhole validation harness and evidence gates`.
-- Latest simulator implementation delivery: **`007f4e5`**, `feat: deliver finite compute CLI examples and validation evidence`.
-- Active child: **`wormhole-validation-harness`**. Exploration and all planning artifacts are complete and committed. Implementation is **0/35 tasks**, with **11 requirements and 25 acceptance scenarios**. No validation-harness runtime code has been implemented yet.
-- Immediate next action: **apply Part 1, tasks 1.1–1.5**, then validate and commit that part before continuing to Part 2. Do not create a replacement change or repeat the completed exploration.
-- This handoff commit changes documentation only. The user requested committing and pushing the branch for migration. The preceding 38 local commits were not yet on `origin/feiyang-dev` when transfer preparation started; a normal push of the branch includes that work. The final conversation message records push verification. Obtain this document's commit with `git log -1 --oneline -- WORMHOLE_HANDOFF.md`.
+- Latest completed child: **`wormhole-validation-harness`**, **35/35 tasks**, with **11 requirements and 25 acceptance scenarios**. Its seven incremental parts deliver offline validation, independent audits, reference import, bounded calibration and a report CLI. See [delivery.md](openspec/changes/wormhole-validation-harness/delivery.md), [progress.md](openspec/changes/wormhole-validation-harness/progress.md), and the [exact identity manifest](openspec/changes/wormhole-validation-harness/delivery-identities.json). The final delivery is the commit containing this update; Part 6 is `736a396`.
+- Next action: **explore `wormhole-multicast-sync` as a separate child**, using the delivered harness findings and limits. Its mechanisms remain pending; no umbrella specification or task was synchronized or archived.
+- The original migration authorized a transfer push. That historical authorization is not an unlimited future push policy. **The seven validation implementation parts were committed locally and were not pushed.** Push only on a new request. Obtain this document's commit with `git log -1 --oneline -- WORMHOLE_HANDOFF.md`.
 
 ## Working agreement
 
@@ -82,9 +81,9 @@ Unsupported or unvalidated: numerical tensors, TT-Metal/RISC-V/ISA execution, de
 
 The explicit legacy FC-chain adapter is supported with complete sidecar metadata. Detailed direct legacy FC now reports an unsupported-mode error instead of silently doing no work. Preserve existing supported conv/pool, LOAD/STORE/SEND/RECV, mesh/DMA and fail-slow behavior. Do not conflate root modules with similarly named modules under `simulator_detailed/`.
 
-## Next child: concrete implementation plan
+## Completed validation child: implementation record
 
-Use the existing [35-task checklist](openspec/changes/wormhole-validation-harness/tasks.md) as the implementation authority. Each numbered part ends with validation, a progress record and a commit.
+The existing [35-task checklist](openspec/changes/wormhole-validation-harness/tasks.md) is complete. Each numbered part ended with validation, a progress record and a commit. Keep this sequence as the delivered record; do not repeat its implementation.
 
 | Part | Tasks | Scope |
 | --- | --- | --- |
@@ -96,7 +95,7 @@ Use the existing [35-task checklist](openspec/changes/wormhole-validation-harnes
 | 6 | 6.1–6.5 | Report CLI, consumer guards, examples and documentation |
 | 7 | 7.1–7.5 | Consolidated checks, legacy smoke, requirement evidence and next-child handoff |
 
-Part 1 should introduce `simulator_detailed/configs/schemas/validation.py` and focused modules under `simulator_detailed/validation/`, with meaningful tests and strict Pyright inclusion. The five planned v1 document kinds are `validation_suite`, `validation_reference`, `validation_report`, `calibration_plan` and `calibration_result`. Record progress in `openspec/changes/wormhole-validation-harness/progress.md` when implementation starts; that file does not exist at this handoff.
+The implementation is in `simulator_detailed/configs/schemas/validation.py`, `simulator_detailed/validation/` and `simulator_detailed/validate_wormhole.py`, with strict Pyright coverage. Its five v1 document kinds are `validation_suite`, `validation_reference`, `validation_report`, `calibration_plan` and `calibration_result`. [Validation usage](simulator_detailed/docs/validation.md) contains six verified CLI examples; [progress.md](openspec/changes/wormhole-validation-harness/progress.md) records actual per-part checks. Functional-reference and silicon-timing evidence remain unvalidated; both fitting examples are synthetic demonstrations.
 
 Keep these design decisions intact:
 
