@@ -298,3 +298,39 @@ Actual validation:
 
 No real functional reference, numerical execution or silicon timing was supplied
 or validated. Successful import is parsing/integrity evidence, not model accuracy.
+
+## Part 5 — bounded calibration and held-out evaluation
+
+Tasks 5.1–5.5 completed. The finite Cartesian search applies only typed memory
+service or compute-rate fields to temporary copies, preserves source/evidence
+bytes, and re-admits each candidate with the public loaders. Rejected, failed
+and blocked candidates retain diagnostics; absent evidence never selects a
+default. Semantic workload/condition fingerprints are recomputed from admitted
+inputs; renamed duplicates, reused capture groups and reused raw captures are
+rejected across fit/evaluation splits. Declared capture origin is not authenticated.
+
+Selection uses fit-only weighted absolute scaled errors and first declared
+minimum, retaining all ties. A digest seals the vector, configurations, all fit
+evidence and metric policy before held-out execution. Export validation detects
+changed seals/evidence. Held-out comparisons use the original tolerances and
+cannot revise the winner. Full fit and evaluation runtime observations are retained.
+
+Actual validation:
+
+- Memory synthetic example: rates 2/4/8 give losses **18/0/9**; selects **4**
+  bytes/cycle. Independent rounded-service expectation: 9 granules × 3 ACI
+  cycles = 27 fit cycles; 17 granules × 3 = **51 held-out cycles**, passed.
+- Compute synthetic example: rates 1/2/4 give losses **1/0/0**; retains the tie
+  and selects **2** by declared order. Held-out **17 cycles** passes; selecting
+  rate 4 would yield 16, so held-out observations do not break the fit tie.
+- Final calibration/contracts/compute-overlap/memory-resource/compute-runtime
+  group: **83/83 passed**, no skips (28.309s); calibration contributes **18**
+  tests, including independently calculated weighted loss, copied-file integrity,
+  failed execution, all-rejected candidates, missing evidence, split leakage,
+  budget/target rejection, zero-reference tolerance, frozen-before-evaluation
+  ordering, tampered exports and perfect-fit/failing-held-out data.
+- Strict Pyright **0 errors/warnings**, scoped Ruff and whitespace **passed**.
+
+Both examples remain **synthetic demonstrations**; no measured calibration or
+real functional/silicon validation is claimed. Original hardware geometry,
+clocks, capacities, mappings and nonselected rates remain configurable and intact.

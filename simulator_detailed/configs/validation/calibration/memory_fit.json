@@ -1,0 +1,333 @@
+{
+  "kind": "memory_replay",
+  "schema_version": 1,
+  "model_revision": "addressed_memory_v1",
+  "source": {
+    "kind": "canonical_graph",
+    "graph_path": "../../topologies/memory_small.json"
+  },
+  "aci_clock_hz": 500000000.0,
+  "fabrics": [
+    0,
+    1
+  ],
+  "packet": {
+    "physical_flit_bytes": 16,
+    "data_capacity_bytes": 8,
+    "header_flits": 2,
+    "max_segment_payload_bytes": 24,
+    "address_alignment_bytes": 4,
+    "evidence": {
+      "status": "assumed",
+      "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+      "sources": []
+    }
+  },
+  "issue_latency_aci_cycles": 1.0,
+  "max_outstanding_segments": 2,
+  "endpoint_queue_capacity_packets": 1,
+  "endpoint_staging_capacity_flits": 1,
+  "resources": [
+    {
+      "resource_id": "dram",
+      "service": {
+        "policy": "aggregate_shared_rw_v1",
+        "native_clock_hz": 250000000,
+        "service_granule_bytes": 4,
+        "chunk_bytes": 4,
+        "bytes_per_cycle": 4,
+        "fixed_latency_cycles": 0.5,
+        "queue_capacity": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    {
+      "resource_id": "l1-a",
+      "service": {
+        "policy": "aggregate_shared_rw_v1",
+        "native_clock_hz": 250000000,
+        "service_granule_bytes": 4,
+        "chunk_bytes": 4,
+        "bytes_per_cycle": 2,
+        "fixed_latency_cycles": 0.5,
+        "queue_capacity": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    }
+  ],
+  "endpoints": [
+    {
+      "endpoint_id": "src0",
+      "fabric_id": 0,
+      "router_id": "t0_0",
+      "roles": [
+        "initiator",
+        "target",
+        "response_sink"
+      ],
+      "resource_ids": [
+        "l1-a"
+      ],
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    {
+      "endpoint_id": "ram0",
+      "fabric_id": 0,
+      "router_id": "t2_2",
+      "roles": [
+        "target"
+      ],
+      "resource_ids": [
+        "dram"
+      ],
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    {
+      "endpoint_id": "src1",
+      "fabric_id": 1,
+      "router_id": "t0_0",
+      "roles": [
+        "initiator",
+        "target",
+        "response_sink"
+      ],
+      "resource_ids": [
+        "l1-a"
+      ],
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    {
+      "endpoint_id": "ram1",
+      "fabric_id": 1,
+      "router_id": "t2_2",
+      "roles": [
+        "target"
+      ],
+      "resource_ids": [
+        "dram"
+      ],
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    }
+  ],
+  "buffers": [
+    {
+      "buffer_id": "local",
+      "resource_id": "l1-a",
+      "base_address": 0,
+      "size_bytes": 16384,
+      "initially_ready": true
+    },
+    {
+      "buffer_id": "remote",
+      "resource_id": "dram",
+      "base_address": 0,
+      "size_bytes": 16384
+    }
+  ],
+  "operations": [
+    {
+      "operation_id": "produce",
+      "kind": "local_write",
+      "initiator_id": "src0",
+      "destination": {
+        "buffer_id": "local",
+        "offset_bytes": 0,
+        "size_bytes": 33
+      }
+    }
+  ],
+  "max_aci_cycles": 10000,
+  "routing": [
+    {
+      "fabric_id": 0,
+      "topology_policy": "torus_2d_positive",
+      "routing_policy": "dimension_order_xy",
+      "dateline": {
+        "x": 0,
+        "y": 0
+      },
+      "router_default": {
+        "enabled": true,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "link_default": {
+        "enabled": true,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    {
+      "fabric_id": 1,
+      "topology_policy": "torus_2d_positive",
+      "routing_policy": "dimension_order_yx",
+      "dateline": {
+        "x": 0,
+        "y": 0
+      },
+      "router_default": {
+        "enabled": true,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "link_default": {
+        "enabled": true,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+          "sources": []
+        }
+      },
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    }
+  ],
+  "runtime": {
+    "transport": {
+      "fabrics": [
+        {
+          "fabric_id": 0,
+          "network_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 125000000.0,
+            "physical_flit_bytes": 16,
+            "wire_bits_per_noc_cycle": 128,
+            "payload_bits_per_noc_cycle": 128,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "local_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 125000000.0,
+            "physical_flit_bytes": 16,
+            "wire_bits_per_noc_cycle": 128,
+            "payload_bits_per_noc_cycle": 128,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "router": {
+            "transfer_aci_cycles": 1.0,
+            "initiation_aci_cycles": 1.0,
+            "capacity_flits": 1
+          }
+        },
+        {
+          "fabric_id": 1,
+          "network_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 125000000.0,
+            "physical_flit_bytes": 16,
+            "wire_bits_per_noc_cycle": 128,
+            "payload_bits_per_noc_cycle": 128,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "local_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 125000000.0,
+            "physical_flit_bytes": 16,
+            "wire_bits_per_noc_cycle": 128,
+            "payload_bits_per_noc_cycle": 128,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "router": {
+            "transfer_aci_cycles": 1.0,
+            "initiation_aci_cycles": 1.0,
+            "capacity_flits": 1
+          }
+        }
+      ],
+      "overrides": [],
+      "endpoint_queue_capacity_packets": 1,
+      "endpoint_staging_capacity_flits": 1,
+      "burst_quantum_flits": 1,
+      "evidence": {
+        "status": "assumed",
+        "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+        "sources": []
+      }
+    },
+    "responder_capacity_packets": 1,
+    "request_control_aci_cycles": 1,
+    "response_control_aci_cycles": 1,
+    "local_capacity_operations": 1,
+    "local_control_aci_cycles": 0,
+    "evidence": {
+      "status": "assumed",
+      "description": "Synthetic scheduling example: availability, capacities, arbitration and timing are model assumptions, not silicon measurements.",
+      "sources": []
+    }
+  }
+}

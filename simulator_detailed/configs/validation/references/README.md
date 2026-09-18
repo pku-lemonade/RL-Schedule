@@ -3,7 +3,7 @@
 Every capture here is **synthetic**, hand specified for importer tests. The local
 write has 33 addressed bytes and nine service chunks: eight full 4-byte chunks
 and one byte rounded to a 4-byte granule. Each costs
-`(1 + 4/8) * (500 MHz / 250 MHz) = 3 ACI cycles`, giving 27 cycles.
+`(0.5 + 4/4) * (500 MHz / 250 MHz) = 3 ACI cycles`, giving 27 cycles.
 The functional fixture describes one 33-byte effect; chunk partitioning and
 independent event-list order are not functional differences.
 

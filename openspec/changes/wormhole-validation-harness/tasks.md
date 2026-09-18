@@ -32,11 +32,11 @@
 
 ## 5. Bounded calibration and held-out evaluation (VA-D03, D07, D08)
 
-- [ ] 5.1 Implement typed candidate application to copied memory-resource and compute-rate configurations with finite Cartesian budgets, positive/nonnegative constraints and full existing workload admission; verify original files/evidence remain unchanged, forbidden targets fail and every rejected candidate is retained diagnostically.
-- [ ] 5.2 Implement fit/evaluation split admission using semantic workload/condition and measurement-group fingerprints with declared metrics/weights/scales/tolerances; reject renamed duplicate cases, reused capture groups and invalid zero-reference tolerance handling before running candidates.
-- [ ] 5.3 Execute fitting cases only for deterministic weighted-error selection with canonical tie handling and no default winner on missing/all-invalid evidence; verify selected candidates against an independently calculated small search, report ties and prove held-out observations cannot influence selection.
-- [ ] 5.4 Freeze the selected vector/plan/evidence digest, execute held-out cases with fixed tolerances and export complete calibration results; verify perfect fit with failing held-out data stays failed, parameter/threshold changes create new identities and synthetic fitting never grants measured calibration status.
-- [ ] 5.5 Run memory and compute synthetic fitting/evaluation examples, negative split/evidence/budget tests and relevant runtime regressions plus strict type/scoped lint/whitespace checks; record actual search/evaluation evidence and commit before CLI/report delivery.
+- [x] 5.1 Implement typed candidate application to copied memory-resource and compute-rate configurations with finite Cartesian budgets, positive/nonnegative constraints and full existing workload admission; verify original files/evidence remain unchanged, forbidden targets fail and every rejected candidate is retained diagnostically.
+- [x] 5.2 Implement fit/evaluation split admission using semantic workload/condition and measurement-group fingerprints with declared metrics/weights/scales/tolerances; reject renamed duplicate cases, reused capture groups and invalid zero-reference tolerance handling before running candidates.
+- [x] 5.3 Execute fitting cases only for deterministic weighted-error selection with canonical tie handling and no default winner on missing/all-invalid evidence; verify selected candidates against an independently calculated small search, report ties and prove held-out observations cannot influence selection.
+- [x] 5.4 Freeze the selected vector/plan/evidence digest, execute held-out cases with fixed tolerances and export complete calibration results; verify perfect fit with failing held-out data stays failed, parameter/threshold changes create new identities and synthetic fitting never grants measured calibration status.
+- [x] 5.5 Run memory and compute synthetic fitting/evaluation examples, negative split/evidence/budget tests and relevant runtime regressions plus strict type/scoped lint/whitespace checks; record actual search/evaluation evidence and commit before CLI/report delivery.
 
 ## 6. Report CLI, capability boundaries and documentation (VA-D01..04, D09..11)
 

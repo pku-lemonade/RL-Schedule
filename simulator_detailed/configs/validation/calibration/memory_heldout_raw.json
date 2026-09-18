@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "execution": "complete",
+  "clocks": [
+    {
+      "domain_id": "aci",
+      "hz": {
+        "state": "known",
+        "value": 500000000
+      }
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "memory_heldout",
+      "role": "job"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "complete",
+      "subject_id": "memory_heldout",
+      "action": "complete",
+      "time": {
+        "value": 51,
+        "unit": "cycles",
+        "clock_domain": "aci"
+      }
+    }
+  ],
+  "effects": [],
+  "causal_edges": [],
+  "routes": [],
+  "intervals": [],
+  "metrics": [
+    {
+      "metric_id": "elapsed",
+      "value": 51,
+      "unit": "cycles",
+      "clock_domain": "aci",
+      "numerator": "hand-calculated completed interval cycles",
+      "denominator": "one run",
+      "window": {
+        "boundary": "simulation_start_to_snapshot",
+        "start": {
+          "value": 0,
+          "unit": "cycles",
+          "clock_domain": "aci"
+        },
+        "end": {
+          "value": 51,
+          "unit": "cycles",
+          "clock_domain": "aci"
+        },
+        "excluded_warmups": [],
+        "repetitions": 1,
+        "aggregation": "none"
+      },
+      "completion_scope": "complete_run"
+    }
+  ],
+  "pending": [],
+  "missing": []
+}

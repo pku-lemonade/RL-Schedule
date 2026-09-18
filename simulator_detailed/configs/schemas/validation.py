@@ -807,6 +807,7 @@ class CalibrationCase(ValidationRecord):
     # the calibration executor; names alone never define the held-out split.
     semantic_sha256: Digest
     capture_group: Identifier
+    conditions: ReferenceConditions | None = None
 
     @model_validator(mode="after")
     def horizon(self) -> Self:
@@ -875,6 +876,7 @@ class CandidateResult(ValidationRecord):
     fit_loss: NonNegative | None
     configuration_sha256: Digest | None
     fit_checks: tuple[CheckResult, ...]
+    fit_runs: tuple[CaseResult, ...] = ()
 
     @model_validator(mode="after")
     def fitted(self) -> Self:
@@ -886,6 +888,12 @@ class CandidateResult(ValidationRecord):
                 raise ValueError("valid candidate requires an actual passing fit and loss")
         elif self.fit_loss is not None:
             raise ValueError("invalid candidate cannot carry a selectable fit loss")
+        if self.fit_runs:
+            observations = {o.observation_id for run in self.fit_runs for o in run.observations}
+            if any(i not in observations for c in self.fit_checks for i in c.observation_ids):
+                raise ValueError("fit check refers to absent run observations")
+            if self.outcome == "valid" and any(aggregate_status(run.checks) != "pass" for run in self.fit_runs):
+                raise ValueError("valid fitting candidate requires passing runtime audits")
         return self
 
 
@@ -915,6 +923,8 @@ class CalibrationResult(ValidationRecord):
     evidence_scope: Literal["synthetic_demonstration", "measured_conditions", "unvalidated"]
     references: tuple[EvidenceReference, ...]
     diagnostics: RunDiagnostics = Field(default_factory=RunDiagnostics)
+    identity: RunIdentity | None = None
+    evaluation_runs: tuple[CaseResult, ...] = ()
 
     @model_validator(mode="after")
     def sealed_evaluation(self) -> Self:
@@ -945,6 +955,18 @@ class CalibrationResult(ValidationRecord):
                 raise ValueError("all tied minima must be reported in candidate order")
             if self.status != aggregate_status(self.evaluation_checks):
                 raise ValueError("held-out outcomes determine status without refitting")
+            if self.identity is not None:
+                plan = CalibrationPlan.model_validate_json(self.identity.effective_plan.text)
+                fit_text = json.dumps([c.model_dump(mode="json") for c in self.candidates], sort_keys=True, separators=(",", ":"), allow_nan=False)
+                fit_digest = hashlib.sha256(fit_text.encode()).hexdigest()
+                if fit_digest != self.selection.fit_evidence_sha256:
+                    raise ValueError("frozen fit evidence digest disagrees with retained candidates")
+                seal = {"candidate_id": self.selection.candidate_id, "values": [v.model_dump(mode="json") for v in self.selection.values],
+                        "configuration_sha256": self.selection.configuration_sha256, "fit_evidence_sha256": fit_digest,
+                        "policy": [m.model_dump(mode="json") for m in plan.metrics]}
+                seal_text = json.dumps(seal, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                if hashlib.sha256(seal_text.encode()).hexdigest() != self.selection.selection_sha256:
+                    raise ValueError("frozen selection digest disagrees with vector/evidence/policy")
         checks = tuple(c for candidate in self.candidates for c in candidate.fit_checks) + self.evaluation_checks
         references = {r.reference_id: r for r in self.references}
         if any(references.get(e.reference_id) != e for c in checks for e in c.evidence):
