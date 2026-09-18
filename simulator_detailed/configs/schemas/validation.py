@@ -420,10 +420,18 @@ class ValidationCase(ValidationRecord):
     budget: CaseBudget
     expected_execution: ExecutionState
     checks: tuple[CheckSelection, ...] = Field(min_length=1)
+    resume_at_aci_cycles: tuple[Positive, ...] = ()
 
     @model_validator(mode="after")
     def finite_execution(self) -> Self:
         unique(tuple(c.check_id for c in self.checks), "case check")
+        if self.resume_at_aci_cycles:
+            if self.adapter not in ("memory_replay_v1", "compute_workload_v1"):
+                raise ValueError("only memory/compute adapters support interruption/resume")
+            if tuple(sorted(set(self.resume_at_aci_cycles))) != self.resume_at_aci_cycles:
+                raise ValueError("resume horizons must be unique and increasing")
+            if self.budget.max_aci_cycles is None or self.resume_at_aci_cycles[-1] >= self.budget.max_aci_cycles:
+                raise ValueError("resume horizons must precede the final budget")
         if (self.adapter not in ("profile_inspection_v1", "topology_inspection_v1")
                 and self.budget.max_aci_cycles is None):
             raise ValueError("runtime adapter requires a finite simulation horizon")

@@ -1,0 +1,1361 @@
+{
+  "kind": "validation_suite",
+  "schema_version": 1,
+  "suite_id": "offline_finite_catalog_v1",
+  "max_cases": 19,
+  "cases": [
+    {
+      "case_id": "idle_latency",
+      "adapter": "torus_replay_v2",
+      "input_path": "idle_latency.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "packet_boundaries",
+      "adapter": "torus_replay_v2",
+      "input_path": "packet_boundaries.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "finite_throughput",
+      "adapter": "torus_replay_v2",
+      "input_path": "finite_throughput.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "shared_link_backpressure",
+      "adapter": "torus_replay_v2",
+      "input_path": "shared_link_backpressure.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "local_latency",
+      "adapter": "torus_replay_v2",
+      "input_path": "local_latency.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "one_hop_latency",
+      "adapter": "torus_replay_v2",
+      "input_path": "one_hop_latency.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "wrap_latency",
+      "adapter": "torus_replay_v2",
+      "input_path": "wrap_latency.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "wormhole_dual_fabric",
+      "adapter": "torus_replay_v2",
+      "input_path": "../replays/wormhole_transport_v2.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "legacy_topology",
+      "adapter": "topology_replay_v1",
+      "input_path": "../replays/heterogeneous_unicast.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 1000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "memory_alias_posted",
+      "adapter": "memory_replay_v1",
+      "input_path": "../memory_replays/generic_ordered.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 10000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "memory_resume",
+      "adapter": "memory_replay_v1",
+      "input_path": "../memory_replays/generic_ordered.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 10000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [
+        30,
+        80
+      ],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "memory_incomplete",
+      "adapter": "memory_replay_v1",
+      "input_path": "../memory_replays/generic_incomplete.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 80
+      },
+      "expected_execution": "incomplete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "wormhole_memory",
+      "adapter": "memory_replay_v1",
+      "input_path": "../memory_replays/wormhole_ordered.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "memory_local",
+      "adapter": "memory_replay_v1",
+      "input_path": "memory_local.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 10000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "compute_depth1",
+      "adapter": "compute_workload_v1",
+      "input_path": "../compute_workloads/streaming_depth1.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "compute_depth2",
+      "adapter": "compute_workload_v1",
+      "input_path": "../compute_workloads/streaming_depth2.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "compute_resume",
+      "adapter": "compute_workload_v1",
+      "input_path": "../compute_workloads/streaming_depth2.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [
+        5,
+        15
+      ],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "wormhole_compute",
+      "adapter": "compute_workload_v1",
+      "input_path": "../compute_workloads/wormhole_bf16_matmul.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "compute_shared_engine",
+      "adapter": "compute_workload_v1",
+      "input_path": "compute_shared_engine.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 100.0
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D06"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "VA-D05"
+          ]
+        }
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "gate_id": "optional_ml",
+      "gate": "optional_ml",
+      "required": false,
+      "wall_time_seconds": 30,
+      "requirements": [
+        "VA-D10"
+      ]
+    }
+  ]
+}

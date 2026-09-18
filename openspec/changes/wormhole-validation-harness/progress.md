@@ -211,3 +211,44 @@ Validation on this host:
 
 No runtime mechanisms, hardware constants, replay formats or legacy consumers
 changed. No external functional execution or silicon timing was validated.
+
+## Part 3 — finite isolated suites and regression gates
+
+Tasks 3.1–3.5 completed. Suite admission resolves and admits every input before
+any runtime starts. Sequential subprocesses enforce declared wall limits; source
+input hashes are checked before/after execution. Invalid admission produces no
+report/output mutation. A killed worker produces a failed bounded-execution check
+with no invented snapshot. Runtime assertions are failures, not missing evidence.
+Optional dependencies and unittest skip reasons remain explicitly blocked.
+Interruption horizons are finite, increasing and inside the admitted final horizon;
+all snapshots retain normalized observations and undergo ownership audits.
+
+The checked-in `configs/validation/offline.json` catalog has **19 cases**: isolated
+latency, local/one-hop/wrap paths, packet boundaries, finite repeated throughput,
+shared-link minimum-buffer backpressure, Wormhole dual fabrics, legacy v1, generic
+and Wormhole memory, shared physical aliases/posted effects, local-only service,
+incomplete and resumed memory, one/two-slot and resumed compute, Wormhole compute,
+and two streams sharing one physical engine. All quantities remain configured.
+Metrics explicitly use simulation start to snapshot, with no excluded warm-ups;
+finite throughput includes declared initial idle time and is not asymptotic
+saturation. An added event audit rejects aggregate channel launch cadence above
+the configured rate (including explicit channel overrides and slowdowns).
+
+Actual validation:
+
+- Catalog: **19/19 required case outcomes passed**; one case intentionally
+  remains incomplete. Optional ML gate blocked: Torch/PyG absent. Functional
+  reference and silicon timing remain unvalidated. Report saved temporarily at
+  `/tmp/wormhole-part3-report.json` during development.
+- Runner/contracts/adapters group before final launch audit: **59/59 passed**
+  (51.347s). Final runner/adapters group: **35/35 passed** (52.107s), including
+  real enforced timeout, deterministic isolated runs, all-input admission,
+  missing tools vs executed failures, skips, empty gates, and shell-free registry.
+- Actual named gates: compute **75 discovered/75 passed**; torus **35/35**;
+  memory **94 discovered, 93 passed, 0 failed, 1 optional Torch/PyG skip**, hence
+  gate outcome blocked. Skips and reasons are retained in structured diagnostics.
+- Strict Pyright **0 errors/warnings**, scoped Ruff and whitespace **passed**.
+
+The root smoke command is registered but its actual execution is reserved for
+the consolidated audit. The two historical root remap limitations remain
+recorded and are not counted as passes. No vendor launcher or network path exists.

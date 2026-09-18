@@ -16,11 +16,11 @@
 
 ## 3. Finite benchmark runner and regression gates (VA-D01, D02, D06, D10)
 
-- [ ] 3.1 Implement finite suite admission/execution with isolated sequential cases, explicit source resolution, configurable simulation/search limits and enforced process wall-time budgets; verify determinism, no leaked runtime state, timeout diagnostics and preservation of existing output when admission fails.
-- [ ] 3.2 Add compact generic and Wormhole case assets under `configs/validation/` covering idle/hop/wrap latency, packet boundaries, finite sustained traffic, shared-link/dual-fabric contention and minimum-buffer backpressure; verify metrics have explicit windows/numerators/denominators and independent expectations are configuration-derived.
-- [ ] 3.3 Add memory-alias/local-only and finite compute depth/shared-engine cases with complete, interruption/resume and posted-drain checks; verify aggregate conservation, bounded occupancy and no completed throughput from pending planned work.
-- [ ] 3.4 Add fixed named regression gates for relevant unittest groups, strict Pyright, scoped Ruff and compatible legacy smokes using argument lists without shell injection; test missing tool/import prerequisites versus executed assertions/type/lint failures, preserve skip reasons, and keep optional ML gates explicitly blocked when unavailable.
-- [ ] 3.5 Run the finite catalog and focused runner/gate tests plus relevant regression/type/lint/whitespace checks; record case identities, known historical root remap limitations and actual outcomes, then commit before external import.
+- [x] 3.1 Implement finite suite admission/execution with isolated sequential cases, explicit source resolution, configurable simulation/search limits and enforced process wall-time budgets; verify determinism, no leaked runtime state, timeout diagnostics and preservation of existing output when admission fails.
+- [x] 3.2 Add compact generic and Wormhole case assets under `configs/validation/` covering idle/hop/wrap latency, packet boundaries, finite sustained traffic, shared-link/dual-fabric contention and minimum-buffer backpressure; verify metrics have explicit windows/numerators/denominators and independent expectations are configuration-derived.
+- [x] 3.3 Add memory-alias/local-only and finite compute depth/shared-engine cases with complete, interruption/resume and posted-drain checks; verify aggregate conservation, bounded occupancy and no completed throughput from pending planned work.
+- [x] 3.4 Add fixed named regression gates for relevant unittest groups, strict Pyright, scoped Ruff and compatible legacy smokes using argument lists without shell injection; test missing tool/import prerequisites versus executed assertions/type/lint failures, preserve skip reasons, and keep optional ML gates explicitly blocked when unavailable.
+- [x] 3.5 Run the finite catalog and focused runner/gate tests plus relevant regression/type/lint/whitespace checks; record case identities, known historical root remap limitations and actual outcomes, then commit before external import.
 
 ## 4. Reference import and comparison admission (VA-D02..04, D07)
 

@@ -189,6 +189,63 @@ def packet_audit(admitted: Admission, raw: Data) -> None:
     require(integer(transport["transmitted_channel_bytes"]) == total, "channel total differs from actual launches")
     if memory:
         require(session["packet_bytes"] == injected and session["channel_bytes"] == total, "planned bytes counted as observed")
+    link_timing_audit(admitted, raw, transport)
+
+
+def link_timing_audit(admitted: Admission, raw: Data, transport: Data) -> None:
+    """A physical channel's launch budget is shared across packets and lanes."""
+    legacy = admitted.adapter == "topology_replay_v1"
+    gaps: dict[str, float] = {}
+    effective = parse(admitted.effective.text)
+    if legacy:
+        for channel in rows(effective["channels"]):
+            gaps[text(channel["channel_id"])] = float(number(obj(channel["settings"])["launch_interval_aci_cycles"]))
+    else:
+        memory = "runtime" in effective
+        config = obj(obj(effective["runtime"])["transport"]) if memory else admitted.configuration
+        resolved = {text(q["field_path"]): number(q["value"]) for q in rows(obj(raw.get("plan", {})).get("quantities", []))}
+
+        def value(setting: object, path: str) -> float:
+            if isinstance(setting, (float, int)):
+                return float(setting)
+            item = obj(setting)
+            return float(number(item["value"])) if item.get("kind") == "literal" else float(resolved[path])
+
+        for event in rows(transport["trace"]):
+            if event["action"] != "link_launch":
+                continue
+            channel = obj(event["channel"])
+            identifier = key(channel)
+            if identifier in gaps:
+                continue
+            fabric = next(f for f in rows(config["fabrics"]) if f["fabric_id"] == channel["fabric_id"])
+            kind = "network_link" if channel["kind"] == "network" else "local_link"
+            setting = obj(fabric[kind])
+            if memory:
+                for override in rows(config.get("overrides", [])):
+                    if override.get("channel") == channel:
+                        setting = obj(override["settings"])
+                ratio = number(setting["aci_clock_hz"]) / number(setting["noc_clock_hz"])
+            else:
+                ratio = value(config["aci_clock"], "aci_clock") / value(fabric["noc_clock"], f"fabrics.{channel['fabric_id']}.noc_clock")
+                # Overrides are explicit admitted channel settings, never fitted facts.
+                for override in rows(config.get("network_overrides", [])):
+                    if channel["kind"] == "network" and (override["fabric_id"], override["link_id"]) == (channel["fabric_id"], channel["identity"]):
+                        setting = obj(override["settings"])
+                for override in rows(config.get("local_overrides", [])):
+                    if (override["endpoint_id"], override["direction"]) == (channel["identity"], channel["kind"]):
+                        setting = obj(override["settings"])
+            gaps[identifier] = float(number(setting["launch_interval_noc_cycles"]) * ratio)
+    previous: dict[str, tuple[float, float]] = {}
+    for event in rows(transport["trace"]):
+        if event["action"] != ("LINK_SEND" if legacy else "link_launch"):
+            continue
+        identifier = text(event["channel_id"]) if legacy else key(event["channel"])
+        when = float(number(event["time_aci_cycles"]))
+        if identifier in previous:
+            last, factor = previous[identifier]
+            require(when - last + 1e-8 >= gaps[identifier] * factor, "shared channel launches exceed configured bandwidth")
+        previous[identifier] = (when, float(number(event.get("launch_factor") or 1)))
 
 
 def service_audit(admitted: Admission, raw: Data) -> None:

@@ -146,6 +146,12 @@ class AdapterTests(unittest.TestCase):
     def test_duplicate_flit_with_unchanged_summary(self):
         self.corrupted("torus", "packet_accounting", lambda r: r["trace"].append(copy.deepcopy(next(e for e in r["trace"] if e["action"] == "link_launch"))))
 
+    def test_aggregate_link_bandwidth_is_checked(self):
+        def mutate(raw):
+            events = [e for e in raw["trace"] if e["action"] == "link_launch" and e["channel"]["kind"] == "inject"]
+            events[1]["time_aci_cycles"] = events[0]["time_aci_cycles"]
+        self.corrupted("torus", "packet_accounting", mutate)
+
     def test_missing_or_duplicate_packet(self):
         self.corrupted("memory", "packet_accounting", lambda r: r["wire_packets"].pop())
         self.corrupted("memory", "packet_accounting", lambda r: r["wire_packets"].append(copy.deepcopy(r["wire_packets"][0])))
