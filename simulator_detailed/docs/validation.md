@@ -76,8 +76,11 @@ addressed effects, causal edges, resource/stage intervals and missing observable
 Capabilities link to the admitted plan digest; its full configuration includes
 layout, mappings, buffers, service assumptions and evidence. Fault cases are
 explicit simulation experiments. Coverage links selected checks to VA-D01..11
-and VA-01..07, remains scoped to this run, and leaves multicast/synchronization
-pending. It never updates OpenSpec or completes a whole requirement from one run.
+and VA-01..07, remains scoped to this run, and treats the unfinished
+`multicast_sync_v1` prototype as a separate opt-in adapter. Shared multicast,
+scalar network/service, pipeline generations and retained resume remain pending.
+Missing runtime evidence produces unsupported checks, not passes. It never updates
+OpenSpec or completes a whole requirement from one run.
 
 Metrics state units, clock domains, completion scope, numerator/denominator and
 measurement window. Catalog elapsed time and throughput use simulation start to
@@ -136,11 +139,12 @@ Each has a declared wall-time budget. Any unittest skip keeps that gate blocked;
 executed assertion/type/lint failures remain failures. Do not include the full
 detailed gate in a test-created suite that recursively runs itself.
 
-No numerical tensor, TT-Metal/RISC-V/ISA/kernel, multicast, atomic/semaphore,
-general synchronization, interchip, host/PCIe or new predictor/RL execution is
-provided. Physical NIU/DRAM-bank/cache fidelity and measured device timing remain
-unvalidated. Historical root remap tests still refer to removed
+No numerical tensor, TT-Metal/RISC-V/ISA/kernel, general dynamic collective,
+interchip, host/PCIe or new predictor/RL execution is provided. Physical
+NIU/DRAM-bank/cache fidelity and measured device timing remain unvalidated.
+Historical root remap tests still refer to removed
 `LayerView.active_cores` and an inactive layer-5/core mapping; the separate passing
 root smoke does not repair or pass those tests. See the
 [child delivery evidence](../../openspec/changes/wormhole-validation-harness/delivery.md)
-for exact checks and the next-child handoff.
+and the [finite multicast child](../../openspec/changes/wormhole-multicast-sync/progress.md)
+for exact checks and supported scope.

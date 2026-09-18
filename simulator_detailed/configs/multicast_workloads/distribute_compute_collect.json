@@ -297,7 +297,7 @@
         }
       ],
       "source": {
-        "graph_path": "graph.json",
+        "graph_path": "../topologies/multicast_sync_fixture.json",
         "kind": "canonical_graph"
       }
     },

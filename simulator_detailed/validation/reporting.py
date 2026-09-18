@@ -45,9 +45,13 @@ def case_capabilities(admitted: Admission, case: CaseResult) -> CaseCapabilities
         mechanisms += ["addressed_memory", "physical_memory_service", "posted_drain"]
     if admitted.adapter == "compute_workload_v1":
         mechanisms += ["abstract_compute_cost", "bounded_stream_overlap"]
+    if admitted.adapter == "multicast_sync_v1":
+        mechanisms += ["rectangle_tree_planning", "serial_multicast_projection"]
     faults = has_faults(admitted.configuration)
     assumptions = ["Rates, capacities, layout and clock domains are taken from the admitted effective plan.",
                    "Finite scheduling/traffic observations do not execute tensor values or device kernels."]
+    if admitted.adapter == "multicast_sync_v1":
+        assumptions.append("The child is a prototype: shared transport/memory/compute service and retained runtime resume are not implemented.")
     if faults:
         assumptions.append("Configured faults are simulation experiments; a passing model audit does not establish measured fault behavior.")
     return CaseCapabilities(
@@ -58,7 +62,9 @@ def case_capabilities(admitted: Admission, case: CaseResult) -> CaseCapabilities
         clocks=case.observations[-1].clocks if case.observations else (),
         effective_plan_sha256=case.identity.effective_plan_sha256,
         simulation_fault_experiment=faults, assumptions=tuple(assumptions),
-        unsupported=("tensor_values", "kernel_execution", "multicast", "synchronization", "multi_asic"),
+        unsupported=("tensor_values", "kernel_execution", "multi_asic", "shared_multicast_runtime", "scalar_network",
+                     "shared_l1_atomics", "pipeline_generations", "retained_resume") if admitted.adapter == "multicast_sync_v1" else
+                    ("tensor_values", "kernel_execution", "multicast", "synchronization", "multi_asic"),
     )
 
 
@@ -90,5 +96,5 @@ def requirement_coverage(suite: ValidationSuite, cases: tuple[CaseResult, ...],
         ))
     for mechanism in ("multicast", "synchronization"):
         coverage.append(RequirementCoverage(requirement_id=f"pending_{mechanism}", status="pending", checks=(), child_commits=(),
-                                            reason="Reserved for wormhole-multicast-sync; no implementation or validation claimed."))
+                                            reason="The complete shared runtime remains pending in wormhole-multicast-sync; prototype checks do not establish delivery."))
     return tuple(coverage)

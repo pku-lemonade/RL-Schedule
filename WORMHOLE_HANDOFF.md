@@ -8,7 +8,7 @@ Prepared on 2026-09-17 for continuing this work on another machine; delivery sta
 - Working branch: **`feiyang-dev`**.
 - Latest planning commit before this handoff: **`7af97842c879a82a77af79596192eb5de2cb25d9`**, `docs: plan Wormhole validation harness and evidence gates`.
 - Latest completed child: **`wormhole-validation-harness`**, **35/35 tasks**, with **11 requirements and 25 acceptance scenarios**. Its seven incremental parts deliver offline validation, independent audits, reference import, bounded calibration and a report CLI. See [delivery.md](openspec/changes/wormhole-validation-harness/delivery.md), [progress.md](openspec/changes/wormhole-validation-harness/progress.md), and the [exact identity manifest](openspec/changes/wormhole-validation-harness/delivery-identities.json). The final delivery is the commit containing this update; Part 6 is `736a396`.
-- Next action: **explore `wormhole-multicast-sync` as a separate child**, using the delivered harness findings and limits. Its mechanisms remain pending; no umbrella specification or task was synchronized or archived.
+- Current action: **repair and continue `wormhole-multicast-sync`**. Planning is complete, but a 2026-09-18 implementation audit reopened overstated task checkmarks: only 2/35 tasks are fully verified. Serial prototypes exist; the required shared transport/memory/compute runtime is not delivered. Read [implementation-audit.md](openspec/changes/wormhole-multicast-sync/implementation-audit.md) and [progress.md](openspec/changes/wormhole-multicast-sync/progress.md) before continuing. No umbrella specification or task was synchronized or archived.
 - The original migration authorized a transfer push. That historical authorization is not an unlimited future push policy. **The seven validation implementation parts were committed locally and were not pushed.** Push only on a new request. Obtain this document's commit with `git log -1 --oneline -- WORMHOLE_HANDOFF.md`.
 
 ## Working agreement
@@ -33,15 +33,15 @@ The umbrella is [wormhole-single-chip-simulation-plan](openspec/changes/wormhole
 | `wormhole-dual-noc-routing` | 35/35 | Two configurable torus fabrics, directed routing, bounded flow control, causal responses and directed slowdowns |
 | `wormhole-memory-transactions` | 40/40 | Addressed transactions, segmentation, shared L1/DRAM service and capacity, ordering/versions and local clients |
 | `wormhole-compute-dataflow` | 35/35 | Finite FC/matmul costs, real memory traffic, shared sessions, reusable slots, causal reader/compute/writer overlap and CLI/examples |
-| **`wormhole-validation-harness`** | **0/35; planning ready** | Unified reproducible model validation, reference imports, comparison admission, bounded calibration/held-out evaluation and reports |
-| `wormhole-multicast-sync` | Not created/applied | Next child after validation: useful multicast subset and scalar atomics/semaphores, with ordering, shared traffic costs and liveness |
+| **`wormhole-validation-harness`** | **35/35; delivered** | Unified reproducible model validation, reference imports, comparison admission, bounded calibration/held-out evaluation and reports |
+| `wormhole-multicast-sync` | 2/35 fully verified after audit; implementation in progress | Schema/tree/serial prototypes and partial validation exist. Shared runtime integration, physical service/ownership, causal pipeline, retained resume and valid Wormhole fixture remain pending. |
 | Umbrella final audit | Pending | Audit 27 parent target requirements, reconcile overlapping deltas and delivered evidence before eventual sync/archive |
 
 The separate `improve-rl-local-remap` change is already 12/12 and is not the active task. Do not select it just because multiple OpenSpec changes exist.
 
 ## Read these files first
 
-1. The active child's [proposal](openspec/changes/wormhole-validation-harness/proposal.md), [design](openspec/changes/wormhole-validation-harness/design.md), [requirements](openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md) and [tasks](openspec/changes/wormhole-validation-harness/tasks.md).
+1. The active multicast child's [proposal](openspec/changes/wormhole-multicast-sync/proposal.md), [design](openspec/changes/wormhole-multicast-sync/design.md), [requirements](openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md), [tasks](openspec/changes/wormhole-multicast-sync/tasks.md) and [implementation audit](openspec/changes/wormhole-multicast-sync/implementation-audit.md).
 2. The preceding compute child's [delivery report](openspec/changes/wormhole-compute-dataflow/delivery.md) and [progress evidence](openspec/changes/wormhole-compute-dataflow/progress.md), including independent oracles, exact identities, compatibility checks and known limitations.
 3. The umbrella [design](openspec/changes/wormhole-single-chip-simulation-plan/design.md) and [VA-01..07 validation requirements](openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md).
 4. The maintained [detailed simulator documentation](simulator_detailed/docs/README.md), especially [compute](simulator_detailed/docs/compute_dataflow.md), [memory](simulator_detailed/docs/memory_transactions.md), [torus transport](simulator_detailed/docs/torus_transport.md) and [profile limits](simulator_detailed/docs/hardware_profile.md).
@@ -191,5 +191,5 @@ Known baseline limitations:
 ## Short prompt for the next agent
 
 ```text
-Continue the Wormhole simulator work in this RL-Schedule checkout on feiyang-dev. Read WORMHOLE_HANDOFF.md and the four planning artifacts in openspec/changes/wormhole-validation-harness/. The plan is committed; implementation is 0/35. Reproduce the documented baseline, then apply Part 1 (tasks 1.1–1.5) and continue incrementally. Test, type-check, lint and commit each completed part before proceeding. Preserve compatibility, configurable hardware parameters and honest evidence tiers. Respond in English first, then Chinese. Do not recreate the plan, repeat the history cleanup, or push future commits unless requested.
+Continue the Wormhole simulator work in this RL-Schedule checkout on feiyang-dev. Read WORMHOLE_HANDOFF.md and the planning artifacts, implementation-audit.md and progress.md in openspec/changes/wormhole-multicast-sync/. The validation predecessor is delivered (35/35). The multicast child has 2/35 fully verified tasks after correcting overstated prototype completion claims. Repair Part 1 admission, then integrate the shared runtime in dependency order. Test, type-check, lint and commit each completed part before proceeding. Preserve compatibility, configurable hardware parameters and honest evidence tiers. Respond in English first, then Chinese. Do not recreate the plan, repeat the history cleanup, or push future commits unless requested.
 ```

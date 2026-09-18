@@ -328,7 +328,8 @@ class TreeForwardingEngine:
         writes = list(self.transport.writes)
         if operation_order is not None:
             positions = {operation_id: index for index, operation_id in enumerate(operation_order)}
-            writes.sort(key=lambda item: positions.get(item.operation_id, len(positions)))
+            writes = [write for write in writes if write.operation_id in positions]
+            writes.sort(key=lambda item: positions[item.operation_id])
         pending: list[str] = []
         for write_index, write in enumerate(writes):
             pending.append(write.operation_id)

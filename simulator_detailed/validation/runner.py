@@ -48,6 +48,8 @@ def admit_suite(path: Path) -> AdmittedSuite:
     for case, admission in zip(suite.cases, admitted, strict=True):
         if case.resume_at_aci_cycles:
             config = admission.configuration
+            if case.adapter == "multicast_sync_v1" and "multicast" in config:
+                config = obj(config["multicast"])
             if "memory" in config:
                 config = obj(config["memory"])
             if case.resume_at_aci_cycles[-1] >= number(config["max_aci_cycles"]):
@@ -91,6 +93,8 @@ def local_check(selection: CheckSelection, case: ValidationCase, admitted: Admis
         elif selection.check == "admission":
             reason = "all declared simulator assets admitted before runtime allocation"
         elif selection.check == "bounded_execution":
+            if admitted.adapter == "multicast_sync_v1":
+                audit("bounded_execution", admitted, raw)
             reason = "isolated worker returned within the enforced wall-time and simulation budgets"
         else:
             reason = audit(selection.check, admitted, raw)

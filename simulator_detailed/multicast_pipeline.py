@@ -179,9 +179,12 @@ class FinitePipelineExecutor:
         memory_results: list[MulticastMemoryResult] = []
         memory_result = memory_executor.run()
         memory_results.append(memory_result)
-        while memory_result.snapshot.pending_operation_ids:
+        while memory_result.status == "complete" and memory_result.snapshot.pending_operation_ids:
+            previous_completed = memory_result.snapshot.completed_operation_ids
             memory_result = memory_executor.resume(memory_result)
             memory_results.append(memory_result)
+            if memory_result.snapshot.completed_operation_ids == previous_completed:
+                break
         external_completed = tuple(
             operation.operation_id
             for result in memory_results
@@ -229,7 +232,10 @@ class FinitePipelineExecutor:
                                                   output_buffer_id=stage.output_buffer_id,
                                                   slot_generation=stage.slot_generation,
                                                   start_aci_cycles=start, completion_aci_cycles=elapsed))
-        status = "complete" if scalar.status == "complete" and all(stage.status == "complete" for stage in stages) else "incomplete"
+        status = "complete" if (memory_results[-1].status == "complete"
+                                and not memory_results[-1].snapshot.pending_operation_ids
+                                and scalar.status == "complete"
+                                and all(stage.status == "complete" for stage in stages)) else "incomplete"
         return FinitePipelineResult(status=status, elapsed_aci_cycles=elapsed, memory=tuple(memory_results),
                                     scalar=scalar, stages=tuple(stages), events=tuple(events),
                                     buffers=tuple(buffers.values()))

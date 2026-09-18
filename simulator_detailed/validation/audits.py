@@ -8,6 +8,7 @@ from itertools import groupby
 from ..configs.schemas.validation import CheckName
 from .adapters import Admission
 from .data import Data, array, integer, key, number, obj, parse, require, rows, text
+from .multicast import MulticastAuditUnavailable, audit_multicast
 
 
 class UnsupportedAudit(ValueError):
@@ -548,6 +549,12 @@ def drain_audit(admitted: Admission, raw: Data) -> None:
 
 
 def audit(check: CheckName, admitted: Admission, raw: Data) -> str:
+    if admitted.adapter == "multicast_sync_v1":
+        try:
+            audit_multicast(check, raw, admitted.configuration, admitted.graph)
+        except MulticastAuditUnavailable as exc:
+            raise UnsupportedAudit(str(exc)) from exc
+        return f"{check}: independent declared rectangle/event audit passed"
     functions = {"routing": route_audit, "packet_accounting": packet_audit, "memory_service": service_audit,
                  "ownership": ownership_audit, "compute_work": compute_audit, "causality": compute_audit, "drain": drain_audit}
     function = functions.get(check)

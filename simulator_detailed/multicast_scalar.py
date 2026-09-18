@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Literal
 
@@ -100,14 +101,17 @@ class ScalarExecutor:
     def _validate(plan: MulticastSyncPlan) -> None:
         workload = plan.workload
         counters = {counter.counter_id: counter for counter in workload.counters}
-        ranges: dict[str, tuple[int, int]] = {}
+        buffers = {buffer.buffer_id: buffer for buffer in workload.memory.buffers}
+        ranges: dict[str, tuple[str, int, int]] = {}
         for counter in workload.counters:
             maximum = (1 << (8 * counter.width_bytes)) - 1
             if counter.initial_value > maximum:
                 raise ValueError(f"counter {counter.counter_id}: initial value overflows width")
-            extent = (counter.offset_bytes, counter.offset_bytes + counter.width_bytes)
+            buffer = buffers[counter.buffer_id]
+            address = buffer.base_address + counter.offset_bytes
+            extent = (buffer.resource_id, address, address + counter.width_bytes)
             for other_id, other_extent in ranges.items():
-                if extent[0] < other_extent[1] and other_extent[0] < extent[1]:
+                if extent[0] == other_extent[0] and extent[1] < other_extent[2] and other_extent[1] < extent[2]:
                     raise ValueError(f"counter {counter.counter_id}: overlaps counter {other_id}")
             ranges[counter.counter_id] = extent
         for increment in workload.increments:
@@ -130,9 +134,10 @@ class ScalarExecutor:
         snapshot: ScalarSnapshot | None = None,
         external_completed: tuple[str, ...] = (),
     ) -> ScalarExecutionResult:
-        if cycle_limit is not None and cycle_limit < 0:
-            raise ValueError("cycle limit must be non-negative")
+        if cycle_limit is not None and (isinstance(cycle_limit, bool) or not math.isfinite(cycle_limit) or cycle_limit < 0):
+            raise ValueError("cycle limit must be finite and non-negative")
         workload = self.plan.workload
+        limit = workload.memory.max_aci_cycles if cycle_limit is None else min(cycle_limit, workload.memory.max_aci_cycles)
         self._validate(self.plan)
         counters = {
             state.counter_id: state
@@ -157,11 +162,21 @@ class ScalarExecutor:
             wait.wait_id for wait in workload.waits
         }
         elapsed = snapshot.elapsed_aci_cycles if snapshot else 0.0
+        if elapsed > limit:
+            raise ValueError("cycle limit precedes scalar snapshot")
         events: list[ScalarEvent] = []
         increment_records: list[ScalarIncrementRecord] = []
         wait_records: list[ScalarWaitRecord] = []
-        for increment in workload.increments:
+        buffers = {buffer.buffer_id: buffer for buffer in workload.memory.buffers}
+        resources = {resource.resource_id: resource for resource in workload.memory.resources}
+        increments = {increment.operation_id: increment for increment in workload.increments}
+        for operation_id in self.plan.record.operation_order:
+            if operation_id not in increments:
+                continue
+            increment = increments[operation_id]
             if increment.operation_id in completed_operations:
+                continue
+            if not set(increment.depends_on) <= completed_operations:
                 continue
             state = counters[increment.counter_id]
             maximum = (1 << (8 * state.width_bytes)) - 1
@@ -175,9 +190,17 @@ class ScalarExecutor:
                 continue
             request_bytes = workload.memory.packet.physical_flit_bytes
             response_bytes = request_bytes if increment.completion == "atomic_returning" else 0
+            native_clock = resources[buffers[state.buffer_id].resource_id].service.native_clock_hz
+            duration = workload.control.atomic_native_cycles * workload.memory.aci_clock_hz / native_clock
+            return_duration = workload.control.local_observation_aci_cycles if response_bytes else 0
+            if not math.isfinite(duration) or duration <= 0 or elapsed + duration <= elapsed:
+                raise ValueError("unrepresentable scalar service duration")
+            if elapsed + duration + return_duration > limit:
+                break
             events.append(self._event(len(events), elapsed, "atomic_submit", increment.operation_id, None,
                                       state, state.value, None, request_bytes))
-            elapsed += workload.control.atomic_native_cycles
+            elapsed += duration
+            linearization = elapsed
             old = state.value
             new = old + 1
             counters[state.counter_id] = state.model_copy(update={"value": new, "version": state.version + 1})
@@ -192,22 +215,23 @@ class ScalarExecutor:
             completed_operations.add(increment.operation_id)
             increment_records.append(self._increment_record(
                 increment, state, "complete", old, new, request_bytes, response_bytes,
-                workload.control.atomic_native_cycles, elapsed, "drained"
-            ))
-            if cycle_limit is not None and elapsed >= cycle_limit:
-                break
+                duration, elapsed, "drained"
+            ).model_copy(update={"linearization_aci_cycles": linearization}))
 
         for wait in workload.waits:
             if wait.wait_id in completed_waits:
                 continue
             state = counters[wait.counter_id]
+            if elapsed + workload.control.local_observation_aci_cycles > limit:
+                wait_records.append(self._wait_record(wait, state, 0, "incomplete", False, None, "cycle_limit"))
+                continue
+            elapsed += workload.control.local_observation_aci_cycles
             observations = 1
             events.append(self._event(len(events), elapsed, "wait_observe", None, wait, state, state.value, None, 0))
             threshold_reached = state.value >= wait.threshold
             producer_ready = all(operation in completed_operations for operation in wait.producer_operations)
             data_ready = all(operation in completed_operations for operation in wait.data_ready_after)
             if threshold_reached and producer_ready and data_ready:
-                elapsed += workload.control.local_observation_aci_cycles
                 events.append(self._event(len(events), elapsed, "wait_complete", None, wait, state, state.value, state.value, 0))
                 completed_waits.add(wait.wait_id)
                 pending_waits.discard(wait.wait_id)

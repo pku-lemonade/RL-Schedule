@@ -41,6 +41,7 @@ TimeValue = Annotated[Number, Field(ge=0)]
 AdapterName = Literal[
     "profile_inspection_v1", "topology_inspection_v1", "topology_replay_v1",
     "torus_replay_v2", "memory_replay_v1", "compute_workload_v1",
+    "multicast_sync_v1",
 ]
 CheckName = Literal[
     "admission", "architecture", "routing", "packet_accounting", "memory_service",
@@ -176,6 +177,7 @@ class ObservationEvent(ValidationRecord):
     time: TimePoint | None
     counters: tuple[ObservationCounter, ...] = ()
     generation: Index | None = None
+    details: CanonicalJSON | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def counters_unique(self) -> Self:

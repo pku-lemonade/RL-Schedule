@@ -46,6 +46,48 @@ def scalar_executor(*, completion: str = "atomic_returning", threshold: int = 1,
 
 
 class MulticastScalarTests(unittest.TestCase):
+    def test_horizon_does_not_publish_an_unserviced_update(self) -> None:
+        result = scalar_executor().run(cycle_limit=0.1)
+        self.assertEqual(result.status, "incomplete")
+        self.assertEqual(result.counters[0].value, 0)
+        self.assertEqual(result.counters[0].version, 0)
+        self.assertFalse(result.events)
+        self.assertFalse(result.increments)
+        self.assertLessEqual(result.elapsed_aci_cycles, 0.1)
+        for invalid in (True, float("inf"), float("nan"), -1):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                scalar_executor().run(cycle_limit=invalid)
+
+    def test_missing_dependency_does_not_submit_increment(self) -> None:
+        original = scalar_executor()
+        document = original.plan.workload.model_dump(mode="json")
+        document["increments"][0]["depends_on"] = ["broadcast"]
+        executor = ScalarExecutor.compile(MulticastSyncPlan.compile(
+            MulticastSyncWorkload.model_validate(document), original.plan.topology))
+        pending = executor.run()
+        self.assertEqual(pending.status, "incomplete")
+        self.assertEqual(pending.counters[0].value, 0)
+        self.assertFalse(any(event.action == "atomic_submit" for event in pending.events))
+        completed = executor.run(external_completed=("broadcast",))
+        self.assertEqual(completed.status, "complete")
+
+    def test_native_duration_is_converted_and_linearization_matches_event(self) -> None:
+        result = scalar_executor(completion="atomic_posted").run()
+        self.assertEqual(result.increments[0].linearization_aci_cycles, 2.5)
+        event = next(event for event in result.events if event.action == "atomic_linearize")
+        self.assertEqual(event.time_aci_cycles, result.increments[0].linearization_aci_cycles)
+
+    def test_equal_offsets_on_independent_resources_are_not_aliases(self) -> None:
+        original = scalar_executor()
+        document = original.plan.workload.model_dump(mode="json")
+        document["counters"].append({
+            "counter_id": "independent", "endpoint_id": "ep-t1_0", "buffer_id": "b-ep-t1_0",
+            "offset_bytes": 256, "width_bytes": 1, "initial_value": 0,
+        })
+        executor = ScalarExecutor.compile(MulticastSyncPlan.compile(
+            MulticastSyncWorkload.model_validate(document), original.plan.topology))
+        self.assertEqual(len(executor.run().counters), 2)
+
     def test_returning_increment_is_indivisible_and_returns_previous_value(self) -> None:
         result = scalar_executor().run()
         self.assertEqual(result.status, "complete")

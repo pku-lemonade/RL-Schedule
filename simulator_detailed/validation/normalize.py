@@ -2,6 +2,7 @@
 
 from collections import Counter
 from fractions import Fraction
+from typing import Literal
 
 from ..configs.schemas.validation import (
     AddressedEffect,
@@ -22,7 +23,9 @@ from ..configs.schemas.validation import (
 )
 from .adapters import Admission
 from .data import Data, array, integer, key, number, obj, rows, text
-from .identity import content_digest
+from .identity import canonical_record, content_digest
+
+ObservationRole = Literal["endpoint", "resource", "worker", "router", "link", "job", "transfer", "slot"]
 
 
 def converted_seconds(point: TimePoint, clocks: tuple[ClockDomain, ...]) -> Fraction:
@@ -49,7 +52,111 @@ def execution(raw: Data) -> ExecutionState:
     return "inspected"
 
 
+def _normalize_multicast(admission: Admission, raw: Data) -> NormalizedObservations:
+    """Keep projection evidence and identities without inventing shared causality."""
+    config = admission.configuration
+    multicast = obj(config.get("multicast", config))
+    memory = obj(multicast["memory"])
+    clock = ClockDomain(domain_id="aci", hz=Metadata[float](
+        state="known", value=float(number(memory["aci_clock_hz"]))))
+    entities: dict[str, ObservationEntity] = {}
+
+    def entity(role: ObservationRole, value: str) -> str:
+        identifier = role + ":" + value
+        entities.setdefault(identifier, ObservationEntity(entity_id=identifier, role=role))
+        return identifier
+
+    for resource in rows(admission.graph.get("resources", [])):
+        entity("resource", text(resource["resource_id"]))
+    for endpoint in rows(admission.graph.get("attachments", [])):
+        entity("endpoint", text(endpoint["endpoint_id"]))
+    events: list[ObservationEvent] = []
+    edges: list[CausalEdge] = []
+    effects: list[AddressedEffect] = []
+    intervals: list[OccupancyInterval] = []
+    previous: dict[tuple[str, str], str] = {}
+
+    def add_event(row: Data, group: str, subject: str) -> str:
+        subject = entity("transfer", subject)
+        identifier = f"{group}:{len(events)}"
+        counters = tuple(
+            ObservationCounter(name=name, value=integer(row[name]),
+                               unit="bytes" if name.endswith("bytes") else "count", scope="observed")
+            for name in ("physical_bytes", "useful_bytes", "service_bytes", "old_value", "new_value")
+            if row.get(name) is not None
+        )
+        events.append(ObservationEvent(
+            event_id=identifier, action=text(row["action"]), subject_id=subject,
+            time=point(number(row["time_aci_cycles"])), counters=counters, details=canonical_record(row)))
+        # List order only establishes a local subject order within one producer.
+        # Separate memory/scalar projections have no demonstrated shared clock or
+        # cross-component causal edges, so do not synthesize those edges here.
+        previous_key = (group, subject)
+        if previous_key in previous:
+            edges.append(CausalEdge(before=previous[previous_key], after=identifier))
+        previous[previous_key] = identifier
+        return identifier
+
+    pipeline = raw.get("kind") == "multicast_pipeline_result"
+    memory_results = rows(raw.get("memory", [])) if pipeline else [raw]
+    if pipeline:
+        for row in rows(raw.get("events", [])):
+            add_event(row, "pipeline", text(row["stage_id"]))
+    buffer_records = {text(buffer["buffer_id"]): buffer for buffer in rows(memory["buffers"])}
+    writes = {text(write["operation_id"]): write for write in rows(multicast.get("writes", []))}
+    for index, memory_result in enumerate(memory_results):
+        for row in rows(memory_result.get("events", [])):
+            event_id = add_event(row, f"memory:{index}", text(row["operation_id"]))
+            if row["action"] == "buffer_ready":
+                buffer = buffer_records[text(row["buffer_id"])]
+                write = writes[text(row["operation_id"])]
+                binding = next(destination for destination in rows(write["destinations"])
+                               if destination["endpoint_id"] == row["endpoint_id"])
+                effects.append(AddressedEffect(
+                    effect_id="publish:" + event_id,
+                    destination_id=entity("endpoint", text(row["endpoint_id"])),
+                    resource_id=entity("resource", text(buffer["resource_id"])),
+                    offset_bytes=integer(buffer["base_address"]) + integer(binding["offset_bytes"]),
+                    size_bytes=integer(row["useful_bytes"]), count=1, visibility_event=event_id))
+        transport = obj(memory_result.get("transport", {}))
+        for row in rows(transport.get("events", [])):
+            add_event(row, f"transport:{index}", text(row["operation_id"]))
+        for reservation in rows(transport.get("reservations", [])):
+            resource = entity("resource", f"reservation:{index}:" + text(reservation["reservation_id"]))
+            release = reservation.get("released_aci_cycles")
+            intervals.append(OccupancyInterval(
+                interval_id=resource, resource_id=resource,
+                owner_id=entity("transfer", text(reservation["operation_id"])),
+                start=point(number(reservation["acquired_aci_cycles"])),
+                end=point(number(release)) if release is not None else None))
+    scalar = obj(raw.get("scalar", {}))
+    for row in rows(scalar.get("events", [])):
+        add_event(row, "scalar", text(row["counter_id"]))
+    # Only the latest memory checkpoint represents the outstanding write set.
+    latest = memory_results[-1] if memory_results else {}
+    pending = {text(item) for item in array(obj(latest.get("snapshot", {})).get("pending_operation_ids", []))}
+    pending.update(text(item) for item in array(raw.get("pending_operations", [])))
+    scalar_snapshot = obj(scalar.get("snapshot", {}))
+    completed_scalar = {text(item) for item in array(scalar_snapshot.get("completed_operations", []))}
+    pending.update(text(item["operation_id"]) for item in rows(multicast.get("increments", []))
+                   if item["operation_id"] not in completed_scalar)
+    pending.update(text(item) for item in array(scalar_snapshot.get("pending_waits", [])))
+    pending.update(text(stage["stage_id"]) for stage in rows(raw.get("stages", [])) if stage["status"] != "complete")
+    return NormalizedObservations(
+        observation_id="obs:" + content_digest(raw), source_result_sha256=content_digest(raw),
+        execution=execution(raw), clocks=(clock,), entities=tuple(entities.values()), events=tuple(events),
+        effects=tuple(effects), causal_edges=tuple(edges), routes=(), intervals=tuple(intervals), metrics=(),
+        pending=tuple(sorted(pending)),
+        missing=(MissingObservation(name="tensor_values", outcome="unsupported", reason="abstract projection"),
+                 MissingObservation(name="shared_timing", outcome="unsupported", reason="executors use separate timelines"),
+                 MissingObservation(name="physical_ownership", outcome="unsupported", reason="no shared credit/service trace"),
+                 MissingObservation(name="silicon_timing", outcome="not_run", reason="requires hardware capture")),
+    )
+
+
 def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
+    if admission.adapter == "multicast_sync_v1":
+        return _normalize_multicast(admission, raw)
     state = execution(raw)
     config = admission.configuration
     memory_config = obj(config["memory"]) if "memory" in config else config

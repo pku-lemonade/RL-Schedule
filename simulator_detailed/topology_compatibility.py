@@ -12,12 +12,17 @@ from .utils.definitions import NoCChannel
 
 CONSUMERS = frozenset({"detailed_predictor", "detailed_encoder"})
 VALIDATION_KINDS = frozenset({"validation_suite", "validation_reference", "validation_report", "calibration_plan", "calibration_result"})
+NONLEGACY_KINDS = frozenset({"multicast_sync_workload", "multicast_sync_result", "multicast_sync_plan",
+                            "multicast_sync_execution_result", "multicast_pipeline_workload", "multicast_pipeline_result",
+                            "multicast_memory_result", "multicast_scalar_result"})
 
 
 def reject_validation_document(value: object) -> None:
     kind = cast(Mapping[str, object], value).get("kind") if isinstance(value, Mapping) else getattr(value, "kind", None)
     if isinstance(kind, str) and kind in VALIDATION_KINDS:
         raise TypeError(f"{kind} is validation evidence, not a legacy topology or event stream")
+    if isinstance(kind, str) and kind in NONLEGACY_KINDS:
+        raise TypeError(f"{kind} is a finite replay document, not a legacy topology or event stream")
 
 
 def require_legacy_topology(topology: object, consumer: str,

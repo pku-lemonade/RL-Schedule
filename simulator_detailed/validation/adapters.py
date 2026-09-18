@@ -10,8 +10,15 @@ from ..configs.schemas.torus_replay import ProfileSource, TorusReplay
 from ..configs.schemas.validation import AdapterName, CanonicalJSON
 from ..hardware_profile import inspect_profile
 from ..memory_runtime import MemoryRuntime
+from ..multicast_pipeline import (
+    FinitePipelinePlan,
+    FinitePipelineWorkload,
+)
+from ..multicast_plan import MulticastSyncPlan
 from ..replay_compute import load_plan as load_compute
 from ..replay_memory import load_plan as load_memory
+from ..replay_multicast_sync import load_workload
+from ..replay_multicast_sync import run_workload as run_multicast
 from ..replay_topology import inspect_topology
 from ..torus import TorusPlan
 from ..torus_transport import TorusTransport
@@ -78,6 +85,25 @@ def admit(adapter: AdapterName, path: Path, *, horizon: float | None = None) -> 
             return (*snapshots, obj(runtime.run().model_dump(mode="json")))
 
         execute = memory_execute
+    elif adapter == "multicast_sync_v1":
+        workload, graph_model, source_path = load_workload(path)
+        inputs["source.json"] = source_path
+        config = obj(workload.model_dump(mode="json"))
+        graph = obj(graph_model.model_dump(mode="json"))
+        if isinstance(workload, FinitePipelineWorkload):
+            pipeline_plan = FinitePipelinePlan.compile(workload, graph_model)
+            effective = {"kind": "multicast_pipeline_plan", "plan_sha256": pipeline_plan.plan_sha256,
+                         "multicast": pipeline_plan.multicast.record.model_dump(mode="json")}
+        else:
+            effective = MulticastSyncPlan.compile(workload, graph_model).record.model_dump(mode="json")
+
+        def multicast_execute(stops: tuple[float, ...]) -> tuple[Data, ...]:
+            if stops:
+                raise ValueError("multicast projection does not support retained runtime interruption/resume")
+            result, _ = run_multicast(path)
+            return (obj(result),)
+
+        execute = multicast_execute
     else:
         compute = load_compute(path)
         config = obj(compute.workload.config.model_dump(mode="json"))
@@ -95,7 +121,14 @@ def admit(adapter: AdapterName, path: Path, *, horizon: float | None = None) -> 
         binding = obj(memory_config["source"])
         inputs["source.json"] = resolve_asset(path, text(binding.get("graph_path", binding.get("profile_path"))))
     if "inspection" not in adapter:
-        bounded = obj(config["memory"]) if adapter == "compute_workload_v1" else config
+        if adapter == "compute_workload_v1":
+            bounded = obj(config["memory"])
+        elif adapter == "multicast_sync_v1" and "multicast" in config:
+            bounded = obj(obj(config["multicast"])["memory"])
+        elif adapter == "multicast_sync_v1":
+            bounded = obj(config["memory"])
+        else:
+            bounded = config
         limit = number(bounded["max_aci_cycles"])
         if horizon is not None and limit > horizon:
             raise ValueError(f"input simulation horizon {limit} exceeds case budget {horizon}")

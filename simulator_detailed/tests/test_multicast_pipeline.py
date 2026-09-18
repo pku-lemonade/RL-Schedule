@@ -79,6 +79,18 @@ def pipeline_workload() -> tuple[dict[str, Any], dict[str, Any]]:
 
 
 class MulticastPipelineTests(unittest.TestCase):
+    def test_unready_source_terminates_with_pending_work(self) -> None:
+        document, graph = pipeline_workload()
+        document["multicast"]["memory"]["buffers"][0]["initially_ready"] = False
+        plan = FinitePipelinePlan.compile(FinitePipelineWorkload.model_validate(document),
+                                          CanonicalTopology.model_validate(graph))
+        result = FinitePipelineExecutor(plan).run()
+        self.assertEqual(result.status, "incomplete")
+        self.assertEqual(len(result.memory), 1)
+        self.assertTrue(result.memory[-1].snapshot.pending_operation_ids)
+        self.assertEqual(result.scalar.counters[0].value, 0)
+        self.assertTrue(all(stage.status == "incomplete" for stage in result.stages))
+
     def test_two_round_pipeline_reuses_slots_after_local_waits(self) -> None:
         document, graph = pipeline_workload()
         plan = FinitePipelinePlan.compile(
