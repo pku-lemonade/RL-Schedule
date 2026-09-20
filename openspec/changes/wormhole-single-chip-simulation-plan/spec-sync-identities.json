@@ -1,0 +1,560 @@
+{
+  "kind": "wormhole_specification_reconciliation",
+  "schema_version": 1,
+  "date": "2026-09-20",
+  "reviewed_audit_revision": "9d5f000af15608e9c739f4908287ff5746350810",
+  "audit_map_sha256": "86ba2a637308ca5d6adabe6f95c0958eb54b41a83506ab7bc8e0cfea3c0d4882",
+  "scope": "Seven canonical specification files; all 100 requirement bodies and 178 scenarios preserved. No runtime, hardware parameters, archival or push changes.",
+  "cli": {
+    "version": "1.11.0",
+    "command_prefix": [
+      "npm",
+      "exec",
+      "--yes",
+      "--package=@fission-ai/openspec@1.11.0",
+      "--",
+      "openspec"
+    ],
+    "node_version": "22.22.2",
+    "package_integrity": "sha512-P9h8H4Snit8I7tHmCopjg3QDwBllIlObxb+/DebvBwhWTj6YEPPYRYkC4n5GqG4PdQnKMA6E1AlEOI9FT4G7FA==",
+    "legacy_version": "1.3.1",
+    "installation": "Pinned npm exec cache; the existing global CLI and project dependencies were not changed.",
+    "compatibility_note": "Version 1.3.1 lacks planningHome and artifactPaths; synchronization resumed only after 1.11.0 supplied authoritative paths and valid specs instructions."
+  },
+  "resolved_changes": [
+    {
+      "change": "wormhole-single-chip-simulation-plan",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-hardware-profile",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "generic-heterogeneous-topology",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-dual-noc-routing",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-memory-transactions",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-compute-dataflow",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-validation-harness",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    },
+    {
+      "change": "wormhole-multicast-sync",
+      "planning_home_kind": "repo",
+      "selection_source": "artifactPaths.specs.existingOutputPaths",
+      "selected_paths": [
+        "openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md"
+      ],
+      "specs_instructions_valid": true,
+      "configured_specs_rules": [],
+      "instruction_body_sha256": "3e4ad948b7ac34809255e46673f6476782c704c50933b47d01d6e1c2b9f2a5f1"
+    }
+  ],
+  "main_specs": [
+    {
+      "path": "openspec/specs/wormhole-compute-dataflow/spec.md",
+      "sha256": "5101a690b2796be6718f735dfa482fced0d69a20de4a256b80367f3a46def5dc",
+      "requirements": [
+        "CD-01",
+        "CD-02",
+        "CD-03",
+        "CD-04",
+        "CD-05",
+        "CD-D01",
+        "CD-D02",
+        "CD-D03",
+        "CD-D04",
+        "CD-D05",
+        "CD-D06",
+        "CD-D07",
+        "CD-D08",
+        "CD-D09",
+        "CD-D10"
+      ],
+      "scenario_count": 25,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+          "sha256": "5a18f12df132f74a42c46a67a966c00c8c6786b9bb4a68b5d9cf799e65413429"
+        },
+        {
+          "path": "openspec/changes/wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md",
+          "sha256": "e3797a2c4ae33faf914f7af68b74e2ed55acabdb24c62168199b801be062974d"
+        }
+      ],
+      "requirement_block_sha256": {
+        "CD-01": "094be5fa11d25455cb75346bf0c72cf9212514db7588efa4e99e702450b67c43",
+        "CD-02": "3dad6e3cf488d9ea0d8c4bfd04ded480fd54ddcbf863c4d9e03cbfc821612e00",
+        "CD-03": "2f1109e258225c78789e892ee9cb04cfdc9f9f131031708f5ff5fbb6fc1749fb",
+        "CD-04": "8beea474be9f1ded4e0f4cfc754bc24fd84f74f31edbbf6ae590587954e968fd",
+        "CD-05": "4ff9d76e2e2fde6d6f9f94d4bfa973bc76564c7a8e9f9090472ab64c046f0695",
+        "CD-D01": "ea17a6af5ba0855e71e4cedc2f8f33bfe44b2efc1a263e4cd9a5ef2b7c209338",
+        "CD-D02": "0530d7bee36e815b37fdbd0359901ecfe3288dde9fa6f8b27845b4e8a6662a50",
+        "CD-D03": "596dd0e33dfe0a9fe779d3b2e6212066695aef7989d0f089c93ef76fc1ad34b1",
+        "CD-D04": "6153fb89e47f81abf25e9529de198571a4c07cdced893341e89067c32f13ec38",
+        "CD-D05": "fa36cc6620afea6894b136af0ad85d3671fda973ac544cdffe312d067bcf55a2",
+        "CD-D06": "be2d748ef9b0699f796dcc2a61f5965bf110333ea3bc68d319e2c5d7dba3b246",
+        "CD-D07": "feab3116bb958ac5f47b74f57d5d3c9713f786d428a55bf7758c6dfbc12c0293",
+        "CD-D08": "09b7901ae90894cdfa4bcaa447268825f4503afa54d11071a789a307cc6928b5",
+        "CD-D09": "782f40e2bcabfd7574cbd8fe55a710972a3656c87b059990993ef5c374c810b5",
+        "CD-D10": "f403be74ada402c7a0fcccda98700ac8a9e12b16ec45d4f6edbcb2983c09f829"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-hardware-profile/spec.md",
+      "sha256": "ce529967209edb1f53aec8f320213e8ed91b0b04e1fa5278207c69ab97b27b3a",
+      "requirements": [
+        "HP-01",
+        "HP-02",
+        "HP-03",
+        "HP-04",
+        "HP-P01",
+        "HP-P02",
+        "HP-P03",
+        "HP-P04",
+        "HP-P05",
+        "HP-P06",
+        "HP-P07",
+        "HP-P08",
+        "HP-P09",
+        "HP-P10"
+      ],
+      "scenario_count": 21,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+          "sha256": "699f2b57cface8d9e7c777f7728c3d1973ceea8c877a3ac76d5c91536f2cf1f8"
+        },
+        {
+          "path": "openspec/changes/wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md",
+          "sha256": "e3a2001fae0ff67f5d9a5cdbe99adc3559ff296bd05d4e4494ac5c643a4445f6"
+        }
+      ],
+      "requirement_block_sha256": {
+        "HP-01": "77f449f2829e7185df93543c5812493b16c0b03b6f2eb5ae44539415321ba376",
+        "HP-02": "810b29a57fb39abf820905694451820dfabdf87ea7caf1259009b097f0f4629a",
+        "HP-03": "82347c73548f4b02af30fb95475f17ff106de31caeb405cd742e428393678222",
+        "HP-04": "1c51fca50f8524a9cac606e3b70e5e61f54b9ad4207989613df60dc229205448",
+        "HP-P01": "d0a7a09cfdb9129a7512af01aec90c8d7b9dbf1a4735834ce3431d44c29f3f31",
+        "HP-P02": "61cc25819fac4efe917983fb690a6a86b7d58e38446206602e5930324fab368d",
+        "HP-P03": "23128cc13c392adfb76164aefb01d600d39d2459e6385f42c635a148eacadff1",
+        "HP-P04": "b34a08606555bcd16af504ea027b5a69020ea319f73a3303d235e050d405290b",
+        "HP-P05": "b04b43a6a35db999a94da90ae685d58f85c31eac18be85f84ee30cd61a88a7de",
+        "HP-P06": "e0f8fdb332363f2897720597a0cb124751ddb47701d6679aba994a03a5c7f1cb",
+        "HP-P07": "67005c49aadf1b761879ecf2ea116054690dd45b3a812d4d060330dc6b8925ed",
+        "HP-P08": "376a72594604ba50345182809690553bcd1095cab973d06275c09a3da714eb73",
+        "HP-P09": "d0a1a3af60c6d3b89a893d87eb0dfbc6705ea25d754bb512a2c3a2ab66332d05",
+        "HP-P10": "a5d6d2739aa17f96d4eb72cdcaf487023887265e79b6923ea0a0e484e05a0e0d"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-memory-transactions/spec.md",
+      "sha256": "ff148cdd9970d9a7652c6d29259edc02796f3e0ed8a6470370db9b7a687a783c",
+      "requirements": [
+        "MT-01",
+        "MT-02",
+        "MT-03",
+        "MT-04",
+        "MT-05",
+        "MT-06",
+        "MT-D01",
+        "MT-D02",
+        "MT-D03",
+        "MT-D04",
+        "MT-D05",
+        "MT-D06",
+        "MT-D07",
+        "MT-D08",
+        "MT-D09",
+        "MT-D10"
+      ],
+      "scenario_count": 27,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+          "sha256": "bc0b802d38a859a33d578df024e299ab7dac5cfefa51a2999a8936e1a2479285"
+        },
+        {
+          "path": "openspec/changes/wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md",
+          "sha256": "6c160e3d26d84151042edc014285ecaa821b40d83f31fd42fe1bd3fc33369ea0"
+        }
+      ],
+      "requirement_block_sha256": {
+        "MT-01": "ff4d041cfec1d01b937670136a94cf7502df1eba4d335ff41742508018428212",
+        "MT-02": "b6e16c31f1399ca60cea8962a2eea15c88194a3cb2103c78842463de8b92a45e",
+        "MT-03": "de09750609accbdc216973665b6c71a0ef540847b9344e10d65baf124184d7ce",
+        "MT-04": "53a6f99f78dda7e9ed270623dacda3a8866519c048d06393ceb22d55ae769c72",
+        "MT-05": "1746025467726c039a705889034d5ab6253635c14feb736758187d0001fab97e",
+        "MT-06": "83f3e5fb06b2f9ab7b59f92a1f4f22231385d3309327396ccf8535747a4cc88c",
+        "MT-D01": "50142f4a015e52d7a5b1bbd6dd1a95e4faf90f0b123f67826fc83934ac18b835",
+        "MT-D02": "ada84f79f09539e989ec735c9fe90b2851b487eeb2176fa5ed30a64fedf797a7",
+        "MT-D03": "6f0ffb4f0d7e56f861d3447255396606110aa8a6ae279c663b56a29493479b0e",
+        "MT-D04": "30809b19202053075315ccc5b199fcdf99ab58921d1cec9b900cc8b870feaf1f",
+        "MT-D05": "f53570dd874524578ae03f906b0ae2746b0b881d36d94d0e1431a0cec0fd2033",
+        "MT-D06": "e41afd37274895fb0f015c3a813f44f1dc5045da525f4de75ccdea065c179362",
+        "MT-D07": "93386cd8483616942e12c271c889c1d3c6b9a5f68f8282859e256c75cfcf86a5",
+        "MT-D08": "b015e3dd28d7fbc64baf5558f8e5fe45000f4cd43824e48df30997254a545212",
+        "MT-D09": "b9bd305228bec43be79cce6c204dcdd5d1878c38b2199897ef482e2fc39eb391",
+        "MT-D10": "453069f13e0030e6b46dd30fec72540afa04369cf999c25dfa9505d8da593268"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-topology-routing/spec.md",
+      "sha256": "f630ee8fbe59439dede42918fe1615ca6afc459a260da7f97f1bc6f9ebfa3ffd",
+      "requirements": [
+        "TR-01",
+        "TR-02",
+        "TR-03",
+        "TR-04",
+        "TR-05",
+        "TR-G01",
+        "TR-G02",
+        "TR-G03",
+        "TR-G04",
+        "TR-G05",
+        "TR-G06",
+        "TR-G07",
+        "TR-G08",
+        "TR-G09",
+        "TR-G10",
+        "TR-D01",
+        "TR-D02",
+        "TR-D03",
+        "TR-D04",
+        "TR-D05",
+        "TR-D06",
+        "TR-D07",
+        "TR-D08",
+        "TR-D09",
+        "TR-D10"
+      ],
+      "scenario_count": 42,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+          "sha256": "28695901cf1796aeb3e8bdf56ef96e47e69d778c9478df7ac18307a08cc4b919"
+        },
+        {
+          "path": "openspec/changes/generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md",
+          "sha256": "e226d8bfdbf0b012b1dbce71a3a5b9b1384d810f7675c329e79a2eac060b1f0f"
+        },
+        {
+          "path": "openspec/changes/wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md",
+          "sha256": "fb4f0d140b07fe65717706e207e76c7b6e1fa79eedff307db7eee19e38f13269"
+        }
+      ],
+      "requirement_block_sha256": {
+        "TR-01": "a98a5779462f9b89ad56ae6a08853c923d8ffbfbc5d7527266a52558db916280",
+        "TR-02": "668610108daa8a4264983bc4206283de4485739e1031f2fa0e66ad5e39ce26df",
+        "TR-03": "fd27f89a6c6110a8423a2d23fca862e2cd339542da3c29e428b3ba78b4a7550b",
+        "TR-04": "a64b280c5448980db898014fcd452645bf5d5a69ceccb660955571348994fd69",
+        "TR-05": "b03217732746fae906df105a8a0494eedf920aac0ee05634325cc1b0d60cc7e7",
+        "TR-G01": "7682aad3db450a10093fff9e61ed283c1a9fc0e640c0e69304f51e7555fe1f5f",
+        "TR-G02": "254544fd01b7eeda5c5a42a3fb3e8af07db271611caed46d671eaaca7c478756",
+        "TR-G03": "192146c50423d9033a0da34482530d9be974798893748795ac20a47fe893c838",
+        "TR-G04": "804afbe392f7e1aa5494ec0e803bb2e5bbc310583b6eebcced95463894c54b51",
+        "TR-G05": "695a380ec25a686e176c2f9003317eb3df7c41e6d703bdeda0fd53017db5da07",
+        "TR-G06": "54ed40fb1e53aab03150bafd1db79e3030e697e018c1223039f83c2581ddb702",
+        "TR-G07": "2f1141cc2bab96f633fffdb3667a7aadeb037c6f687019dec0de812289c6c2b8",
+        "TR-G08": "3a414f1cecc6d918493a8e4d2f60bacc5765924a24e5b2ec8cd5731b1b7bea23",
+        "TR-G09": "1f44fb70f2340b9656ef4d17ded26c8e2d89a879648e111d6d04742eb2830375",
+        "TR-G10": "c42479315e3e4064d6ad9bc505528994b335c46113de64cc2ecfc7d1bff6a15e",
+        "TR-D01": "9cb1a7da34e3c67768d698b5de9fedee58b50caa64b40f2b0a01643fd408804c",
+        "TR-D02": "2742624f481e1f014214ef383c384c4476db6cfc8a5f4ccd36868780568cf3df",
+        "TR-D03": "52da18c899528f7af9b03d8dd30cf84634cd007b3c185252f23c6dc8f4bfca66",
+        "TR-D04": "0c399f1b66e52e372f0e67038c0d21dec4e10f5533f33991b35501f69afc5beb",
+        "TR-D05": "e776c7f0bf6f83175c4eb8cd1e504402ee161b5ca72c8dcaf14e0e3b976aa0a2",
+        "TR-D06": "0a64c422959e1807ed649c5dd5596e789af20139a56eb8f381e971f08011540b",
+        "TR-D07": "20aed6344c4d6ed5d4aaf8376dc4ce6f0e453de352faf90ee1602efd163b9e96",
+        "TR-D08": "f89a1944be947a5ac8e3302e7dc6220e6f0fce88df241cdf9a529d1ac92fa9c7",
+        "TR-D09": "45c97e55db7609e80ea2a8c071d686825465d6833bee419d72368db3e11cec2b",
+        "TR-D10": "a166d4299864b1ecf133c112c88175e4a9cbd29ce15b9ec1e2a77d3cf34adb17"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-validation/spec.md",
+      "sha256": "14176b977fc37787258dfe0c49264840a726bfcbbb0c5dec360e25fdc3a504a5",
+      "requirements": [
+        "VA-01",
+        "VA-02",
+        "VA-03",
+        "VA-04",
+        "VA-05",
+        "VA-06",
+        "VA-07"
+      ],
+      "scenario_count": 7,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+          "sha256": "7dd40e09319ce8c3c7cc95d32e9b497c7787876fe05c1cdd5fc7810ccc65c32e"
+        }
+      ],
+      "requirement_block_sha256": {
+        "VA-01": "5a9c8bab31e3b59fece0eac21203d824da5472c46c1666a2ffecc278cedb9670",
+        "VA-02": "7badebbac6ded52f9ef6b6eb542c1555696e80b72a590ea846eb10595f3d83f7",
+        "VA-03": "7c4326a525d3eafcfcb1a4716df56edff983f4f33e22f234dde31abaa0048d0c",
+        "VA-04": "19bf1e29a41e00ff1a62678f19ab2bc60132d965593d70a958406a1e633fe714",
+        "VA-05": "a339ea9d7e7b4195b0828d80ec1f66b5475f4653c3d47b8158dc69b7254f03a8",
+        "VA-06": "f52268141a7aa034bf8cd47dbf16c77d000f760e4a9d81ffca7fa21a20e62f76",
+        "VA-07": "d9c7fdea295911a269a7e2299f05ba62a5de96ea53ff8796195d52c0f654a982"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-validation-harness/spec.md",
+      "sha256": "7f87cc104da7b379633b2fa08b8b19f8c61590568efc2f90340ad202e96d63c0",
+      "requirements": [
+        "VA-D01",
+        "VA-D02",
+        "VA-D03",
+        "VA-D04",
+        "VA-D05",
+        "VA-D06",
+        "VA-D07",
+        "VA-D08",
+        "VA-D09",
+        "VA-D10",
+        "VA-D11"
+      ],
+      "scenario_count": 25,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md",
+          "sha256": "4f82a63d981f839932494f49f2da5aed736676570342b7c7fed442a9c5421e1e"
+        }
+      ],
+      "requirement_block_sha256": {
+        "VA-D01": "cf9f0f83ce84fff8f19e232cfa736aca3b2b0b1b7443f648b79fc2423bd3a857",
+        "VA-D02": "6aec902305b58bbc61ea80d59bae51632bb992e444cd33984ebd730eb3516092",
+        "VA-D03": "0274f4f761c0536a0b17bb6a380cb751fec2da968752c1d50d525af4e2cbd987",
+        "VA-D04": "ea594a06e974011e3cb1dee518c31fc0a129db98311603511dc89a4a38882afa",
+        "VA-D05": "e539d59b91235894e38183b9423c25d7e4bda43432286cc06a9d6087dd11c384",
+        "VA-D06": "4a5119916f0df1a3cc60627832a5860c94751d2fc856aa7817df303db6b25db7",
+        "VA-D07": "71dd3429975192ec694b999eb051d97922c144fe39cc07b866fa031c8590b2b1",
+        "VA-D08": "6e8de384ea125b2ead82d0bb999077db4dd36d9cda8c3bb7a992f1990294e71e",
+        "VA-D09": "b79087d774aaccd5db15de7866ae7ab90166422a00d7550a9dc4986ab4894041",
+        "VA-D10": "919ea3e2ecf9cd202e73c50a07954a02ece50d2fe7b457d9941902d87f2ec941",
+        "VA-D11": "e203b7ec592c6198fdccf7d146d4811052bf6997b7146b06339db731702a0d15"
+      }
+    },
+    {
+      "path": "openspec/specs/wormhole-multicast-sync/spec.md",
+      "sha256": "b59175d125e05526574ff9386110960be02cdf5eeb4ed7f07f933eb8721b1e23",
+      "requirements": [
+        "MS-01",
+        "MS-02",
+        "MS-03",
+        "MS-04",
+        "MS-05",
+        "MS-06",
+        "MS-07",
+        "MS-08",
+        "MS-09",
+        "MS-10",
+        "MS-11",
+        "MS-12"
+      ],
+      "scenario_count": 31,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md",
+          "sha256": "998802bcef7858b265e9f3b50be5ca72c78743ef0fbd522cbcf7ff5a1081c337"
+        }
+      ],
+      "requirement_block_sha256": {
+        "MS-01": "c9cb71efe66ae7141fd64d66cce95f80f64642e84b51c7505047ff1ee7160936",
+        "MS-02": "8aec6dc7535bea911b61557910962878ea4c7d18dc3f539991e9148c115d922b",
+        "MS-03": "0ce42d545996a01c5db10f638fa927059a8222e0675230bdf5f3ff8ee98978ab",
+        "MS-04": "6457fdc3d9e8b7f01ddff659627dfa150a71c9137d5ff99384eedce39e423ca3",
+        "MS-05": "896e85ad6e4663118939bf25ac221a43547b4475d668561aad943b5509a803f5",
+        "MS-06": "1cb36cb0526fceec20f2a8238c94f4706529361b617936a01f14569a1549b42e",
+        "MS-07": "589cf4366fcbc0e06c78051d5b80023f717c1782d5a5fe603d16c81dfa2d1154",
+        "MS-08": "c9d4c490d77d04c8d3f96e42e8a30d832e20a4c0294c3c34c14710759d263e8d",
+        "MS-09": "d418fb3b394210c307da9137fb122389b10b36f92f020154b29974fc45ef7155",
+        "MS-10": "e8b2d4911dff7c04959e41c885aad4a3683227a2a445eb58e3ca83893f2f3dab",
+        "MS-11": "d302a3646fd6a61d48c1143a6550ca1c3d8c0c22ec309108cc5334be2aebe378",
+        "MS-12": "1537f230e003c6e03e99f307f7e051e2f1df9890bc4a51cd38a0834fd6552ed1"
+      }
+    }
+  ],
+  "purpose_policy": "Existing parent Purpose bodies seed the five parent capabilities; the harness Purpose seeds its capability. The missing multicast Purpose was completed from its reviewed proposal. No TBD remains.",
+  "scope_notes": "Parent capability obligations, standalone adapter contracts and historical child delivery conditions are distinguished without editing normative blocks.",
+  "checks": {
+    "main_specs_strict": {
+      "passed": 7,
+      "failed": 0
+    },
+    "related_changes_strict": {
+      "passed": 8,
+      "failed": 0
+    },
+    "repeat_merge": {
+      "files_written": 0,
+      "same_bytes": true
+    },
+    "input_and_body_integrity": {
+      "delta_files": 12,
+      "unique_requirement_ids": 100,
+      "scenarios": 178,
+      "all_input_hashes_match_audit": true,
+      "all_normative_blocks_preserved": true
+    },
+    "unit_tests": {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "unittest",
+        "simulator_detailed.tests.test_validation_identity",
+        "-q"
+      ],
+      "discovered": 12,
+      "passed": 12,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "runner_seconds": 0.348
+    },
+    "strict_pyright": {
+      "command": [
+        ".venv/bin/pyright",
+        "--pythonpath",
+        ".venv/bin/python",
+        "--project",
+        "simulator_detailed/pyrightconfig.phase2.json"
+      ],
+      "errors": 0,
+      "warnings": 0,
+      "informations": 0
+    },
+    "scoped_ruff": {
+      "command_source": "openspec/changes/wormhole-multicast-sync/delivery-identities.json:scoped_ruff_command",
+      "paths": 45,
+      "result": "pass"
+    },
+    "unmodified_runtime_identity": {
+      "path": "openspec/changes/wormhole-multicast-sync/delivery-identities.json",
+      "sha256": "21580b20fa29a7310759d88514ea39231de39cbb5f4c06f5d6826ec25ca83b19",
+      "verified_file_counts": {
+        "detailed_source": 167,
+        "root_smoke_source": 18,
+        "assets": 14
+      },
+      "detailed_source_bundle_sha256": "708e23f3c23a251b7c6193723894faf4397b7efee7d7f17a3f0b7f5558a9f894",
+      "recorded_full_suite": {
+        "command": [
+          ".venv/bin/python",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "simulator_detailed/tests",
+          "-q"
+        ],
+        "discovered": 557,
+        "passed": 556,
+        "skipped": 1,
+        "failures": 0,
+        "errors": 0,
+        "seconds": 189.838,
+        "skip_reason": "optional Torch/PyG dependencies unavailable"
+      },
+      "reuse_note": "Source and asset hashes were rechecked during this documentation-only audit. The full-suite result is the prior multicast delivery run, not a newly executed run."
+    },
+    "validation_retry": "After main specs were created, five matching spec/change names made unqualified validation ambiguous (exit 1). Explicit --type change validated all five; no behavioral failure was reclassified.",
+    "final_integrity": {
+      "main_specs": 7,
+      "unchanged_delta_inputs": 12,
+      "preserved_requirement_bodies": 100,
+      "preserved_scenarios": 178,
+      "runtime_identity_files": {
+        "detailed_source": 167,
+        "root_smoke_source": 18,
+        "assets": 14
+      },
+      "umbrella_tasks_complete": 38,
+      "child_tasks_complete": 233,
+      "markdown_local_links_checked": 129,
+      "shell_blocks_syntax_checked": 7,
+      "result": "pass"
+    },
+    "final_apply": {
+      "progress": {
+        "total": 38,
+        "complete": 38,
+        "remaining": 0
+      },
+      "state": "all_done"
+    }
+  },
+  "archive_handling": "No archival performed. CLI 1.11.0 supports --skip-specs for a later explicit archive of already synchronized changes; validation must remain enabled.",
+  "external_evidence": {
+    "functional_reference": "unvalidated",
+    "silicon_timing": "unvalidated",
+    "optional_ml": "unvalidated"
+  }
+}

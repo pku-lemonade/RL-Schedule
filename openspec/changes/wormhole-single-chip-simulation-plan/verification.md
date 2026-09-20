@@ -1,5 +1,7 @@
 # Verification report: Wormhole single-chip simulation plan
 
+**Closure update:** task 8.3 is now complete. The [reconciliation delivery](reconciliation.md) and [canonical identities](spec-sync-identities.json) record seven validated main specs, 100 preserved requirement IDs and 178 scenarios. The umbrella is **38/38**. The report below is the historical evidence audit at `9d5f000`; its 37/38 status, empty-main-spec finding and pending VA-07 baseline disposition describe that earlier checkpoint. That specification-closure issue is resolved. Optional ML, historical root local-remap and external accuracy limitations remain. No change has been archived or pushed.
+
 Reviewed on 2026-09-20 against `f6ca63b` and its exact source/input manifest.
 The seven implementation children are complete. This audit closes the retrospective
 child milestones and umbrella tasks 8.1–8.2, bringing the parent to **37/38**.
