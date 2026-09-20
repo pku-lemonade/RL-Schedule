@@ -5,21 +5,21 @@
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.valid.json",
-    "sha256": "36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5",
-    "size_bytes": 14792
+    "sha256": "ef068f13d094627102b67ac515d89c02378cce31cc70a1728d2dd516137a9bac",
+    "size_bytes": 14814
   },
   "bundles": [
     {
       "artifact_id": "ttsim-bundle",
       "logical_path": "capture.valid.json",
-      "sha256": "e2662ac44210a0361af5af2e0453f98ecc9ca7d5a2ec1f438dae0df7209f3672",
-      "size_bytes": 4111
+      "sha256": "f37ecf649fd3f7923729f4595d7864ab84f52dd6f44e39bf02ea23c453c0235d",
+      "size_bytes": 4133
     },
     {
       "artifact_id": "wormhole-unavailable-bundle",
       "logical_path": "capture.unavailable.json",
-      "sha256": "7d0a5e58a745118b9d2eb4f5fafb7e3d130c18c0592cabe672054826bc108f4e",
-      "size_bytes": 3558
+      "sha256": "8c220b2ff570777648fb3154b22e3bea3540895320c0919de3ad1dfb67c74ca5",
+      "size_bytes": 3580
     }
   ],
   "boundaries": [

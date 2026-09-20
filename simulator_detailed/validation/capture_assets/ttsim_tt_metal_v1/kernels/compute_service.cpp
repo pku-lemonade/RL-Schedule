@@ -22,7 +22,9 @@ void kernel_main() {
         inner > kMaximumTilesPerAxis || columns > kMaximumTilesPerAxis) {
         return;
     }
+#if COMPILE_FOR_TRISC == 1
     DeviceZoneScopedN("COMPUTE_SERVICE");
+#endif
     compute_kernel_hw_startup<SrcOrder::Reverse>(input_a, input_b, output);
     matmul_init(input_a, input_b);
     for (std::uint32_t row = 0; row < rows; ++row) {

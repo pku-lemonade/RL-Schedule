@@ -1,12 +1,12 @@
 {
   "kind": "external_capture_bundle",
   "schema_version": 1,
-  "bundle_id": "ttsim-capture:5c3b1204a710bfb5bc6191e3a65a762d179f4986345dd30b1c8e005161617eba",
+  "bundle_id": "ttsim-capture:875f6eb456329f0fd7e30ee728789342cc2a8a0c7336bfa6740cd5783dff3239",
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.json",
-    "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
-    "size_bytes": 19200
+    "sha256": "e3138d2f8eefe648cce1c12f0670c9c39f44de7b3838695b6e93385ffc35cb15",
+    "size_bytes": 20356
   },
   "case_id": "noc-64b",
   "producer_id": "ttsim-functional",
@@ -17,21 +17,49 @@
     "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
     "source_snapshot_sha256": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
     "configuration": {
-      "text": "{\"build_type\":\"release\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
+      "text": "{\"build_type\":\"release\",\"enable_tracy\":true,\"runtime_library_path\":\"bin/runtime\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
     },
     "artifacts": [
       {
         "artifact_id": "host-program",
         "logical_path": "bin/wormhole_external_validation",
-        "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
-        "size_bytes": 617464,
+        "sha256": "6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03",
+        "size_bytes": 665016,
         "role": "host_binary"
       },
       {
         "artifact_id": "metalium-runtime",
         "logical_path": "bin/runtime/libtt_metal.so",
-        "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
-        "size_bytes": 29128744,
+        "sha256": "0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee",
+        "size_bytes": 29196040,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "tracy-runtime",
+        "logical_path": "bin/runtime/libtracy.so.0.14.1",
+        "sha256": "9ff27509bd7c564bb037162e0253edfc3c22069b59bbe74a079c64914ffa271d",
+        "size_bytes": 495128,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "umd-runtime",
+        "logical_path": "bin/runtime/libtt-umd.so.0",
+        "sha256": "dc60ca07ad03f02520ffeefc247f19ab1c54860a05f9f480e9ce26f8447afc4d",
+        "size_bytes": 5424832,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "tt-stl-runtime",
+        "logical_path": "bin/runtime/libtt_stl.so",
+        "sha256": "4b1f608a927e7a42c820c4c3919d81e3ca2a5febc26fbdd5116a7cad34da2b51",
+        "size_bytes": 19096,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "hwloc-runtime",
+        "logical_path": "bin/runtime/libhwloc.so.15",
+        "sha256": "e36d4c385db612fd3c343ed0cbca72283b8e236bf5230f3d7b01ed28656296dc",
+        "size_bytes": 417808,
         "role": "device_binary"
       },
       {
@@ -44,8 +72,8 @@
       {
         "artifact_id": "producer-sources",
         "logical_path": "bin/wormhole_external_sources.json",
-        "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
-        "size_bytes": 2280,
+        "sha256": "4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138",
+        "size_bytes": 2281,
         "role": "source_bundle"
       }
     ]
@@ -189,13 +217,13 @@
     {
       "artifact_id": "noc-ttsim-functional",
       "logical_path": "noc/ttsim-functional.json",
-      "sha256": "26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436",
-      "size_bytes": 6978
+      "sha256": "7c27b9640416e2fe29895aa0d64d44fec25a8fbabf541713fad8e839ad28ede8",
+      "size_bytes": 7959
     },
     {
       "artifact_id": "noc-ttsim-manifest",
       "logical_path": "noc/ttsim-manifest.json",
-      "sha256": "2e9c82eab63d5eff23f4f1d216a8cc3ba6e4bc37e6f961c64b55086867ab3150",
+      "sha256": "9d4f7a3c0692460cfe064f16ea17ef34490ec8309f86a749d0ee1558d4fe8181",
       "size_bytes": 480
     }
   ],

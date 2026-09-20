@@ -267,17 +267,25 @@ class WormholeCollectorTests(unittest.TestCase):
         )
         plan = plan_wormhole_collection(campaign, "noc-64b", selection)
         self.assertEqual(plan.selection, selection)
-        self.assertEqual(plan.argv[20:], ("2", "--pcie-slot", "0000:03:00.0"))
+        self.assertEqual(plan.argv[22:], ("2", "--pcie-slot", "0000:03:00.0"))
         self.assertEqual(
             {item.name for item in plan.environment},
-            {"TT_METAL_DEVICE_PROFILER", "TT_METAL_SLOW_DISPATCH_MODE"},
+            {
+                "LD_LIBRARY_PATH",
+                "TT_METAL_HOME",
+                "TT_METAL_DEVICE_PROFILER",
+                "TT_METAL_SLOW_DISPATCH_MODE",
+                "TT_METAL_PROFILER_DIR",
+            },
         )
+        self.assertEqual(plan.profiler_selections[0].device, "2")
+        self.assertEqual(plan.profiler_selections[0].risc, "BRISC")
         self.assertEqual(
             {item.role for item in plan.outputs},
             {"functional_record", "profiler_csv", "capture_manifest"},
         )
         malformed = plan.model_dump(mode="json")
-        malformed["argv"][20] = "1"
+        malformed["argv"][22] = "1"
         with self.assertRaisesRegex(ValueError, "device selection"):
             WormholeCollectionPlan.model_validate_json(json.dumps(malformed))
 
@@ -373,7 +381,7 @@ class WormholeCollectorTests(unittest.TestCase):
                 architecture="wormhole_b0",
             )
             plan = plan_wormhole_collection(campaign, case.case_id, device)
-            profiler = _noc_selection(case)
+            profiler = plan.profiler_selections[0]
             conditions = _captured_conditions(case, profiler)
             environment = CaptureEnvironment(
                 host=Metadata[CanonicalJSON](
@@ -416,7 +424,13 @@ class WormholeCollectorTests(unittest.TestCase):
                 self.assertEqual(command[1:], list(plan.argv[1:]))
                 self.assertEqual(kwargs["cwd"], worker.resolve())
                 process_environment = cast(dict[str, str], kwargs["env"])
+                self.assertEqual(process_environment["LD_LIBRARY_PATH"], "bin/runtime")
                 self.assertEqual(process_environment["TT_METAL_DEVICE_PROFILER"], "1")
+                self.assertNotIn("TT_METAL_SIMULATOR", process_environment)
+                self.assertEqual(
+                    json.loads((worker / plan.argv[12]).read_text()),
+                    plan.model_dump(mode="json"),
+                )
                 payloads = {
                     "functional_record": b'{"test_only":"functional placeholder"}\n',
                     "profiler_csv": _profiler_csv(profiler),
@@ -459,15 +473,15 @@ class WormholeCollectorTests(unittest.TestCase):
             {"tt-metal-wormhole-pinned"},
         )
         expected = {
-            "noc_ack_roundtrip": ("noc_ack_roundtrip.cpp", "NOC_ACK_ROUNDTRIP"),
-            "dram_read_return": ("dram_read_return.cpp", "DRAM_READ_RETURN"),
-            "compute_service": ("compute_service.cpp", "COMPUTE_SERVICE"),
+            "noc_ack_roundtrip": ("noc_ack_roundtrip.cpp", "NOC_ACK_ROUNDTRIP", "BRISC"),
+            "dram_read_return": ("dram_read_return.cpp", "DRAM_READ_RETURN", "BRISC"),
+            "compute_service": ("compute_service.cpp", "COMPUTE_SERVICE", "TRISC_1"),
         }
         identities: set[tuple[str, int, str]] = set()
         with tempfile.TemporaryDirectory() as directory:
             kit = generate_ttsim_capture_kit(admitted, Path(directory) / "kit")
             for case in campaign.cases:
-                filename, zone = expected[case.family]
+                filename, zone, risc = expected[case.family]
                 line = _zone_line(ASSETS / "kernels" / filename, zone)
                 self.assertEqual(case.boundary_maps[0].producer_zone, zone)
                 identities.add((filename, line, zone))
@@ -484,6 +498,8 @@ class WormholeCollectorTests(unittest.TestCase):
                 self.assertEqual(plan.build, kit.build)
                 self.assertEqual(plan.binary_manifest, kit.binary_manifest)
                 self.assertEqual(plan.conditions, case.conditions)
+                self.assertEqual(plan.profiler_selections[0].risc, risc)
+                self.assertEqual(plan.profiler_selections[0].source_line, line)
         self.assertEqual(len(identities), len(expected))
 
     def test_verified_hardware_csv_converts_with_exact_integer_samples(self):

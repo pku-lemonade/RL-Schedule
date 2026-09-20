@@ -43,22 +43,32 @@ constexpr std::uint32_t kMaximumTransferBytes = 4096;
 constexpr std::uint32_t kCompletionNoc = 0x57484f4c;
 constexpr std::uint32_t kCompletionDram = 0x4452414d;
 constexpr std::string_view kCompletionMarker = "WORMHOLE_EXTERNAL_COMPLETE_V1";
-constexpr std::array<std::string_view, 8> kFlags = {
+constexpr std::array<std::string_view, 8> kTTSimFlags = {
     "--recipe",          "--input",              "--functional-output", "--manifest-output",
     "--repetitions",     "--warmup-repetitions", "--timeout-seconds",    "--max-output-bytes",
+};
+constexpr std::array<std::string_view, 12> kHardwareFlags = {
+    "--recipe",          "--input",              "--functional-output",  "--profiler-output",
+    "--manifest-output", "--plan",               "--repetitions",        "--warmup-repetitions",
+    "--timeout-seconds", "--max-output-bytes",   "--device-index",       "--pcie-slot",
 };
 constexpr std::array<std::string_view, 3> kRecipes = {
     "noc_ack_roundtrip_v1", "dram_read_return_v1", "compute_service_v1"};
 
 struct Invocation {
+    bool hardware;
     std::string recipe;
     std::filesystem::path input;
     std::filesystem::path functional_output;
+    std::filesystem::path profiler_output;
     std::filesystem::path manifest_output;
+    std::filesystem::path plan;
     std::uint32_t repetitions;
     std::uint32_t warmups;
     std::uint32_t timeout_seconds;
     std::uint32_t max_output_bytes;
+    std::uint32_t device_index;
+    std::string pcie_slot;
 };
 
 struct CampaignContext {
@@ -69,13 +79,15 @@ struct CampaignContext {
     json input;
     json workload;
     json mapping;
+    json plan;
 };
 
 struct DeviceSession {
     std::shared_ptr<dist::MeshDevice> mesh;
     IDevice* device;
 
-    DeviceSession() : mesh(dist::MeshDevice::create_unit_mesh(0)), device(mesh->get_devices().at(0)) {}
+    explicit DeviceSession(std::uint32_t device_index) :
+        mesh(dist::MeshDevice::create_unit_mesh(device_index)), device(mesh->get_devices().at(0)) {}
     ~DeviceSession() {
         if (mesh) {
             try {
@@ -114,33 +126,47 @@ void require_portable_path(const std::filesystem::path& path) {
 }
 
 Invocation parse_invocation(int argc, char** argv) {
-    if (argc != 17) {
-        throw std::invalid_argument("expected the fixed eight-argument capture interface");
+    const bool hardware = argc == 25;
+    if (!hardware && argc != 17) {
+        throw std::invalid_argument("expected the fixed ttsim or Wormhole capture interface");
     }
+    const std::span<const std::string_view> flags = hardware
+        ? std::span<const std::string_view>(kHardwareFlags)
+        : std::span<const std::string_view>(kTTSimFlags);
     std::map<std::string_view, std::string_view> values;
-    for (std::size_t index = 0; index < kFlags.size(); ++index) {
-        if (std::string_view(argv[2 * index + 1]) != kFlags[index]) {
+    for (std::size_t index = 0; index < flags.size(); ++index) {
+        if (std::string_view(argv[2 * index + 1]) != flags[index]) {
             throw std::invalid_argument("capture flags must use the fixed order");
         }
-        values.emplace(kFlags[index], argv[2 * index + 2]);
+        values.emplace(flags[index], argv[2 * index + 2]);
     }
     const std::string recipe(values.at("--recipe"));
     if (std::find(kRecipes.begin(), kRecipes.end(), recipe) == kRecipes.end()) {
         throw std::invalid_argument("unknown capture recipe");
     }
     Invocation result{
+        .hardware = hardware,
         .recipe = recipe,
         .input = std::string(values.at("--input")),
         .functional_output = std::string(values.at("--functional-output")),
+        .profiler_output = hardware ? std::filesystem::path(values.at("--profiler-output")) : std::filesystem::path(),
         .manifest_output = std::string(values.at("--manifest-output")),
+        .plan = hardware ? std::filesystem::path(values.at("--plan")) : std::filesystem::path(),
         .repetitions = parse_positive(values.at("--repetitions"), "repetitions"),
         .warmups = parse_nonnegative(values.at("--warmup-repetitions"), "warmups"),
         .timeout_seconds = parse_positive(values.at("--timeout-seconds"), "timeout"),
         .max_output_bytes = parse_positive(values.at("--max-output-bytes"), "output budget"),
+        .device_index = hardware ? parse_nonnegative(values.at("--device-index"), "device index") : 0,
+        .pcie_slot = hardware ? std::string(values.at("--pcie-slot")) : std::string(),
     };
     require_portable_path(result.input);
     require_portable_path(result.functional_output);
     require_portable_path(result.manifest_output);
+    if (hardware) {
+        require_portable_path(result.profiler_output);
+        require_portable_path(result.plan);
+        if (result.pcie_slot.empty()) throw std::invalid_argument("PCIe slot must be nonempty");
+    }
     if (result.repetitions > kMaximumRepetitions || result.warmups >= result.repetitions ||
         result.max_output_bytes > kMaximumOutputBytes) {
         throw std::invalid_argument("capture invocation exceeds the producer's finite limits");
@@ -148,17 +174,37 @@ Invocation parse_invocation(int argc, char** argv) {
     return result;
 }
 
-void require_environment() {
-    const std::array<std::pair<const char*, const char*>, 4> required = {{
+void require_environment(const Invocation& invocation) {
+    const std::array<std::pair<const char*, const char*>, 5> ttsim_required = {{
+        {"LD_LIBRARY_PATH", "bin/runtime"},
         {"TT_METAL_HOME", "vendor/tt-metal"},
         {"TT_METAL_SIMULATOR", "runtime/ttsim/libttsim_wh.so"},
         {"TT_METAL_SLOW_DISPATCH_MODE", "1"},
         {"TT_METAL_DISABLE_SFPLOADMACRO", "1"},
     }};
+    const std::array<std::pair<const char*, const char*>, 4> hardware_required = {{
+        {"LD_LIBRARY_PATH", "bin/runtime"},
+        {"TT_METAL_HOME", "vendor/tt-metal"},
+        {"TT_METAL_DEVICE_PROFILER", "1"},
+        {"TT_METAL_SLOW_DISPATCH_MODE", "1"},
+    }};
+    const std::span<const std::pair<const char*, const char*>> required = invocation.hardware
+        ? std::span<const std::pair<const char*, const char*>>(hardware_required)
+        : std::span<const std::pair<const char*, const char*>>(ttsim_required);
     for (const auto& [name, expected] : required) {
         const char* value = std::getenv(name);
         if (value == nullptr || std::string_view(value) != expected) {
             throw std::runtime_error(std::string(name) + " must match the capture manifest");
+        }
+    }
+    if (invocation.hardware) {
+        const char* profiler_directory = std::getenv("TT_METAL_PROFILER_DIR");
+        if (profiler_directory == nullptr) {
+            throw std::runtime_error("TT_METAL_PROFILER_DIR must be set for Wormhole collection");
+        }
+        require_portable_path(profiler_directory);
+        if (std::getenv("TT_METAL_SIMULATOR") != nullptr) {
+            throw std::runtime_error("Wormhole collection cannot run with TT_METAL_SIMULATOR set");
         }
     }
 }
@@ -175,6 +221,34 @@ json read_json(const std::filesystem::path& path) {
     const auto bytes = read_bytes(path);
     return json::parse(bytes.begin(), bytes.end());
 }
+
+std::string path_text(const std::filesystem::path& path) { return path.generic_string(); }
+
+json without_null_fields(const json& value) {
+    if (value.is_array()) {
+        json result = json::array();
+        for (const auto& item : value) result.push_back(without_null_fields(item));
+        return result;
+    }
+    if (value.is_object()) {
+        json result = json::object();
+        for (const auto& [key, item] : value.items()) {
+            if (!item.is_null()) result[key] = without_null_fields(item);
+        }
+        return result;
+    }
+    return value;
+}
+
+void require_equal(const json& actual, const json& expected, std::string_view label) {
+    if (without_null_fields(actual) != without_null_fields(expected)) {
+        throw std::runtime_error(std::string(label) + " disagrees with the sealed collection plan");
+    }
+}
+
+json known(json value) { return {{"state", "known"}, {"value", std::move(value)}, {"reason", nullptr}}; }
+
+json canonical_record(json value) { return {{"text", value.dump()}}; }
 
 std::uint32_t unsigned_field(const json& record, std::string_view name) {
     const auto& value = record.at(std::string(name));
@@ -291,10 +365,103 @@ void validate_input_contract(const json& input, const std::string& family) {
     }
 }
 
+json load_hardware_plan(
+    const Invocation& invocation,
+    const json& campaign,
+    std::span<const std::uint8_t> campaign_bytes,
+    const json& case_record,
+    const json& producer,
+    const json& build) {
+    if (!invocation.hardware) return json::object();
+    const json plan = read_json(invocation.plan);
+    if (plan.value("kind", "") != "wormhole_collection_plan" || unsigned_field(plan, "schema_version") != 1) {
+        throw std::runtime_error("collection plan has an unsupported contract");
+    }
+    require_equal(plan.at("campaign_id"), campaign.at("campaign_id"), "campaign identity");
+    require_equal(plan.at("case_id"), case_record.at("case_id"), "case identity");
+    require_equal(plan.at("producer"), producer, "producer identity");
+    require_equal(plan.at("build"), build, "build identity");
+    require_equal(plan.at("binary_manifest"), build.at("artifacts"), "binary manifest");
+    require_equal(plan.at("conditions"), case_record.at("conditions"), "case conditions");
+    const auto& campaign_identity = plan.at("campaign");
+    if (campaign_identity.at("logical_path") != "campaign.json" ||
+        campaign_identity.at("sha256") != wormhole_external::sha256(campaign_bytes) ||
+        unsigned_field(campaign_identity, "size_bytes") != campaign_bytes.size()) {
+        throw std::runtime_error("campaign bytes disagree with the sealed collection plan");
+    }
+
+    const auto& selection = plan.at("selection");
+    if (unsigned_field(selection, "device_index") != invocation.device_index ||
+        selection.at("pcie_slot") != invocation.pcie_slot || selection.at("architecture") != "wormhole_b0") {
+        throw std::runtime_error("device selection disagrees with the sealed collection plan");
+    }
+    const std::array<std::string, 12> argument_values = {
+        invocation.recipe,
+        path_text(invocation.input),
+        path_text(invocation.functional_output),
+        path_text(invocation.profiler_output),
+        path_text(invocation.manifest_output),
+        path_text(invocation.plan),
+        std::to_string(invocation.repetitions),
+        std::to_string(invocation.warmups),
+        std::to_string(invocation.timeout_seconds),
+        std::to_string(invocation.max_output_bytes),
+        std::to_string(invocation.device_index),
+        invocation.pcie_slot,
+    };
+    const auto& plan_argv = plan.at("argv");
+    if (!plan_argv.is_array() || plan_argv.size() != 25) {
+        throw std::runtime_error("collection plan argv has an unsupported shape");
+    }
+    for (std::size_t index = 0; index < kHardwareFlags.size(); ++index) {
+        if (plan_argv.at(2 * index + 1) != kHardwareFlags[index] ||
+            plan_argv.at(2 * index + 2) != argument_values[index]) {
+            throw std::runtime_error("invocation disagrees with the sealed collection plan");
+        }
+    }
+
+    std::map<std::string, std::string> environment;
+    for (const auto& item : plan.at("environment")) {
+        if (!environment.emplace(item.at("name").get<std::string>(), item.at("value").get<std::string>()).second) {
+            throw std::runtime_error("collection plan repeats an environment variable");
+        }
+    }
+    if (environment.size() != 5) throw std::runtime_error("collection plan environment is incomplete");
+    for (const auto& [name, expected] : environment) {
+        const char* actual = std::getenv(name.c_str());
+        if (actual == nullptr || actual != expected) {
+            throw std::runtime_error(name + " disagrees with the sealed collection plan");
+        }
+    }
+
+    const auto& profiler_selections = plan.at("profiler_selections");
+    if (!profiler_selections.is_array() || profiler_selections.size() != 1 ||
+        profiler_selections.at(0).at("device") != std::to_string(invocation.device_index)) {
+        throw std::runtime_error("profiler selection disagrees with the selected device");
+    }
+    const auto& plan_outputs = plan.at("outputs");
+    const std::map<std::string, std::string> expected_outputs = {
+        {"functional_record", path_text(invocation.functional_output)},
+        {"profiler_csv", path_text(invocation.profiler_output)},
+        {"capture_manifest", path_text(invocation.manifest_output)},
+    };
+    if (!plan_outputs.is_array() || plan_outputs.size() != expected_outputs.size()) {
+        throw std::runtime_error("collection plan output contract is incomplete");
+    }
+    for (const auto& output : plan_outputs) {
+        const std::string role = output.at("role");
+        if (!expected_outputs.contains(role) || output.at("logical_path") != expected_outputs.at(role)) {
+            throw std::runtime_error("collection plan output path is not the invoked output path");
+        }
+    }
+    return plan;
+}
+
 CampaignContext load_context(const Invocation& invocation) {
     const auto input_bytes = read_bytes(invocation.input);
     const json input = json::parse(input_bytes.begin(), input_bytes.end());
-    const json campaign = read_json("campaign.json");
+    const auto campaign_bytes = read_bytes("campaign.json");
+    const json campaign = json::parse(campaign_bytes.begin(), campaign_bytes.end());
     const std::string family = family_for_recipe(invocation.recipe);
     validate_input_contract(input, family);
     const std::string input_sha = wormhole_external::sha256(input_bytes);
@@ -324,23 +491,26 @@ CampaignContext load_context(const Invocation& invocation) {
         throw std::runtime_error("invocation disagrees with campaign budgets");
     }
 
+    const std::string adapter = invocation.hardware ? "wormhole_tt_metal_profiler_v1" : "ttsim_tt_metal_v1";
     std::vector<json> producers;
     for (const auto& candidate : campaign.at("producers")) {
-        if (candidate.at("adapter") == "ttsim_tt_metal_v1") producers.push_back(candidate);
+        if (candidate.at("adapter") == adapter) producers.push_back(candidate);
     }
-    if (producers.size() != 1) throw std::runtime_error("campaign requires one named ttsim producer");
+    if (producers.size() != 1) throw std::runtime_error("campaign requires one named producer for the selected mode");
     json producer = producers.front();
     bool bound = false;
     for (const auto& binding : case_record.at("producers")) {
         bound = bound || binding.at("producer_id") == producer.at("producer_id");
     }
-    if (!bound) throw std::runtime_error("campaign case is not bound to the ttsim producer");
+    if (!bound) throw std::runtime_error("campaign case is not bound to the selected producer");
     std::vector<json> builds;
     for (const auto& candidate : campaign.at("builds")) {
         if (candidate.at("build_id") == producer.at("build_id")) builds.push_back(candidate);
     }
-    if (builds.size() != 1) throw std::runtime_error("ttsim producer build identity is ambiguous");
-    return {campaign, case_record, producer, builds.front(), input, workload, mapping};
+    if (builds.size() != 1) throw std::runtime_error("producer build identity is ambiguous");
+    const json plan = load_hardware_plan(
+        invocation, campaign, campaign_bytes, case_record, producer, builds.front());
+    return {campaign, case_record, producer, builds.front(), input, workload, mapping, plan};
 }
 
 std::vector<std::uint8_t> pattern(std::uint32_t size, std::uint32_t seed, std::uint32_t stride) {
@@ -645,7 +815,25 @@ int run(const Invocation& invocation) {
     if (::setenv("TT_METAL_RUNTIME_ROOT", runtime_root.c_str(), 1) != 0) {
         throw std::runtime_error("cannot configure the pinned TT-Metal runtime root");
     }
-    DeviceSession session;
+    DeviceSession session(invocation.device_index);
+    std::uint64_t clock_hz = 0;
+    if (invocation.hardware) {
+        if (session.device->id() != static_cast<int>(invocation.device_index)) {
+            throw std::runtime_error("opened device identity disagrees with the explicit selection");
+        }
+        if (session.device->arch() != tt::ARCH::WORMHOLE_B0) {
+            throw std::runtime_error("selected device is not Wormhole B0");
+        }
+        const int clock_mhz = session.device->get_clock_rate_mhz();
+        if (clock_mhz <= 0) throw std::runtime_error("selected device reported an invalid clock");
+        clock_hz = static_cast<std::uint64_t>(clock_mhz) * 1'000'000;
+        const auto& clocks = context.plan.at("conditions").at("clocks").at("value");
+        if (!clocks.is_array() || clocks.size() != 1 || clocks.at(0).at("domain_id") != "tensix" ||
+            clocks.at(0).at("hz").at("state") != "known" ||
+            clocks.at(0).at("hz").at("value").get<double>() != static_cast<double>(clock_hz)) {
+            throw std::runtime_error("live Tensix clock disagrees with the sealed campaign clock");
+        }
+    }
     json repetitions = json::array();
     const auto& repetition_ids = context.case_record.at("boundary_maps").at(0).at("samples").at("repetition_ids");
     for (std::uint32_t index = 0; index < invocation.repetitions; ++index) {
@@ -670,23 +858,70 @@ int run(const Invocation& invocation) {
         {"entities", entities(context)}, {"repetitions", repetitions},
     };
     const auto functional_bytes = serialized(record);
-    json manifest = {
-        {"kind", "tt_metal_capture_manifest"}, {"schema_version", 1}, {"status", "pass"},
-        {"completion_marker", kCompletionMarker}, {"case_id", context.case_record.at("case_id")},
-        {"recipe", invocation.recipe}, {"input_sha256", context.case_record.at("simulator_input").at("sha256")},
-        {"functional_sha256", wormhole_external::sha256(functional_bytes)},
-        {"repetitions", invocation.repetitions}, {"warmup_repetitions", invocation.warmups},
-        {"timeout_seconds", invocation.timeout_seconds}, {"max_output_bytes", invocation.max_output_bytes},
-    };
+    std::vector<std::uint8_t> profiler_bytes;
+    json manifest;
+    if (invocation.hardware) {
+        const std::filesystem::path profiler_source =
+            std::filesystem::path(std::getenv("TT_METAL_PROFILER_DIR")) / ".logs" / "profile_log_device.csv";
+        profiler_bytes = read_bytes(profiler_source);
+        if (profiler_bytes.empty()) throw std::runtime_error("device profiler CSV is empty");
+        json conditions = context.plan.at("conditions");
+        conditions["device"] = known(invocation.pcie_slot);
+        const json environment = {
+            {"host", known(canonical_record({{"worker_id", context.plan.at("selection").at("worker_id")}}))},
+            {"device", known(invocation.pcie_slot)},
+            {"software", conditions.at("software")},
+            {"firmware", conditions.at("firmware")},
+            {"clocks", known(json::array({canonical_record({{"domain_id", "tensix"}, {"hz", clock_hz}})}))},
+            {"enabled_layout", conditions.at("enabled_layout")},
+        };
+        manifest = {
+            {"kind", "wormhole_worker_result"},
+            {"schema_version", 1},
+            {"plan_id", context.plan.at("plan_id")},
+            {"campaign_id", context.plan.at("campaign_id")},
+            {"case_id", context.case_record.at("case_id")},
+            {"producer_id", context.producer.at("producer_id")},
+            {"build_id", context.build.at("build_id")},
+            {"selection", context.plan.at("selection")},
+            {"environment", environment},
+            {"conditions", conditions},
+            {"profiler_selections", context.plan.at("profiler_selections")},
+            {"counters", json::array({
+                {{"name", "repetitions"}, {"value", invocation.repetitions}, {"unit", "count"}},
+                {{"name", "warmup_repetitions"}, {"value", invocation.warmups}, {"unit", "count"}},
+            })},
+            {"diagnostics", json::array({
+                "opened numeric device " + std::to_string(invocation.device_index) +
+                    " as the explicit operator binding for PCIe slot " + invocation.pcie_slot,
+                "verified Wormhole B0 and live Tensix clock " + std::to_string(clock_hz) + " Hz",
+                "firmware remains unknown because the pinned public TT-Metal device API exposes no firmware identity",
+            })},
+        };
+    } else {
+        manifest = {
+            {"kind", "tt_metal_capture_manifest"}, {"schema_version", 1}, {"status", "pass"},
+            {"completion_marker", kCompletionMarker}, {"case_id", context.case_record.at("case_id")},
+            {"recipe", invocation.recipe}, {"input_sha256", context.case_record.at("simulator_input").at("sha256")},
+            {"functional_sha256", wormhole_external::sha256(functional_bytes)},
+            {"repetitions", invocation.repetitions}, {"warmup_repetitions", invocation.warmups},
+            {"timeout_seconds", invocation.timeout_seconds}, {"max_output_bytes", invocation.max_output_bytes},
+        };
+    }
     const auto manifest_bytes = serialized(manifest);
-    if (functional_bytes.size() + manifest_bytes.size() > invocation.max_output_bytes) {
+    const std::uint64_t output_budget = static_cast<std::uint64_t>(invocation.max_output_bytes) *
+                                        (invocation.hardware ? invocation.repetitions : 1);
+    if (functional_bytes.size() + profiler_bytes.size() + manifest_bytes.size() > output_budget) {
         throw std::runtime_error("producer outputs exceed the declared byte budget");
     }
     write_new_file(invocation.functional_output, functional_bytes);
     try {
+        if (invocation.hardware) write_new_file(invocation.profiler_output, profiler_bytes);
         write_new_file(invocation.manifest_output, manifest_bytes);
     } catch (...) {
         std::filesystem::remove(invocation.functional_output);
+        if (invocation.hardware) std::filesystem::remove(invocation.profiler_output);
+        std::filesystem::remove(invocation.manifest_output);
         throw;
     }
     return 0;
@@ -696,7 +931,7 @@ int run(const Invocation& invocation) {
 int main(int argc, char** argv) {
     try {
         const Invocation invocation = parse_invocation(argc, argv);
-        require_environment();
+        require_environment(invocation);
         return run(invocation);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "wormhole external validation failed: %s\n", error.what());

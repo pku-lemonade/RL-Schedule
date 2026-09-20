@@ -1,8 +1,8 @@
 {
   "kind": "functional_identifier_mappings",
   "schema_version": 1,
-  "reference_id": "external:compute-bf16-32:67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
-  "source_artifact_sha256": "67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
+  "reference_id": "external:compute-bf16-32:6aaf88aa8d83d8c4799be37aba9a1fe95e18bccf842b4360ce5d8a52952cfe41",
+  "source_artifact_sha256": "6aaf88aa8d83d8c4799be37aba9a1fe95e18bccf842b4360ce5d8a52952cfe41",
   "entity_mappings": [
     {
       "reference": "operation",

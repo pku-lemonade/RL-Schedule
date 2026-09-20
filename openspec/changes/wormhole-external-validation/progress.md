@@ -1,8 +1,94 @@
 # Wormhole external validation progress
 
-## Current blocked silicon campaign checkpoint
+## Profiler-enabled worker correction and clean rerun
 
-Status: executed on 2026-09-20 after the clean ttsim rerun. Progress remains
+Status: validated on 2026-09-21. Progress remains 25/35. The hardware
+collector implementation is now executable end to end on a compatible worker,
+but this host has no Tenstorrent device and therefore produced no silicon
+capture, timing comparison, fit or held-out result.
+
+The previous worker accepted only the 17-argument ttsim interface while the
+typed hardware plan emitted 23 arguments. It also hard-coded device zero,
+required simulator variables and could not emit profiler CSV or a typed worker
+manifest. The corrected worker retains that ttsim interface and adds a fixed
+25-argument hardware interface with a sealed collection-plan path, explicit
+device index and PCIe binding, exact profiler selection, finite budgets and
+three declared outputs. It verifies the campaign, plan, build, conditions,
+arguments, environment and output contract before device creation.
+
+The profiler-enabled TT-Metal build now uses `ENABLE_TRACY=ON`. The campaign
+seals the host, Metalium, Tracy, UMD, TT-STL, hwloc, ttsim and producer-source
+bytes. Both producer modes set the fixed portable
+`LD_LIBRARY_PATH=bin/runtime`; legacy four-variable ttsim manifests remain
+readable. The compute zone is emitted only by `TRISC_1`, matching its typed
+same-RISC selection.
+
+A direct hardware invocation with a valid sealed plan loaded every non-system
+runtime library from the kit and reached `MeshDevice::create_unit_mesh`. It
+then failed with `No chips detected in the cluster`. The earlier
+`TT_METAL_DEVICE_PROFILER requires a Tracy-enabled build` failure is gone. This
+is a successful unavailable-host preflight, not hardware evidence.
+
+Two independently generated clean kits then ran all three ttsim recipes and
+converted every capture. Their campaign, kit/source manifests, capture trees
+and reference trees matched byte for byte. The first tree replaced the
+committed functional evidence.
+
+| Identity | Value |
+| --- | --- |
+| Campaign SHA-256 | `e3138d2f8eefe648cce1c12f0670c9c39f44de7b3838695b6e93385ffc35cb15` |
+| Kit identity | `ttsim-kit:7db98738f60681c63e2c3d580590c9e948d8e698ca9dfbeef6d753e97b6729a7` |
+| Host executable SHA-256 | `6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03` |
+| Metalium runtime SHA-256 | `0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee` |
+| Producer source bundle SHA-256 | `4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138` |
+
+| Case | Capture bundle | Raw functional SHA-256 | Reference identity |
+| --- | --- | --- | --- |
+| `noc-64b` | `ttsim-capture:875f6eb456329f0fd7e30ee728789342cc2a8a0c7336bfa6740cd5783dff3239` | `ca65dc818c2cec0947d428ac5ba57b85145ac23195fc29294a6414b8b19917f7` | `external:noc-64b:7c27b9640416e2fe29895aa0d64d44fec25a8fbabf541713fad8e839ad28ede8` |
+| `dram-read-256b` | `ttsim-capture:4671a8ee6c0fa73b425408d1d3c80e6f2540f955646d4a6db9535d97192d6a05` | `00883361d077881a6b822608de9cde7e268372dc9f09b658396abbe474f0a73b` | `external:dram-read-256b:d6bd37baaa9c206b522560daff470c1dad3bf9eb8d3de2acd908d786f82ce94b` |
+| `compute-bf16-32` | `ttsim-capture:70c696a27a24a7552c55325eaa3a7b9ba2620269fd3957472edc26c9baf2af8e` | `1f6a1c99046aef816e2bf45b78c079de98bafe7fa0d1fe4e4a14df4a0ea19e89` | `external:compute-bf16-32:6aaf88aa8d83d8c4799be37aba9a1fe95e18bccf842b4360ce5d8a52952cfe41` |
+
+Temporary execution roots are
+`/tmp/wormhole-tracy-preflight-20260921-eiqgbc51`,
+`/tmp/wormhole-tracy-evidence-a-20260921-ipw8o0h_` and
+`/tmp/wormhole-tracy-evidence-b-20260921-fvntxnaq`. They are reproducibility
+workspaces, not tracked evidence.
+
+Executed verification:
+
+```text
+Tracy-enabled TT-Metal configure and wormhole_external_validation build
+passed at pinned TT-Metal revision a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e.
+
+direct sealed hardware preflight
+plan, environment and portable runtime libraries validated; device creation
+blocked with "No chips detected in the cluster"; no silicon evidence emitted.
+
+two independent clean ttsim matrices
+6/6 case executions passed; campaign, kit/source manifests, capture trees and
+converted reference trees matched byte for byte.
+
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+613 tests discovered in 226.164s; 612 passed; 0 failures; 0 errors;
+1 optional skip.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check <changed Python implementation and tests>
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --type change --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+delivery identity verifier
+44 source, test, fixture and evidence identities matched current bytes;
+progress is 25/35 with 10 open tasks.
+```
+
+## Historical blocked silicon campaign checkpoint
+
+Status: executed on 2026-09-20 after the earlier clean ttsim rerun. Progress remained
 25/35 because this host has no Wormhole device. No hardware-dependent task was
 marked complete and no unavailable result was promoted to silicon evidence.
 
@@ -64,8 +150,8 @@ Delivered and verified:
   one-rank control-plane `all_reduce`; its SHA-256 participates in the
   effective TT-Metal source snapshot.
 - The binary manifest seals the host executable, patched Metalium runtime,
-  ttsim runtime and producer source bundle. Collection rechecks those bytes,
-  fixed arguments, four allowed environment variables, budgets and all raw
+  Tracy, UMD, TT-STL, hwloc, ttsim runtime and producer source bundle.
+  Collection rechecks those bytes, fixed arguments, five allowed environment variables, budgets and all raw
   output identities before admitting evidence.
 - Each raw bundle was independently admitted and converted. Conversion
   rechecked effective operation/mapping/layout/fidelity, every repetition,
@@ -90,19 +176,19 @@ Pinned worker and build identities:
 | TT-Metal base tree SHA-256 | `b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71` |
 | worker patch SHA-256 | `7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0` |
 | effective TT-Metal snapshot SHA-256 | `b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169` |
-| host executable SHA-256 | `12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923` |
-| Metalium runtime SHA-256 | `ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4` |
-| producer source bundle SHA-256 | `b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488` |
-| campaign SHA-256 | `5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3` |
-| kit identity | `ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f` |
+| host executable SHA-256 | `6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03` |
+| Metalium runtime SHA-256 | `0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee` |
+| producer source bundle SHA-256 | `4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138` |
+| campaign SHA-256 | `e3138d2f8eefe648cce1c12f0670c9c39f44de7b3838695b6e93385ffc35cb15` |
+| kit identity | `ttsim-kit:7db98738f60681c63e2c3d580590c9e948d8e698ca9dfbeef6d753e97b6729a7` |
 
 Committed functional evidence:
 
 | Case | Capture bundle | Raw functional SHA-256 | Reference identity |
 | --- | --- | --- | --- |
-| `noc-64b` | `ttsim-capture:5c3b1204a710bfb5bc6191e3a65a762d179f4986345dd30b1c8e005161617eba` | `26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436` | `external:noc-64b:26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436` |
-| `dram-read-256b` | `ttsim-capture:f10933130a84396ee1ffca314557d6d1039c5b07dabe267e10a287cc783a94fd` | `2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c` | `external:dram-read-256b:2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c` |
-| `compute-bf16-32` | `ttsim-capture:b017041654cfdd43f5d4f49056df7cfa1b54eaba9bb2a52b773cdc8598c1d2f9` | `67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48` | `external:compute-bf16-32:67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48` |
+| `noc-64b` | `ttsim-capture:875f6eb456329f0fd7e30ee728789342cc2a8a0c7336bfa6740cd5783dff3239` | `ca65dc818c2cec0947d428ac5ba57b85145ac23195fc29294a6414b8b19917f7` | `external:noc-64b:7c27b9640416e2fe29895aa0d64d44fec25a8fbabf541713fad8e839ad28ede8` |
+| `dram-read-256b` | `ttsim-capture:4671a8ee6c0fa73b425408d1d3c80e6f2540f955646d4a6db9535d97192d6a05` | `00883361d077881a6b822608de9cde7e268372dc9f09b658396abbe474f0a73b` | `external:dram-read-256b:d6bd37baaa9c206b522560daff470c1dad3bf9eb8d3de2acd908d786f82ce94b` |
+| `compute-bf16-32` | `ttsim-capture:70c696a27a24a7552c55325eaa3a7b9ba2620269fd3957472edc26c9baf2af8e` | `1f6a1c99046aef816e2bf45b78c079de98bafe7fa0d1fe4e4a14df4a0ea19e89` | `external:compute-bf16-32:6aaf88aa8d83d8c4799be37aba9a1fe95e18bccf842b4360ce5d8a52952cfe41` |
 
 Executed verification:
 
@@ -180,12 +266,12 @@ Delivered and verified:
 - The offline validation suite passed all 123 checks in 19 cases. Its optional
   ML gate remained blocked, and its functional-reference and silicon-timing
   tiers remained unvalidated. No external tool or device was accessed.
-- A clean ttsim kit regenerated identity
-  `ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f`.
-  Its kit and source manifests matched the committed bytes. Fresh NoC, DRAM and
-  compute executions reproduced all three committed capture directories and
-  converted reference directories byte for byte, including bundle and reference
-  identities. This re-execution supplies functional evidence only.
+- The latest clean profiler-enabled ttsim kits regenerated identity
+  `ttsim-kit:7db98738f60681c63e2c3d580590c9e948d8e698ca9dfbeef6d753e97b6729a7`.
+  Two independent NoC, DRAM and compute executions reproduced all three
+  committed capture and converted-reference directories byte for byte,
+  including bundle and reference identities. This re-execution supplies
+  functional evidence only.
 
 Implementation source SHA-256 identities before this progress/task update:
 
@@ -200,9 +286,9 @@ Executed verification:
 
 ```text
 clean pinned ttsim matrix from a fresh generated kit
-noc-64b: bundle 5c3b1204..., reference raw 26a04c62..., byte-identical;
-dram-read-256b: bundle f1093313..., reference raw 2ebf5cfa..., byte-identical;
-compute-bf16-32: bundle b0170416..., reference raw 67c4a315..., byte-identical;
+noc-64b: bundle 875f6eb4..., reference raw ca65dc81..., byte-identical;
+dram-read-256b: bundle 4671a8ee..., reference raw 00883361..., byte-identical;
+compute-bf16-32: bundle 70c696a2..., reference raw 1f6a1c99..., byte-identical;
 kit manifest and producer source manifest: byte-identical to committed evidence.
 
 .venv/bin/python -m unittest simulator_detailed.tests.test_external_audit simulator_detailed.tests.test_external_campaign simulator_detailed.tests.test_external_calibration

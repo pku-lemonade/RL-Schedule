@@ -1,7 +1,7 @@
 {
   "kind": "validation_reference",
   "schema_version": 1,
-  "reference_id": "external:dram-read-256b:2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c",
+  "reference_id": "external:dram-read-256b:d6bd37baaa9c206b522560daff470c1dad3bf9eb8d3de2acd908d786f82ce94b",
   "format": "normalized_functional_v1",
   "provenance": {
     "classification": "functional_capture",

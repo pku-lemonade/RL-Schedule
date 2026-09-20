@@ -1,12 +1,12 @@
 {
   "kind": "ttsim_capture_kit",
   "schema_version": 1,
-  "kit_id": "ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f",
+  "kit_id": "ttsim-kit:7db98738f60681c63e2c3d580590c9e948d8e698ca9dfbeef6d753e97b6729a7",
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.json",
-    "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
-    "size_bytes": 19200
+    "sha256": "e3138d2f8eefe648cce1c12f0670c9c39f44de7b3838695b6e93385ffc35cb15",
+    "size_bytes": 20356
   },
   "campaign_id": "wormhole-external-validation-v1-20260920",
   "producer": {
@@ -20,21 +20,49 @@
     "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
     "source_snapshot_sha256": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
     "configuration": {
-      "text": "{\"build_type\":\"release\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
+      "text": "{\"build_type\":\"release\",\"enable_tracy\":true,\"runtime_library_path\":\"bin/runtime\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
     },
     "artifacts": [
       {
         "artifact_id": "host-program",
         "logical_path": "bin/wormhole_external_validation",
-        "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
-        "size_bytes": 617464,
+        "sha256": "6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03",
+        "size_bytes": 665016,
         "role": "host_binary"
       },
       {
         "artifact_id": "metalium-runtime",
         "logical_path": "bin/runtime/libtt_metal.so",
-        "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
-        "size_bytes": 29128744,
+        "sha256": "0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee",
+        "size_bytes": 29196040,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "tracy-runtime",
+        "logical_path": "bin/runtime/libtracy.so.0.14.1",
+        "sha256": "9ff27509bd7c564bb037162e0253edfc3c22069b59bbe74a079c64914ffa271d",
+        "size_bytes": 495128,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "umd-runtime",
+        "logical_path": "bin/runtime/libtt-umd.so.0",
+        "sha256": "dc60ca07ad03f02520ffeefc247f19ab1c54860a05f9f480e9ce26f8447afc4d",
+        "size_bytes": 5424832,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "tt-stl-runtime",
+        "logical_path": "bin/runtime/libtt_stl.so",
+        "sha256": "4b1f608a927e7a42c820c4c3919d81e3ca2a5febc26fbdd5116a7cad34da2b51",
+        "size_bytes": 19096,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "hwloc-runtime",
+        "logical_path": "bin/runtime/libhwloc.so.15",
+        "sha256": "e36d4c385db612fd3c343ed0cbca72283b8e236bf5230f3d7b01ed28656296dc",
+        "size_bytes": 417808,
         "role": "device_binary"
       },
       {
@@ -47,8 +75,8 @@
       {
         "artifact_id": "producer-sources",
         "logical_path": "bin/wormhole_external_sources.json",
-        "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
-        "size_bytes": 2280,
+        "sha256": "4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138",
+        "size_bytes": 2281,
         "role": "source_bundle"
       }
     ]
@@ -57,15 +85,43 @@
     {
       "artifact_id": "host-program",
       "logical_path": "bin/wormhole_external_validation",
-      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
-      "size_bytes": 617464,
+      "sha256": "6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03",
+      "size_bytes": 665016,
       "role": "host_binary"
     },
     {
       "artifact_id": "metalium-runtime",
       "logical_path": "bin/runtime/libtt_metal.so",
-      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
-      "size_bytes": 29128744,
+      "sha256": "0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee",
+      "size_bytes": 29196040,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "tracy-runtime",
+      "logical_path": "bin/runtime/libtracy.so.0.14.1",
+      "sha256": "9ff27509bd7c564bb037162e0253edfc3c22069b59bbe74a079c64914ffa271d",
+      "size_bytes": 495128,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "umd-runtime",
+      "logical_path": "bin/runtime/libtt-umd.so.0",
+      "sha256": "dc60ca07ad03f02520ffeefc247f19ab1c54860a05f9f480e9ce26f8447afc4d",
+      "size_bytes": 5424832,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "tt-stl-runtime",
+      "logical_path": "bin/runtime/libtt_stl.so",
+      "sha256": "4b1f608a927e7a42c820c4c3919d81e3ca2a5febc26fbdd5116a7cad34da2b51",
+      "size_bytes": 19096,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "hwloc-runtime",
+      "logical_path": "bin/runtime/libhwloc.so.15",
+      "sha256": "e36d4c385db612fd3c343ed0cbca72283b8e236bf5230f3d7b01ed28656296dc",
+      "size_bytes": 417808,
       "role": "device_binary"
     },
     {
@@ -78,8 +134,8 @@
     {
       "artifact_id": "producer-sources",
       "logical_path": "bin/wormhole_external_sources.json",
-      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
-      "size_bytes": 2280,
+      "sha256": "4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138",
+      "size_bytes": 2281,
       "role": "source_bundle"
     }
   ],
@@ -92,8 +148,8 @@
     {
       "artifact_id": "campaign",
       "logical_path": "campaign.json",
-      "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
-      "size_bytes": 19200,
+      "sha256": "e3138d2f8eefe648cce1c12f0670c9c39f44de7b3838695b6e93385ffc35cb15",
+      "size_bytes": 20356,
       "role": "campaign"
     },
     {
@@ -120,8 +176,8 @@
     {
       "artifact_id": "producer:BUILD.md",
       "logical_path": "producer/BUILD.md",
-      "sha256": "025870a1e407e61ff054fc24fc157d4d58e19e93fdc8d633894d34fe3c1ef8b3",
-      "size_bytes": 929,
+      "sha256": "17be1d5660a065120854dee47b4d050ae5a36aada656e733e532406fbc47929c",
+      "size_bytes": 1682,
       "role": "build_file"
     },
     {
@@ -141,8 +197,8 @@
     {
       "artifact_id": "producer:host:wormhole_external_validation.cpp",
       "logical_path": "producer/host/wormhole_external_validation.cpp",
-      "sha256": "a7f531dfab7a839094da374e0fe0ac66f8b70dc1efce49d6a7c45b4101e49963",
-      "size_bytes": 38042,
+      "sha256": "1326e244de30ff0fb96a891b1e89ed2f6a384f490c00d0b71f82d809353e1efe",
+      "size_bytes": 50651,
       "role": "host_source"
     },
     {
@@ -155,8 +211,8 @@
     {
       "artifact_id": "producer:kernels:compute_service.cpp",
       "logical_path": "producer/kernels/compute_service.cpp",
-      "sha256": "ac3ae8ffeb69d5fa243dc6c580b574461ebb6cddfdaa3bdd5ee1994e86fdf655",
-      "size_bytes": 1684,
+      "sha256": "75bede5f581018fb04aac6e343b95af0ce290019223c777553a642eed8962042",
+      "size_bytes": 1718,
       "role": "device_source"
     },
     {
@@ -221,6 +277,10 @@
       ],
       "environment": [
         {
+          "name": "LD_LIBRARY_PATH",
+          "value": "bin/runtime"
+        },
+        {
           "name": "TT_METAL_HOME",
           "value": "vendor/tt-metal"
         },
@@ -284,6 +344,10 @@
       ],
       "environment": [
         {
+          "name": "LD_LIBRARY_PATH",
+          "value": "bin/runtime"
+        },
+        {
           "name": "TT_METAL_HOME",
           "value": "vendor/tt-metal"
         },
@@ -346,6 +410,10 @@
         "131072"
       ],
       "environment": [
+        {
+          "name": "LD_LIBRARY_PATH",
+          "value": "bin/runtime"
+        },
         {
           "name": "TT_METAL_HOME",
           "value": "vendor/tt-metal"

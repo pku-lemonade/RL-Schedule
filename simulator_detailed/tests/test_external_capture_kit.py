@@ -21,6 +21,7 @@ from simulator_detailed.configs.schemas.external_validation import (
     ExternalCaptureBundle,
     ExternalOutcome,
     ProducerFunctionalRecord,
+    TTSimCaptureInvocation,
     TTSimCaptureKitManifest,
 )
 from simulator_detailed.configs.schemas.validation import CanonicalJSON, Metadata
@@ -337,9 +338,13 @@ class TTSimCaptureKitTests(unittest.TestCase):
             {item.artifact_id for item in manifest.binary_manifest},
             {
                 "host-program",
+                "hwloc-runtime",
                 "metalium-runtime",
                 "producer-sources",
+                "tracy-runtime",
+                "tt-stl-runtime",
                 "ttsim-runtime",
+                "umd-runtime",
             },
         )
 
@@ -381,6 +386,25 @@ class TTSimCaptureKitTests(unittest.TestCase):
                     (len(data), hashlib.sha256(data).hexdigest()),
                     (item.size_bytes, item.sha256),
                 )
+
+    def test_legacy_ttsim_environment_remains_readable(self):
+        campaign = admit_external_campaign(EXTERNAL / "campaign.valid.json")
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = generate_ttsim_capture_kit(campaign, Path(directory) / "kit")
+        invocation = manifest.invocations[0].model_dump(mode="json")
+        invocation["environment"] = [
+            item
+            for item in invocation["environment"]
+            if item["name"] != "LD_LIBRARY_PATH"
+        ]
+        parsed = TTSimCaptureInvocation.model_validate_json(json.dumps(invocation))
+        self.assertNotIn(
+            "LD_LIBRARY_PATH", {item.name for item in parsed.environment}
+        )
+
+        invocation["environment"].append(invocation["environment"][0])
+        with self.assertRaisesRegex(ValueError, "environment variable"):
+            TTSimCaptureInvocation.model_validate_json(json.dumps(invocation))
 
     def test_failed_generation_preserves_existing_output(self):
         campaign = admit_external_campaign(EXTERNAL / "campaign.valid.json")

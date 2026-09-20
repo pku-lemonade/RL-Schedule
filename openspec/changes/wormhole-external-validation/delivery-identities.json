@@ -1,10 +1,10 @@
 {
   "kind": "wormhole_external_validation_delivery_checkpoint",
   "schema_version": 1,
-  "recorded_at": "2026-09-20",
-  "base_revision": "c5e9cb8515e501cdb2a257636ad5e5389f81c4cf",
+  "recorded_at": "2026-09-21",
+  "base_revision": "ae4bedf2dc96771d6730e6276657693e0c0bd818",
   "progress": {
-    "complete": 22,
+    "complete": 25,
     "total": 35,
     "final_delivery": false
   },
@@ -14,13 +14,18 @@
     "cecaa96e811f37f038e41c9709275a765c95b3d1",
     "56bf6130f7bb9f7adf153216768aadf8df014bb1",
     "aa11a7fe633907d9d2d41de570a45274ce5ac3e9",
-    "c5e9cb8515e501cdb2a257636ad5e5389f81c4cf"
+    "c5e9cb8515e501cdb2a257636ad5e5389f81c4cf",
+    "f43b774fda3eae99f3bfc2a89e9cc5720392d144",
+    "3f1b86feca42e188ae5ac8b1832804f02b1ebee4",
+    "668cf3e672b1b9e151960b0ca074e214dff0cba2",
+    "886c0d050442b7c4ad6e0a8f5e2011d52d1735c1",
+    "ae4bedf2dc96771d6730e6276657693e0c0bd818"
   ],
   "source_files": [
     {
       "logical_path": "simulator_detailed/configs/schemas/external_validation.py",
-      "sha256": "5c203ce9fa99a80b763217a7fb1fcff67f589d4ae852d15c28f8869873a7cc92",
-      "size_bytes": 45810
+      "sha256": "9002a4735e86e5bdac1f531dd5503437d066c6d41f66267d15f3002fe75c4264",
+      "size_bytes": 48259
     },
     {
       "logical_path": "simulator_detailed/configs/schemas/validation.py",
@@ -34,13 +39,13 @@
     },
     {
       "logical_path": "simulator_detailed/validation/external_capture.py",
-      "sha256": "4f9512aa3cb36457207d7319f56ee80266f16ff9b004421214f505e9b4af6196",
-      "size_bytes": 36029
+      "sha256": "0b09484f3eef14ebdd5255564d7e039205b139b374065567eaf304467f786053",
+      "size_bytes": 54347
     },
     {
       "logical_path": "simulator_detailed/validation/external_collector.py",
-      "sha256": "52f549ae47aa14f94a97659331bba4d69edc54a7592d2b71d6690149e9861485",
-      "size_bytes": 21903
+      "sha256": "5a07843563459acbdb6b0ac0375e2f82ecf45c9019018d31692d96ec2b26400f",
+      "size_bytes": 25773
     },
     {
       "logical_path": "simulator_detailed/validation/external_campaign.py",
@@ -69,8 +74,8 @@
     },
     {
       "logical_path": "simulator_detailed/validation/references.py",
-      "sha256": "8c320e583270c9d71c6141fcac16a993c4345b28199107771e8102b1fdb734a0",
-      "size_bytes": 10908
+      "sha256": "78de05b37429dd966c6c19d0f29c7f433c10c559ebae506e5a287ff053b17a42",
+      "size_bytes": 17834
     },
     {
       "logical_path": "simulator_detailed/validation/calibration.py",
@@ -81,6 +86,21 @@
       "logical_path": "simulator_detailed/validation/gates.py",
       "sha256": "75f3828e101eb8a66f4cabae355576d627c4c8e4776614516f93fb23c5b2de61",
       "size_bytes": 4949
+    },
+    {
+      "logical_path": "simulator_detailed/validation/capture_assets/ttsim_tt_metal_v1/BUILD.md",
+      "sha256": "17be1d5660a065120854dee47b4d050ae5a36aada656e733e532406fbc47929c",
+      "size_bytes": 1682
+    },
+    {
+      "logical_path": "simulator_detailed/validation/capture_assets/ttsim_tt_metal_v1/host/wormhole_external_validation.cpp",
+      "sha256": "1326e244de30ff0fb96a891b1e89ed2f6a384f490c00d0b71f82d809353e1efe",
+      "size_bytes": 50651
+    },
+    {
+      "logical_path": "simulator_detailed/validation/capture_assets/ttsim_tt_metal_v1/kernels/compute_service.cpp",
+      "sha256": "75bede5f581018fb04aac6e343b95af0ce290019223c777553a642eed8962042",
+      "size_bytes": 1718
     }
   ],
   "test_files": [
@@ -94,11 +114,11 @@
     },
     {
       "logical_path": "simulator_detailed/tests/test_external_capture_kit.py",
-      "sha256": "9e1d59b821abac7d38486aec4abea2d5c9f862a5689ff7b24297c61aa6208351"
+      "sha256": "a4e13737a4c06f388d1d8a79080467d6f7ff250bf05788748bca12347ea974a5"
     },
     {
       "logical_path": "simulator_detailed/tests/test_external_wormhole_collector.py",
-      "sha256": "8d6318aedcd3523e5835ac42e5d4f3647d5a39f6987dc0d60d69a521483c2b40"
+      "sha256": "32e45d2b094d1936126c2e21abd7676aada316345d69ced81489de68eb1ab6d7"
     },
     {
       "logical_path": "simulator_detailed/tests/test_external_campaign.py",
@@ -144,7 +164,7 @@
   "fixture_files": [
     {
       "logical_path": "simulator_detailed/configs/validation/external/campaign.valid.json",
-      "sha256": "36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5"
+      "sha256": "ef068f13d094627102b67ac515d89c02378cce31cc70a1728d2dd516137a9bac"
     },
     {
       "logical_path": "simulator_detailed/configs/validation/external/campaign.adversarial.json",
@@ -152,11 +172,11 @@
     },
     {
       "logical_path": "simulator_detailed/configs/validation/external/capture.valid.json",
-      "sha256": "e2662ac44210a0361af5af2e0453f98ecc9ca7d5a2ec1f438dae0df7209f3672"
+      "sha256": "f37ecf649fd3f7923729f4595d7864ab84f52dd6f44e39bf02ea23c453c0235d"
     },
     {
       "logical_path": "simulator_detailed/configs/validation/external/capture.unavailable.json",
-      "sha256": "7d0a5e58a745118b9d2eb4f5fafb7e3d130c18c0592cabe672054826bc108f4e"
+      "sha256": "8c220b2ff570777648fb3154b22e3bea3540895320c0919de3ad1dfb67c74ca5"
     },
     {
       "logical_path": "simulator_detailed/configs/validation/external/capture.adversarial.json",
@@ -164,84 +184,255 @@
     },
     {
       "logical_path": "simulator_detailed/configs/validation/external/report.blocked.json",
-      "sha256": "224581cca68bf638689807217a6beaa31820102007b4299d7ca21f7b77cf050f"
+      "sha256": "a9417577dd6a3599d5b70bd5d45b60cd10371676c661b5cd3d14b8e8c840af2a"
     }
   ],
   "requirements": [
     {
       "requirement_id": "EV-01",
-      "implementation": ["external_validation.py", "external.py", "external_capture.py"],
-      "tests": ["test_external_validation_contracts.py", "test_external_capture_kit.py"],
+      "implementation": [
+        "external_validation.py",
+        "external.py",
+        "external_capture.py"
+      ],
+      "tests": [
+        "test_external_validation_contracts.py",
+        "test_external_capture_kit.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     },
     {
       "requirement_id": "EV-02",
-      "implementation": ["external_validation.py", "external.py", "external_campaign.py", "external_audit.py"],
-      "tests": ["test_external_validation_contracts.py", "test_external_campaign.py", "test_external_audit.py"],
+      "implementation": [
+        "external_validation.py",
+        "external.py",
+        "external_campaign.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_validation_contracts.py",
+        "test_external_campaign.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
-      "external_evidence": []
+      "external_evidence": [
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/noc-64b/bundle.json",
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/dram-read-256b/bundle.json",
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/compute-bf16-32/bundle.json"
+      ]
     },
     {
       "requirement_id": "EV-03",
-      "implementation": ["external_campaign.py", "external_audit.py"],
-      "tests": ["test_external_campaign.py", "test_external_audit.py"],
+      "implementation": [
+        "external_campaign.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_campaign.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     },
     {
       "requirement_id": "EV-04",
-      "implementation": ["external_capture.py", "external_campaign.py", "external_audit.py"],
-      "tests": ["test_external_capture_kit.py", "test_external_campaign.py", "test_external_audit.py"],
+      "implementation": [
+        "external_capture.py",
+        "external_campaign.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_capture_kit.py",
+        "test_external_campaign.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
-      "external_evidence": []
+      "external_evidence": [
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/noc-64b/noc-64b.reference.json",
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/dram-read-256b/dram-read-256b.reference.json",
+        "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/compute-bf16-32/compute-bf16-32.reference.json"
+      ]
     },
     {
       "requirement_id": "EV-05",
-      "implementation": ["normalize.py", "comparison.py", "external_collector.py", "external_audit.py"],
-      "tests": ["test_external_validation_intervals.py", "test_external_wormhole_collector.py", "test_external_audit.py"],
+      "implementation": [
+        "normalize.py",
+        "comparison.py",
+        "external_collector.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_validation_intervals.py",
+        "test_external_wormhole_collector.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     },
     {
       "requirement_id": "EV-06",
-      "implementation": ["external_calibration.py", "calibration.py", "external_audit.py"],
-      "tests": ["test_external_calibration.py", "test_validation_calibration.py", "test_external_audit.py"],
+      "implementation": [
+        "external_calibration.py",
+        "calibration.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_calibration.py",
+        "test_validation_calibration.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     },
     {
       "requirement_id": "EV-07",
-      "implementation": ["external_campaign.py", "external_calibration.py", "external_audit.py"],
-      "tests": ["test_external_campaign.py", "test_external_calibration.py", "test_external_audit.py"],
+      "implementation": [
+        "external_campaign.py",
+        "external_calibration.py",
+        "external_audit.py"
+      ],
+      "tests": [
+        "test_external_campaign.py",
+        "test_external_calibration.py",
+        "test_external_audit.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     },
     {
       "requirement_id": "EV-08",
-      "implementation": ["validation.py", "gates.py"],
-      "tests": ["test_validation_cli.py", "test_topology_consumers.py", "test_memory_adapters.py", "test_compute_adapters.py", "test_multicast_validation.py"],
+      "implementation": [
+        "validation.py",
+        "gates.py"
+      ],
+      "tests": [
+        "test_validation_cli.py",
+        "test_topology_consumers.py",
+        "test_memory_adapters.py",
+        "test_compute_adapters.py",
+        "test_multicast_validation.py"
+      ],
       "offline_status": "verified",
       "external_evidence": []
     }
   ],
   "checks": {
-    "focused_tests": {"discovered": 12, "passed": 12, "failed": 0, "errors": 0, "skipped": 0},
-    "full_tests": {"discovered": 606, "passed": 605, "failed": 0, "errors": 0, "skipped": 1},
-    "compatibility_tests": {"discovered": 46, "passed": 45, "failed": 0, "errors": 0, "skipped": 1},
-    "offline_validation": {"cases": 19, "checks": 123, "passed": 123, "failed": 0},
-    "root_darknet19": {"status": "pass", "completed_nodes": 37888, "cores": 16, "links": 48, "windows": 11},
-    "optional_ml": {"status": "blocked", "missing": ["torch", "torch_geometric"]},
+    "focused_tests": {
+      "discovered": 22,
+      "passed": 22,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "full_tests": {
+      "discovered": 613,
+      "passed": 612,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "compatibility_tests": {
+      "discovered": 46,
+      "passed": 45,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "offline_validation": {
+      "cases": 19,
+      "checks": 123,
+      "passed": 123,
+      "failed": 0
+    },
+    "root_darknet19": {
+      "status": "pass",
+      "completed_nodes": 37888,
+      "cores": 16,
+      "links": 48,
+      "windows": 11
+    },
+    "optional_ml": {
+      "status": "blocked",
+      "missing": [
+        "torch",
+        "torch_geometric"
+      ]
+    },
     "pyright": "pass",
     "ruff": "pass",
     "openspec_strict": "pass",
-    "diff_check": "pass"
+    "diff_check": "pass",
+    "profiler_enabled_build": "pass",
+    "hardware_preflight": {
+      "status": "blocked",
+      "reason": "No chips detected in the cluster",
+      "contract_validated_before_device_creation": true
+    },
+    "ttsim_clean_reruns": {
+      "independent_kits": 2,
+      "executed_cases": 6,
+      "byte_identical": true
+    }
   },
   "environment": {
     "tenstorrent_device": "absent",
     "tt_smi": "unavailable",
-    "ttsim_shared_library": "unavailable",
-    "pinned_tt_metal_checkout": "unavailable"
+    "ttsim_shared_library": "available:pinned",
+    "pinned_tt_metal_checkout": "available:pinned"
   },
-  "open_tasks": ["3.2", "3.4", "3.5", "4.3", "4.4", "4.5", "5.4", "5.5", "6.3", "6.4", "6.5", "7.1", "7.5"]
+  "open_tasks": [
+    "4.3",
+    "4.4",
+    "4.5",
+    "5.4",
+    "5.5",
+    "6.3",
+    "6.4",
+    "6.5",
+    "7.1",
+    "7.5"
+  ],
+  "external_evidence": {
+    "kit_manifest": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/kit/capture-kit.json",
+      "sha256": "b7911c0d1a6f973999936768544bf4b24a45d3cca883871aa906bd34b2c1cb15",
+      "size_bytes": 14761
+    },
+    "source_manifest": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/kit/wormhole_external_sources.json",
+      "sha256": "4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138",
+      "size_bytes": 2281
+    },
+    "noc_capture": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/noc-64b/bundle.json",
+      "sha256": "de375f73269ae4fd45778f62b96aa1c420746645170b5e7791d3073c98e181b7",
+      "size_bytes": 7948
+    },
+    "noc_reference": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/noc-64b/noc-64b.reference.json",
+      "sha256": "4d18edb01ab6e8f289842c6ef23b0186cf824374582358f8c23afcb26d214310",
+      "size_bytes": 3379
+    },
+    "dram_capture": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/dram-read-256b/bundle.json",
+      "sha256": "802809bbc08eb83fdecce260403d619d09c6b2b86a62fcf0f8bcccaa1d795ac1",
+      "size_bytes": 7931
+    },
+    "dram_reference": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/dram-read-256b/dram-read-256b.reference.json",
+      "sha256": "65986295b4f0c83c0807ce08a0d4dc52d3efb13f87484ef7e6160677ede152ae",
+      "size_bytes": 3354
+    },
+    "compute_capture": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/captures/compute-bf16-32/bundle.json",
+      "sha256": "be43d5dbf6ac46d1f3ea7e0ed3aaa2d0b5981d8788eae8eb93fec3a0d4c82606",
+      "size_bytes": 8080
+    },
+    "compute_reference": {
+      "logical_path": "simulator_detailed/configs/validation/external/evidence/ttsim-wormhole-external-validation-v1-20260920/references/compute-bf16-32/compute-bf16-32.reference.json",
+      "sha256": "c70836e8f66f154b5e1e1c80acf1ab0ab6e313805d61e3fc1053b88127160fa5",
+      "size_bytes": 3479
+    }
+  }
 }

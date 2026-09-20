@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import subprocess
@@ -16,6 +17,7 @@ from ..configs.schemas.external_validation import (
     ExternalCaptureBundle,
     ExternalOutcome,
     ExternalValidationCampaign,
+    ExternalValidationCase,
     WormholeCollectionPlan,
     WormholeDeviceSelection,
     WormholeProfilerEnvironmentVariable,
@@ -25,6 +27,7 @@ from ..configs.schemas.validation import (
     ArtifactReference,
     CanonicalJSON,
     Metadata,
+    ProfilerSelection,
     ReferenceProvenance,
     ValidationReference,
 )
@@ -34,7 +37,7 @@ from .external import (
     AdmittedExternalCapture,
     admit_external_capture,
 )
-from .external_capture import RECIPE_BY_FAMILY
+from .external_capture import ASSET_ROOT, RECIPE_BY_FAMILY
 from .identity import bytes_digest, canonical_record, content_digest
 from .references import EXTRACTOR, EXTRACTOR_VERSION, import_reference
 
@@ -56,6 +59,63 @@ def _verified_bytes(
         f"worker artifact identity mismatch: {identity.logical_path}",
     )
     return data
+
+
+def _profiler_selection(
+    case: ExternalValidationCase, selection: WormholeDeviceSelection
+) -> ProfilerSelection:
+    family = case.family
+    source_file, zone, core_field, risc = {
+        "noc_ack_roundtrip": (
+            "kernels/noc_ack_roundtrip.cpp",
+            "NOC_ACK_ROUNDTRIP",
+            "source_core",
+            "BRISC",
+        ),
+        "dram_read_return": (
+            "kernels/dram_read_return.cpp",
+            "DRAM_READ_RETURN",
+            "destination_core",
+            "BRISC",
+        ),
+        "compute_service": (
+            "kernels/compute_service.cpp",
+            "COMPUTE_SERVICE",
+            "worker_core",
+            "TRISC_1",
+        ),
+    }[family]
+    source_lines = [
+        number
+        for number, line in enumerate(
+            (ASSET_ROOT / source_file).read_text().splitlines(), start=1
+        )
+        if f'DeviceZoneScopedN("{zone}")' in line
+    ]
+    require(len(source_lines) == 1, f"producer source must contain one {zone} zone")
+    boundary = case.boundary_maps[0]
+    mapping = case.conditions.mapping.value
+    if mapping is None:
+        raise ValueError("Wormhole case mapping is unavailable")
+    mapping_value = json.loads(mapping.text)
+    coordinate = mapping_value[core_field]
+    return ProfilerSelection(
+        device=str(selection.device_index),
+        core_x=coordinate[0],
+        core_y=coordinate[1],
+        risc=risc,
+        zone=zone,
+        source_file=source_file,
+        source_line=source_lines[0],
+        clock_domain=boundary.clock_domain,
+        metric_id=boundary.simulator_interval.metric_id,
+        boundary=boundary.simulator_boundary,
+        run_ids=tuple(int(item) for item in boundary.samples.repetition_ids),
+        warmup_run_ids=tuple(
+            int(item) for item in boundary.samples.warmup_repetition_ids
+        ),
+        aggregation=boundary.samples.aggregation,
+    )
 
 
 def plan_wormhole_collection(
@@ -88,6 +148,22 @@ def plan_wormhole_collection(
     profiler = next(item for item in outputs if item.role == "profiler_csv")
     manifest = next(item for item in outputs if item.role == "capture_manifest")
     input_path = f"inputs/{case.case_id}.json"
+    plan_path = f"outputs/{case.case_id}/collection-plan.json"
+    profiler_directory = f"outputs/{case.case_id}/profiler-runtime"
+    environment = (
+        WormholeProfilerEnvironmentVariable(
+            name="LD_LIBRARY_PATH", value="bin/runtime"
+        ),
+        WormholeProfilerEnvironmentVariable(
+            name="TT_METAL_HOME", value="vendor/tt-metal"
+        ),
+        WormholeProfilerEnvironmentVariable(name="TT_METAL_DEVICE_PROFILER", value="1"),
+        WormholeProfilerEnvironmentVariable(name="TT_METAL_SLOW_DISPATCH_MODE", value="1"),
+        WormholeProfilerEnvironmentVariable(
+            name="TT_METAL_PROFILER_DIR", value=profiler_directory
+        ),
+    )
+    profiler_selections = (_profiler_selection(case, selection),)
     argv = (
         host.logical_path,
         "--recipe", RECIPE_BY_FAMILY[case.family],
@@ -95,6 +171,7 @@ def plan_wormhole_collection(
         "--functional-output", functional.logical_path,
         "--profiler-output", profiler.logical_path,
         "--manifest-output", manifest.logical_path,
+        "--plan", plan_path,
         "--repetitions", str(case.budget.repetitions),
         "--warmup-repetitions", str(case.budget.warmup_repetitions),
         "--timeout-seconds", format(case.budget.timeout_seconds, "g"),
@@ -109,6 +186,10 @@ def plan_wormhole_collection(
         "selection": selection.model_dump(mode="json"),
         "conditions": case.conditions.model_dump(mode="json"),
         "argv": argv,
+        "environment": [item.model_dump(mode="json") for item in environment],
+        "profiler_selections": [
+            item.model_dump(mode="json") for item in profiler_selections
+        ],
         "outputs": [item.model_dump(mode="json") for item in outputs],
     }
     return WormholeCollectionPlan(
@@ -127,10 +208,8 @@ def plan_wormhole_collection(
         selection=selection,
         conditions=case.conditions,
         argv=argv,
-        environment=(
-            WormholeProfilerEnvironmentVariable(name="TT_METAL_DEVICE_PROFILER", value="1"),
-            WormholeProfilerEnvironmentVariable(name="TT_METAL_SLOW_DISPATCH_MODE", value="1"),
-        ),
+        environment=environment,
+        profiler_selections=profiler_selections,
         repetition_ids=case.boundary_maps[0].samples.repetition_ids,
         warmup_repetition_ids=case.boundary_maps[0].samples.warmup_repetition_ids,
         timeout_seconds=case.budget.timeout_seconds,
@@ -259,6 +338,28 @@ def collect_wormhole_capture(
         }
         if any(path.exists() for path in output_paths.values()):
             raise ValueError("worker output already exists; refusing to replace evidence")
+        profiler_directory = next(
+            item.value
+            for item in plan.environment
+            if item.name == "TT_METAL_PROFILER_DIR"
+        )
+        if _worker_path(root, profiler_directory).exists():
+            raise ValueError("worker profiler directory already exists")
+        plan_path = _worker_path(root, plan.argv[12])
+        plan_data = (plan.model_dump_json(indent=2) + "\n").encode()
+        if plan_path.exists():
+            require(
+                plan_path.read_bytes() == plan_data,
+                "worker collection plan changed",
+            )
+        else:
+            plan_path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                prefix=".collection-plan-", dir=plan_path.parent, delete=False
+            ) as handle:
+                handle.write(plan_data)
+                temporary_plan = Path(handle.name)
+            temporary_plan.replace(plan_path)
     except (OSError, ValueError) as exc:
         return write_unavailable_wormhole_capture(
             admitted,
@@ -268,6 +369,8 @@ def collect_wormhole_capture(
         )
 
     environment = os.environ.copy()
+    environment.pop("TT_METAL_SIMULATOR", None)
+    environment.pop("TT_METAL_DISABLE_SFPLOADMACRO", None)
     environment.update({item.name: item.value for item in plan.environment})
     command = [str(_worker_path(root, plan.argv[0])), *plan.argv[1:]]
     try:

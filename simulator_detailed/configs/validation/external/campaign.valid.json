@@ -13,7 +13,7 @@
       "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
       "source_snapshot_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
       "configuration": {
-        "text": "{\"build_type\":\"release\",\"target_arch\":\"wormhole_b0\"}"
+        "text": "{\"build_type\":\"release\",\"enable_tracy\":true,\"target_arch\":\"wormhole_b0\"}"
       },
       "artifacts": [
         {

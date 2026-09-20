@@ -1,7 +1,7 @@
 {
   "case_id": "compute-bf16-32",
   "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
-  "functional_sha256": "67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
+  "functional_sha256": "6aaf88aa8d83d8c4799be37aba9a1fe95e18bccf842b4360ce5d8a52952cfe41",
   "input_sha256": "41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c",
   "kind": "tt_metal_capture_manifest",
   "max_output_bytes": 131072,

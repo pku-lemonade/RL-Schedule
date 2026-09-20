@@ -5,15 +5,43 @@
       "artifact_id": "host-program",
       "logical_path": "bin/wormhole_external_validation",
       "role": "host_binary",
-      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
-      "size_bytes": 617464
+      "sha256": "6f7d9158b7b4118ad2c75587dfba86258a55332c64e5048a154c8a451be50e03",
+      "size_bytes": 665016
     },
     {
       "artifact_id": "metalium-runtime",
       "logical_path": "bin/runtime/libtt_metal.so",
       "role": "device_binary",
-      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
-      "size_bytes": 29128744
+      "sha256": "0047e781a26932d8a534e8f27a1cc2ae0f809cc3b043c94adbaa17ecd8b38eee",
+      "size_bytes": 29196040
+    },
+    {
+      "artifact_id": "tracy-runtime",
+      "logical_path": "bin/runtime/libtracy.so.0.14.1",
+      "role": "device_binary",
+      "sha256": "9ff27509bd7c564bb037162e0253edfc3c22069b59bbe74a079c64914ffa271d",
+      "size_bytes": 495128
+    },
+    {
+      "artifact_id": "umd-runtime",
+      "logical_path": "bin/runtime/libtt-umd.so.0",
+      "role": "device_binary",
+      "sha256": "dc60ca07ad03f02520ffeefc247f19ab1c54860a05f9f480e9ce26f8447afc4d",
+      "size_bytes": 5424832
+    },
+    {
+      "artifact_id": "tt-stl-runtime",
+      "logical_path": "bin/runtime/libtt_stl.so",
+      "role": "device_binary",
+      "sha256": "4b1f608a927e7a42c820c4c3919d81e3ca2a5febc26fbdd5116a7cad34da2b51",
+      "size_bytes": 19096
+    },
+    {
+      "artifact_id": "hwloc-runtime",
+      "logical_path": "bin/runtime/libhwloc.so.15",
+      "role": "device_binary",
+      "sha256": "e36d4c385db612fd3c343ed0cbca72283b8e236bf5230f3d7b01ed28656296dc",
+      "size_bytes": 417808
     },
     {
       "artifact_id": "ttsim-runtime",
@@ -26,8 +54,8 @@
       "artifact_id": "producer-sources",
       "logical_path": "bin/wormhole_external_sources.json",
       "role": "source_bundle",
-      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
-      "size_bytes": 2280
+      "sha256": "4065dd20549c1f10dbfd1ce92350676b80fd3120195a255c08a0cc4bdfdb1138",
+      "size_bytes": 2281
     }
   ],
   "build_id": "tt-metal-wormhole-pinned",

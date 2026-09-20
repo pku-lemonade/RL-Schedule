@@ -349,6 +349,7 @@ def _effective_conditions(family: str, value: Data) -> tuple[Data, Data]:
 
 def _environment() -> tuple[CaptureEnvironmentVariable, ...]:
     return (
+        CaptureEnvironmentVariable(name="LD_LIBRARY_PATH", value="bin/runtime"),
         CaptureEnvironmentVariable(name="TT_METAL_HOME", value="vendor/tt-metal"),
         CaptureEnvironmentVariable(
             name="TT_METAL_SIMULATOR", value="runtime/ttsim/libttsim_wh.so"

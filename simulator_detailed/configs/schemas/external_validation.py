@@ -196,6 +196,7 @@ class CaptureKitFile(ValidationRecord):
 
 class CaptureEnvironmentVariable(ValidationRecord):
     name: Literal[
+        "LD_LIBRARY_PATH",
         "TT_METAL_HOME",
         "TT_METAL_SIMULATOR",
         "TT_METAL_SLOW_DISPATCH_MODE",
@@ -206,6 +207,7 @@ class CaptureEnvironmentVariable(ValidationRecord):
     @model_validator(mode="after")
     def fixed_value(self) -> Self:
         expected = {
+            "LD_LIBRARY_PATH": "bin/runtime",
             "TT_METAL_HOME": "vendor/tt-metal",
             "TT_METAL_SIMULATOR": "runtime/ttsim/libttsim_wh.so",
             "TT_METAL_SLOW_DISPATCH_MODE": "1",
@@ -222,7 +224,7 @@ class TTSimCaptureInvocation(ValidationRecord):
     case_id: Identifier
     argv: tuple[Text, ...] = Field(min_length=17, max_length=17)
     environment: tuple[CaptureEnvironmentVariable, ...] = Field(
-        min_length=4, max_length=4
+        min_length=4, max_length=5
     )
     repetition_ids: tuple[Identifier, ...] = Field(min_length=1)
     warmup_repetition_ids: tuple[Identifier, ...] = ()
@@ -279,13 +281,16 @@ class TTSimCaptureInvocation(ValidationRecord):
             for value in self.argv
         ):
             raise ValueError("capture-kit argv cannot contain evaluated shell text")
-        variables = {item.name for item in self.environment}
-        if variables != {
+        environment_names = tuple(item.name for item in self.environment)
+        unique(environment_names, "capture-kit environment variable")
+        variables = set(environment_names)
+        legacy_variables = {
             "TT_METAL_HOME",
             "TT_METAL_SIMULATOR",
             "TT_METAL_SLOW_DISPATCH_MODE",
             "TT_METAL_DISABLE_SFPLOADMACRO",
-        }:
+        }
+        if variables not in (legacy_variables, legacy_variables | {"LD_LIBRARY_PATH"}):
             raise ValueError("capture-kit environment is incomplete")
         if {item.role for item in self.outputs} != {
             "functional_record",
@@ -356,8 +361,28 @@ class WormholeDeviceSelection(ValidationRecord):
 
 
 class WormholeProfilerEnvironmentVariable(ValidationRecord):
-    name: Literal["TT_METAL_DEVICE_PROFILER", "TT_METAL_SLOW_DISPATCH_MODE"]
-    value: Literal["1"]
+    name: Literal[
+        "LD_LIBRARY_PATH",
+        "TT_METAL_HOME",
+        "TT_METAL_DEVICE_PROFILER",
+        "TT_METAL_SLOW_DISPATCH_MODE",
+        "TT_METAL_PROFILER_DIR",
+    ]
+    value: Text
+
+    @model_validator(mode="after")
+    def fixed_value(self) -> Self:
+        expected = {
+            "LD_LIBRARY_PATH": "bin/runtime",
+            "TT_METAL_HOME": "vendor/tt-metal",
+            "TT_METAL_DEVICE_PROFILER": "1",
+            "TT_METAL_SLOW_DISPATCH_MODE": "1",
+        }
+        if self.name in expected and self.value != expected[self.name]:
+            raise ValueError("Wormhole profiler environment uses an unsupported value")
+        if self.name == "TT_METAL_PROFILER_DIR":
+            _portable_path(self.value, "Wormhole profiler directory")
+        return self
 
 
 class WormholeCollectionPlan(ValidationRecord):
@@ -372,10 +397,11 @@ class WormholeCollectionPlan(ValidationRecord):
     binary_manifest: tuple[BuildArtifactIdentity, ...] = Field(min_length=1)
     selection: WormholeDeviceSelection
     conditions: ReferenceConditions
-    argv: tuple[Text, ...] = Field(min_length=23, max_length=23)
+    argv: tuple[Text, ...] = Field(min_length=25, max_length=25)
     environment: tuple[WormholeProfilerEnvironmentVariable, ...] = Field(
-        min_length=2, max_length=2
+        min_length=5, max_length=5
     )
+    profiler_selections: tuple[ProfilerSelection, ...] = Field(min_length=1)
     repetition_ids: tuple[Identifier, ...] = Field(min_length=1)
     warmup_repetition_ids: tuple[Identifier, ...] = ()
     timeout_seconds: Positive
@@ -399,24 +425,25 @@ class WormholeCollectionPlan(ValidationRecord):
             raise ValueError("Wormhole collection warm-ups must be a proper subset of repetitions")
         expected_flags = (
             "--recipe", "--input", "--functional-output", "--profiler-output", "--manifest-output",
-            "--repetitions", "--warmup-repetitions", "--timeout-seconds", "--max-output-bytes",
+            "--plan", "--repetitions", "--warmup-repetitions", "--timeout-seconds", "--max-output-bytes",
             "--device-index", "--pcie-slot",
         )
         host = next((item for item in self.binary_manifest if item.role == "host_binary"), None)
         if host is None or self.argv[0] != host.logical_path or self.argv[1::2] != expected_flags:
             raise ValueError("Wormhole collector argv does not use the fixed named interface")
-        for index in (0, 4, 6, 8, 10):
+        for index in (0, 4, 6, 8, 10, 12):
             _portable_path(self.argv[index], "Wormhole collector argv path")
-        if self.argv[12] != str(len(self.repetition_ids)):
+        if self.argv[14] != str(len(self.repetition_ids)):
             raise ValueError("Wormhole collection repetition argv disagrees with its budget")
-        if self.argv[14] != str(len(self.warmup_repetition_ids)):
+        if self.argv[16] != str(len(self.warmup_repetition_ids)):
             raise ValueError("Wormhole collection warm-up argv disagrees with its budget")
-        if self.argv[16] != format(self.timeout_seconds, "g") or self.argv[18] != str(self.max_output_bytes):
+        if self.argv[18] != format(self.timeout_seconds, "g") or self.argv[20] != str(self.max_output_bytes):
             raise ValueError("Wormhole collection argv disagrees with its finite budget")
-        if self.argv[20] != str(self.selection.device_index) or self.argv[22] != self.selection.pcie_slot:
+        if self.argv[22] != str(self.selection.device_index) or self.argv[24] != self.selection.pcie_slot:
             raise ValueError("Wormhole collection argv disagrees with explicit device selection")
         if {item.name for item in self.environment} != {
-            "TT_METAL_DEVICE_PROFILER", "TT_METAL_SLOW_DISPATCH_MODE",
+            "LD_LIBRARY_PATH", "TT_METAL_HOME", "TT_METAL_DEVICE_PROFILER",
+            "TT_METAL_SLOW_DISPATCH_MODE", "TT_METAL_PROFILER_DIR",
         }:
             raise ValueError("Wormhole profiler environment is incomplete")
         if {item.role for item in self.outputs} != {
@@ -425,6 +452,25 @@ class WormholeCollectionPlan(ValidationRecord):
             raise ValueError("Wormhole collection output contract is incomplete")
         if {item.logical_path for item in self.outputs} != {self.argv[6], self.argv[8], self.argv[10]}:
             raise ValueError("Wormhole collection argv disagrees with its output contract")
+        if len(self.profiler_selections) != 1:
+            raise ValueError("Wormhole collection requires one profiler selection")
+        profiler = self.profiler_selections[0]
+        boundary = self.conditions.measurement.value
+        if (
+            profiler.device not in {str(self.selection.device_index), self.selection.pcie_slot}
+            or profiler.run_ids != tuple(int(item) for item in self.repetition_ids)
+            or profiler.warmup_run_ids
+            != tuple(int(item) for item in self.warmup_repetition_ids)
+            or (
+                boundary is not None
+                and (
+                    profiler.boundary != boundary.boundary
+                    or profiler.clock_domain != boundary.start.clock_domain
+                    or profiler.aggregation != boundary.aggregation
+                )
+            )
+        ):
+            raise ValueError("Wormhole profiler selection disagrees with the collection plan")
         return self
 
 

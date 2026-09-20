@@ -5,8 +5,8 @@
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.valid.json",
-    "sha256": "36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5",
-    "size_bytes": 14792
+    "sha256": "ef068f13d094627102b67ac515d89c02378cce31cc70a1728d2dd516137a9bac",
+    "size_bytes": 14814
   },
   "case_id": "noc-64b",
   "producer_id": "ttsim-functional",
@@ -16,7 +16,7 @@
     "source_url": "https://github.com/tenstorrent/tt-metal",
     "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
     "source_snapshot_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
-    "configuration": {"text": "{\"build_type\":\"release\",\"target_arch\":\"wormhole_b0\"}"},
+    "configuration": {"text": "{\"build_type\":\"release\",\"enable_tracy\":true,\"target_arch\":\"wormhole_b0\"}"},
     "artifacts": [
       {
         "artifact_id": "host-program",
