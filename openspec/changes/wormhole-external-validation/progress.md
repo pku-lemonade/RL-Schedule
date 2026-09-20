@@ -1,5 +1,79 @@
 # Wormhole external validation progress
 
+## Part 6 - Measured fitting and sealed held-out evaluation
+
+Status: implementation checkpoint on 2026-09-20; tasks 6.1 and 6.2 are
+complete. Tasks 6.3, 6.4 and 6.5 remain open because no admitted Wormhole fit
+and held-out captures exist on this host. Synthetic references exercise the
+mechanics but are explicitly labeled and cannot produce a measured-calibration
+claim.
+
+Delivered and verified:
+
+- An external campaign planner packages the campaign, each admitted simulator
+  input and source, and each raw/reference pair into a portable existing-format
+  calibration plan. One plan accepts one supported family and only the existing
+  typed memory bandwidth/fixed-latency or compute work-rate/setup targets; NoC,
+  topology, clocks, dimensions, capacities, harvesting, fidelity and protocol
+  fields cannot enter the candidate grid.
+- Every case selects its exact metric and retains explicit entity/clock maps.
+  The planner verifies campaign/reference conditions, family/target agreement,
+  boundary identity, evidence classification, finite budgets, source targets
+  and disjoint fit/evaluation bindings before atomically publishing the plan.
+- Calibration admission now seals and verifies the source campaign in addition
+  to the existing plan, source, reference and raw-capture identities. Candidate
+  declaration order, metric weights/scales/tolerances, semantic fingerprints,
+  capture groups and reference identities remain part of the plan or selection
+  seals. Existing plans without the additive per-case selectors retain their
+  prior all-metric behavior.
+- The existing bounded engine applies only typed numeric targets to copied
+  configurations, re-admits every candidate, freezes the first declared
+  minimum and its configuration/fit-evidence digests, and evaluates held-out
+  cases without refitting. Tests retain candidate failures, all-invalid search,
+  ties, held-out failure and unchanged source inputs.
+- A result publisher atomically emits the existing calibration-result document
+  and distinct calibration/evaluation outcomes for the external report. It
+  includes candidate history, fit/evaluation error text, per-reference sample
+  statistics, exact admitted case conditions, selected targets, ambiguity and
+  explicit limits against unique physical identification, untested workloads
+  and full-device timing claims. Its portable report path is covered with
+  synthetic evidence only; task 6.4 awaits a real measured result.
+
+Implementation source SHA-256 identities before this progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `configs/schemas/validation.py` | `c51bea93b96d64d882248817ed8538c8bd5b89f439cfbad8dbe52af7b94c41dd` |
+| `validation/calibration.py` | `f31574f2ce8644fe9cf20422281d55640cc7831fde6c97575f6953593e8a947c` |
+| `validation/external_calibration.py` | `a3f12db9a5d8733ad27920a57306e16941af1e39259becd5966c28b061ae208c` |
+| `tests/test_external_calibration.py` | `b4d17073954c12714eca5ee53a94a4e8b36384ed78ee214db02488812886378b` |
+| `tests/test_validation_calibration.py` | `597835ce8cae5c8d0e3c6b45bfb6e23365d8dbecb846037c0d44eb1bdcaae82a` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_calibration simulator_detailed.tests.test_validation_calibration
+21 tests passed in 27.857s; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_calibration simulator_detailed.tests.test_validation_calibration simulator_detailed.tests.test_external_campaign simulator_detailed.tests.test_external_wormhole_collector simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+147 tests passed in 108.390s; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/validation.py simulator_detailed/validation/calibration.py simulator_detailed/validation/external_calibration.py simulator_detailed/tests/test_external_calibration.py simulator_detailed/tests/test_validation_calibration.py
+All checks passed.
+```
+
+Blocked prerequisites observed on this host:
+
+- `/dev/tenstorrent` is absent, `tt-smi` is unavailable and no ttsim shared
+  library was found in the repository. No pinned TT-Metal build, named Wormhole
+  board, firmware inventory or live profiler CSV has been supplied.
+- Tasks 6.3-6.5 require disjoint admitted hardware captures for measured fitting
+  and held-out evaluation. The publisher is ready for those artifacts, but no
+  synthetic result is promoted to measured evidence or counted as completion.
+
 ## Part 5 - Paired campaign execution and scoped reports
 
 Status: implementation checkpoint on 2026-09-20; tasks 5.1, 5.2 and 5.3 are

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..configs.schemas.validation import (
     CalibrationCase,
+    CalibrationMetric,
     CalibrationParameter,
     CalibrationPlan,
     CalibrationResult,
@@ -77,10 +78,26 @@ def semantic_fingerprint(admitted: Admission, conditions: ReferenceConditions | 
     return content_digest({"model": {k: v.model_dump(mode="json") if isinstance(v, CanonicalJSON) else v for k, v in metadata.items()}, "conditions": scope})
 
 
+def _case_metrics(
+    plan: CalibrationPlan, case: CalibrationCase
+) -> tuple[CalibrationMetric, ...]:
+    selected = set(case.metric_ids)
+    return tuple(
+        metric
+        for metric in plan.metrics
+        if not selected or metric.metric_id in selected
+    )
+
+
 def admit_calibration(path: Path) -> CalibrationAdmission:
     plan = CalibrationPlan.model_validate_json(path.read_bytes())
     items: list[CalibrationInput] = []
     inputs: dict[str, Path] = {"plan.json": path.resolve()}
+    if plan.source_campaign is not None:
+        read_verified_artifact(path, plan.source_campaign)
+        inputs["external/campaign.json"] = resolve_asset(
+            path, plan.source_campaign.path
+        )
     for index, case in enumerate((*plan.fit_cases, *plan.evaluation_cases)):
         admitted = admit(case.adapter, resolve_asset(path, case.input_path), horizon=case.budget.max_aci_cycles)
         require(semantic_fingerprint(admitted, case.conditions) == case.semantic_sha256, "declared semantic fingerprint disagrees with admitted workload/conditions")
@@ -110,7 +127,7 @@ def admit_calibration(path: Path) -> CalibrationAdmission:
     require(not fit_raw.intersection(i.reference.provenance.raw_artifact.sha256 for i in evaluation if i.reference is not None), "fit/evaluation reuse the same raw capture")
     for item in items:
         if item.reference is not None and item.reference.observations is not None:
-            for metric in plan.metrics:
+            for metric in _case_metrics(plan, item.case):
                 expected = next((m for m in item.reference.observations.metrics if m.metric_id == metric.metric_id), None)
                 if expected is not None:
                     tolerance_pass(Fraction(str(expected.value)), Fraction(str(expected.value)), metric)
@@ -156,8 +173,13 @@ def _runtime_case(case: CalibrationCase) -> ValidationCase:
                           expected_execution="complete", checks=checks, conditions=case.conditions)
 
 
-def _policies(plan: CalibrationPlan) -> tuple[MetricPolicy, ...]:
-    return tuple(MetricPolicy.model_validate(m.model_dump(exclude={"weight", "scale"})) for m in plan.metrics)
+def _policies(
+    plan: CalibrationPlan, case: CalibrationCase
+) -> tuple[MetricPolicy, ...]:
+    return tuple(
+        MetricPolicy.model_validate(metric.model_dump(exclude={"weight", "scale"}))
+        for metric in _case_metrics(plan, case)
+    )
 
 
 def _fit_candidate(plan: CalibrationPlan, fit: tuple[CalibrationInput, ...], values: tuple[ParameterValue, ...], index: int, directory: Path) -> CandidateResult:
@@ -187,14 +209,28 @@ def _fit_candidate(plan: CalibrationPlan, fit: tuple[CalibrationInput, ...], val
             observation = result.observations[-1]
             acceptance = compare(CheckSelection(check_id="fit_acceptance", check="metrics", required=True,
                                                   tier="silicon_timing" if plan.evidence_scope == "measured_conditions" else "model_invariant",
-                                                  requirements=("VA-D08",), reference_id=item.reference.reference_id, metrics=_policies(plan)),
+                                                  requirements=("VA-D08",), reference_id=item.reference.reference_id, metrics=_policies(plan, item.case),
+                                                  entity_mappings=item.case.entity_mappings,
+                                                  clock_mappings=item.case.clock_mappings),
                                  candidate, item.case.conditions, observation, item.reference, item.evidence)
             if acceptance.outcome == "blocked":
                 raise IncompatibleReference(acceptance.reason)
             measured_accepted = measured_accepted and acceptance.outcome == "pass"
-            for metric in plan.metrics:
+            for metric in _case_metrics(plan, item.case):
                 failure = "blocked"
-                actual, expected = metric_pair(observation, item.reference.observations, metric, {})
+                actual, expected = metric_pair(
+                    observation,
+                    item.reference.observations,
+                    metric,
+                    {
+                        mapping.reference: mapping.simulator
+                        for mapping in item.case.clock_mappings
+                    },
+                    {
+                        mapping.reference: mapping.simulator
+                        for mapping in item.case.entity_mappings
+                    },
+                )
                 error = abs(actual - expected) / Fraction(str(metric.scale))
                 weight = Fraction(str(metric.weight))
                 errors += weight * error
@@ -237,7 +273,9 @@ def _evaluate(admission: CalibrationAdmission, frozen: FrozenSelection, director
             selection = CheckSelection(check_id=item.case.case_id + ":evaluation", check="metrics", required=True,
                                         tier="silicon_timing" if admission.plan.evidence_scope == "measured_conditions" else "model_invariant",
                                         requirements=("VA-D08",), reference_id=item.reference.reference_id,
-                                        metrics=_policies(admission.plan))
+                                        metrics=_policies(admission.plan, item.case),
+                                        entity_mappings=item.case.entity_mappings,
+                                        clock_mappings=item.case.clock_mappings)
             checks.append(compare(selection, candidate, item.case.conditions, result.observations[-1], item.reference, item.evidence))
         except (ValueError, TypeError, KeyError, OverflowError) as exc:
             checks.append(CheckResult(check_id=item.case.case_id + ":evaluation", required=True, tier="model_invariant",

@@ -40,8 +40,8 @@
 
 ## 6. Measured fitting and sealed held-out evaluation
 
-- [ ] 6.1 Generate bounded existing-format calibration plans from admitted campaign cases for only memory bandwidth/fixed latency and compute work rate/setup; verify topology, clocks, widths, capacities, harvesting, fidelity and protocol structure cannot become fit targets.
-- [ ] 6.2 Seal candidate order, metric scales/weights, tolerances, fit captures, held-out capture identities and semantic/capture-group splits before selection; verify renamed workloads, reused raw captures, changed thresholds and post-seal evidence mutation are rejected.
+- [x] 6.1 Generate bounded existing-format calibration plans from admitted campaign cases for only memory bandwidth/fixed latency and compute work rate/setup; verify topology, clocks, widths, capacities, harvesting, fidelity and protocol structure cannot become fit targets.
+- [x] 6.2 Seal candidate order, metric scales/weights, tolerances, fit captures, held-out capture identities and semantic/capture-group splits before selection; verify renamed workloads, reused raw captures, changed thresholds and post-seal evidence mutation are rejected.
 - [ ] 6.3 Execute measured fitting on the admitted fit captures, freeze the selected vector/configuration digest, and evaluate disjoint hardware captures without refitting; verify candidate failures, ties, all-invalid searches and held-out failures remain visible and source inputs are unchanged.
 - [ ] 6.4 Publish candidate history, fit/evaluation errors, sample statistics, ambiguity and exact device/workload/window scope in the external report; verify no result claims unique physical identification, untested workloads or full-device timing accuracy.
 - [ ] 6.5 Run calibration/lineage regression tests and the actual measured fit/held-out campaign, strict Pyright, scoped Ruff and strict OpenSpec validation; record exact outcomes in `progress.md` and commit Part 6 before continuing.

@@ -130,6 +130,26 @@ class CalibrationTests(unittest.TestCase):
         self.assertNotEqual(result.plan_sha256, self.memory.plan_sha256)
         self.assertNotEqual(result.selection.selection_sha256, self.memory.selection.selection_sha256)
 
+    def test_declared_candidate_order_is_part_of_the_seal_and_tie_break(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.copied(directory, mode="compute")
+            self.edit(
+                path,
+                lambda document: document["parameters"][0].update(
+                    candidates=[4, 2, 1]
+                ),
+            )
+            result = calibrate(path)
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.selection.values[0].value, 4)
+        self.assertEqual(result.tied_candidate_ids, ("candidate:0", "candidate:1"))
+        self.assertEqual(result.evaluation_checks[0].outcome, "fail")
+        self.assertNotEqual(result.plan_sha256, self.compute.plan_sha256)
+        self.assertNotEqual(
+            result.selection.selection_sha256,
+            self.compute.selection.selection_sha256,
+        )
+
     def test_all_rejected_candidates_remain_visible(self):
         with tempfile.TemporaryDirectory() as directory:
             path = self.copied(directory)

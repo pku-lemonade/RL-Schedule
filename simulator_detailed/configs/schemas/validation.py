@@ -900,11 +900,18 @@ class CalibrationCase(ValidationRecord):
     semantic_sha256: Digest
     capture_group: Identifier
     conditions: ReferenceConditions | None = None
+    metric_ids: tuple[Identifier, ...] = ()
+    entity_mappings: tuple[IdentifierMapping, ...] = ()
+    clock_mappings: tuple[IdentifierMapping, ...] = ()
 
     @model_validator(mode="after")
     def horizon(self) -> Self:
         if self.budget.max_aci_cycles is None:
             raise ValueError("calibration case requires a finite simulation horizon")
+        unique(self.metric_ids, "calibration case metric")
+        for mappings in (self.entity_mappings, self.clock_mappings):
+            unique(tuple(item.reference for item in mappings), "reference mapping")
+            unique(tuple(item.simulator for item in mappings), "simulator mapping")
         return self
 
 
@@ -921,6 +928,7 @@ class CalibrationPlan(ValidationRecord):
     loss: Literal["weighted_mean_absolute_scaled_error_v1"]
     tie_break: Literal["declared_candidate_order"]
     evidence_scope: Literal["synthetic_demonstration", "measured_conditions"]
+    source_campaign: ArtifactReference | None = None
 
     @model_validator(mode="after")
     def bounded_split(self) -> Self:
@@ -945,6 +953,16 @@ class CalibrationPlan(ValidationRecord):
             c.reference.reference_id for c in self.evaluation_cases
         }:
             raise ValueError("fit/evaluation reference identities overlap")
+        metric_ids = {item.metric_id for item in self.metrics}
+        selected_metric_ids = {
+            metric_id
+            for case in cases
+            for metric_id in (case.metric_ids or tuple(metric_ids))
+        }
+        if selected_metric_ids != metric_ids:
+            raise ValueError(
+                "case metric selections must reference and cover plan metrics"
+            )
         count = 1
         for parameter in self.parameters:
             count *= len(parameter.candidates)
