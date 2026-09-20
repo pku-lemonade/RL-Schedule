@@ -7,7 +7,7 @@ shared transport/memory/compute design. This correction preserves that design
 and reopens the incomplete tasks instead of reducing their acceptance criteria.
 The correction initially retained the reproduced baseline (1.1) and Part 1
 check/commit boundary (1.5). The subsequent tree-admission repair verifies 1.3:
-**3/35 fully verified tasks**. The validation predecessor remains delivered.
+**5/35 fully verified tasks** after the 2026-09-20 mixed-admission repair. The validation predecessor remains delivered.
 
 The tree compiler now uses selected-fabric coordinates, validates the common
 physical target address, rejects unavailable workers and duplicate aliases,
@@ -15,8 +15,9 @@ and inventories parent/child/ejection/terminal stages. Admission also reuses
 canonical memory binding and reservation/service checks, normalizes source
 identity without locator paths, rejects forged plan inventories and validates
 profile scalar/packet contracts. These are pure admission improvements, not
-evidence of shared execution. Tasks 1.2 and 1.4 remain open for the complete
-mixed settings/control/route/conflict inventory.
+evidence of shared execution. Tasks 1.2 and 1.4 now include explicit mixed hardware/control settings,
+return-path/responder inventory and initial access/version/phase dependency
+admission. Runtime integration and the acceptance evidence below remain open.
 
 ## Concrete findings
 

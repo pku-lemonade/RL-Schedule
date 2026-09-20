@@ -11,7 +11,13 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, StrictBool, field_validator, model_validator
 
-from .memory_replay import MemoryRange, MemorySystemConfig
+from ...memory_execution import MemoryRuntimeConfig
+from .memory_replay import (
+    MemoryOperation,
+    MemoryRange,
+    MemorySystemConfig,
+    MemoryVersion,
+)
 from .topology import Coordinate, GraphRecord, Identifier, Index, PositiveInt, unique
 from .torus_replay import TransportEvidence
 
@@ -57,6 +63,7 @@ class MulticastWrite(GraphRecord):
     destinations: tuple[DestinationBinding, ...] = Field(min_length=1)
     completion: Literal["write_posted", "write_acknowledged"]
     depends_on: tuple[Identifier, ...] = ()
+    source_version: MemoryVersion | None = None
 
     @model_validator(mode="after")
     def shape(self) -> Self:
@@ -93,10 +100,31 @@ class ScalarIncrement(GraphRecord):
     counter_id: Identifier
     completion: Literal["atomic_posted", "atomic_returning"]
     depends_on: tuple[Identifier, ...] = ()
+    return_inbox: MemoryRange | None = None
 
     @model_validator(mode="after")
     def dependencies(self) -> Self:
         unique(self.depends_on, "atomic dependency")
+        if self.completion == "atomic_posted" and self.return_inbox is not None:
+            raise ValueError("posted increments cannot declare a return inbox")
+        return self
+
+
+class LocalDataPrerequisite(GraphRecord):
+    """An extent and version observed only at the declaring operation's L1."""
+
+    access: MemoryRange
+    version: MemoryVersion
+
+
+class SyncGate(GraphRecord):
+    operation_id: Identifier
+    after_waits: tuple[Identifier, ...] = ()
+    local_data: tuple[LocalDataPrerequisite, ...] = ()
+
+    @model_validator(mode="after")
+    def distinct(self) -> Self:
+        unique(self.after_waits, "local wait dependency")
         return self
 
 
@@ -107,6 +135,7 @@ class ScalarWait(GraphRecord):
     threshold: NonNegativeInt
     producer_operations: tuple[Identifier, ...] = Field(min_length=1)
     data_ready_after: tuple[Identifier, ...] = ()
+    local_data: tuple[LocalDataPrerequisite, ...] = ()
 
     @model_validator(mode="after")
     def distinct(self) -> Self:
@@ -126,6 +155,8 @@ class SyncControlConfig(GraphRecord):
     reservation_edge_aci_cycles: Positive
     atomic_native_cycles: Positive
     local_observation_aci_cycles: NonNegative
+    atomic_granule_bytes: PositiveInt | None = None
+    inline_control_bytes: PositiveInt | None = None
     evidence: TransportEvidence
 
 
@@ -136,7 +167,10 @@ class MulticastSyncWorkload(GraphRecord):
     schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
     model_revision: Literal["finite_multicast_sync_v1"]
     memory: MemorySystemConfig
+    runtime: MemoryRuntimeConfig | None = None
     control: SyncControlConfig
+    operations: tuple[MemoryOperation, ...] = ()
+    gates: tuple[SyncGate, ...] = ()
     writes: tuple[MulticastWrite, ...] = ()
     counters: tuple[ScalarCounter, ...] = ()
     increments: tuple[ScalarIncrement, ...] = ()
@@ -144,16 +178,25 @@ class MulticastSyncWorkload(GraphRecord):
 
     @model_validator(mode="after")
     def identities(self) -> Self:
-        if not self.writes and not self.increments and not self.waits:
+        if not self.writes and not self.increments and not self.waits and not self.operations:
             raise ValueError("multicast/synchronization workload requires an operation")
         unique(tuple(w.operation_id for w in self.writes), "multicast operation")
         unique(tuple(i.operation_id for i in self.increments), "atomic operation")
         unique(tuple(w.wait_id for w in self.waits), "scalar wait")
         unique(tuple(c.counter_id for c in self.counters), "scalar counter")
-        all_operations = tuple(w.operation_id for w in self.writes) + tuple(i.operation_id for i in self.increments)
+        all_operations = (tuple(w.operation_id for w in self.writes) + tuple(i.operation_id for i in self.increments)
+                          + tuple(o.operation_id for o in self.operations))
         unique(all_operations + tuple(w.wait_id for w in self.waits), "operation/wait")
         operation_ids = set(all_operations)
         counter_ids = {c.counter_id for c in self.counters}
+        wait_ids = {w.wait_id for w in self.waits}
+        unique(tuple(g.operation_id for g in self.gates), "operation gate")
+        for gate in self.gates:
+            if gate.operation_id not in operation_ids or not set(gate.after_waits) <= wait_ids:
+                raise ValueError("gate refers to an unknown operation/wait")
+        for operation in self.operations:
+            if not set(operation.depends_on + operation.destination_ready_after + operation.fence_operations) <= operation_ids:
+                raise ValueError(f"memory {operation.operation_id}: unknown dependency")
         for write in self.writes:
             if any(dep not in operation_ids for dep in write.depends_on):
                 raise ValueError(f"multicast {write.operation_id}: unknown dependency")

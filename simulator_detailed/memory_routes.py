@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .configs.schemas.memory_replay import MemoryEndpointBinding, MemoryOperation
-from .configs.schemas.topology import GraphRecord, Identifier
+from .configs.schemas.memory_replay import (
+    MemoryEndpointBinding,
+    MemoryOperation,
+    MemorySystemConfig,
+)
+from .configs.schemas.topology import CanonicalTopology, GraphRecord, Identifier
 from .configs.schemas.torus_replay import RouteRecord
 from .memory_plan import MemoryPlan
 from .torus import TorusRouting
@@ -43,18 +47,23 @@ class MemoryRoutes:
 
 def _operation_routes(plan: MemoryPlan, routing: TorusRouting,
                       operation: MemoryOperation) -> MemoryOperationRoutes:
-    config = plan.config
+    return operation_routes(plan.config, plan.graph, routing, operation)
+
+
+def operation_routes(config: MemorySystemConfig, graph: CanonicalTopology, routing: TorusRouting,
+                     operation: MemoryOperation) -> MemoryOperationRoutes:
+    """Shared addressed route admission for standalone and mixed memory clients."""
     if operation.source is None or operation.destination is None or operation.fabric_id is None:
         raise ValueError("network operation requires both ranges and a fabric")
     endpoints = {item.endpoint_id: item for item in config.endpoints}
-    resources = {item.resource_id: item for item in plan.graph.resources}
+    resources = {item.resource_id: item for item in graph.resources}
     resource_configs = {item.resource_id: item for item in config.resources}
     buffers = {item.buffer_id: item for item in config.buffers}
     initiator = endpoints[operation.initiator_id]
     if not initiator.enabled or "initiator" not in initiator.roles:
         raise ValueError(f"operation {operation.operation_id}: endpoint cannot initiate")
     router = routing.routers[(initiator.fabric_id, initiator.router_id)]
-    if router.tile_id not in plan.graph.enabled_worker_ids:
+    if router.tile_id not in graph.enabled_worker_ids:
         raise ValueError("memory initiation requires an enabled worker")
     if operation.source.size_bytes != operation.destination.size_bytes:
         raise ValueError("memory source and destination lengths must agree")

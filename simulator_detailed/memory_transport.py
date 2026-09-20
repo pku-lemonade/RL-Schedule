@@ -10,7 +10,13 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
-from .configs.schemas.topology import GraphRecord, Index, PositiveInt, unique
+from .configs.schemas.topology import (
+    CanonicalTopology,
+    GraphRecord,
+    Index,
+    PositiveInt,
+    unique,
+)
 from .configs.schemas.torus_replay import (
     ChannelIdentity,
     LaneIdentity,
@@ -111,62 +117,17 @@ class MemoryTransportPlan:
         config = MemoryTransportConfig.model_validate(config.model_dump(mode="python"))
         if not wire.packets and physical_flit_bytes is None:
             raise ValueError("memory wire transport requires network packets")
-        fabrics = {f.fabric_id: f for f in config.fabrics}
-        graph = wire.routes.routing.topology.graph
-        if set(fabrics) != {f.fabric_id for f in graph.fabrics}:
-            raise ValueError("transport settings must cover exactly the graph fabrics")
         physical = {p.packet.layout.physical_flit_bytes for p in wire.packets}
         if physical_flit_bytes is not None:
             if type(physical_flit_bytes) is not int or physical_flit_bytes <= 0 or (physical and physical != {physical_flit_bytes}):
                 raise ValueError("declared physical width differs from memory packet layout")
-            # Local-only execution has an empty network but still validates its
-            # configured geometry; no fabricated packets or links are needed.
             physical = {physical_flit_bytes}
-        for f in config.fabrics:
-            for link in (f.network_link, f.local_link):
-                if link.slowdowns:
-                    raise ValueError("slowdowns require an explicit directed channel override")
-                if physical != {link.physical_flit_bytes}:
-                    raise ValueError("link physical width differs from memory packet layout")
-                if link.aci_clock_hz != wire.aci_clock_hz:
-                    raise ValueError("transport ACI clock differs from the admitted memory plan")
-            if (f.network_link.aci_clock_hz, f.network_link.noc_clock_hz) != (
-                    f.local_link.aci_clock_hz, f.local_link.noc_clock_hz):
-                raise ValueError("local/network clocks disagree")
-        if len({f.network_link.aci_clock_hz for f in config.fabrics}) != 1:
-            raise ValueError("all fabrics must use one shared ACI clock")
+        if len(physical) != 1:
+            raise ValueError("memory packets must use one declared physical width")
+        graph = wire.routes.routing.topology.graph
+        validate_transport_settings(graph, config, physical_flit_bytes=next(iter(physical)), aci_clock_hz=wire.aci_clock_hz)
+        fabrics = {f.fabric_id: f for f in config.fabrics}
         overrides = {o.channel: o.settings for o in config.overrides}
-        graph_links = {(e.fabric_id, e.link_id): e for e in graph.links}
-        attachments = {e.endpoint_id: e for e in graph.attachments}
-        for channel, settings in overrides.items():
-            if channel.fabric_id not in fabrics:
-                raise ValueError("override uses an unknown fabric")
-            base = fabrics[channel.fabric_id].network_link
-            if physical != {settings.physical_flit_bytes} or (settings.aci_clock_hz, settings.noc_clock_hz) != (
-                    base.aci_clock_hz, base.noc_clock_hz):
-                raise ValueError("override changes admitted clock or physical width")
-            if channel.kind == "network":
-                edge = graph_links.get((channel.fabric_id, channel.identity))
-                if edge is None or edge.enabled is not True:
-                    raise ValueError("slowdown/override requires an enabled directed network link")
-            else:
-                endpoint = attachments.get(channel.identity)
-                if endpoint is None or endpoint.fabric_id != channel.fabric_id or not endpoint.replay_enabled or (
-                    endpoint.inject_port if channel.kind == "inject" else endpoint.eject_port
-                ) is None:
-                    raise ValueError("override requires an admitted local channel")
-                if settings.slowdowns:
-                    raise ValueError("slowdown cannot target a local channel")
-            previous = 0.0
-            unique(tuple(s[0] for s in settings.slowdowns), "directed slowdown identity")
-            for _, start, end, factor in settings.slowdowns:
-                if not all(math.isfinite(x) for x in (start, end, factor)) or start < previous or end <= start or factor < 1:
-                    raise ValueError("invalid or overlapping directed slowdown interval")
-                previous = end
-                if any(not math.isfinite(settings.aci(native) * factor) for native in (
-                        settings.serialization_noc_cycles, settings.launch_interval_noc_cycles,
-                        settings.propagation_noc_cycles)):
-                    raise ValueError("slowdown produces an unrepresentable service duration")
         digest = content_digest({"wire_plan_sha256": wire.plan_sha256, "transport": config.model_dump(mode="json")})
         definitions: dict[PacketIdentity, PacketDefinition] = {}
         templates: dict[ChannelIdentity, dict[PacketIdentity, tuple[RoutedMemoryPacket, int]]] = {}
@@ -197,3 +158,57 @@ class MemoryTransportPlan:
                                     MappingProxyType(routers), config.endpoint_queue_capacity_packets,
                                     config.endpoint_staging_capacity_flits)
         return cls(wire, config, network)
+
+
+def validate_transport_settings(graph: CanonicalTopology, config: MemoryTransportConfig, *,
+                                physical_flit_bytes: int, aci_clock_hz: float) -> None:
+    """Validate shared physical settings before allocating any runtime objects."""
+    config = MemoryTransportConfig.model_validate(config.model_dump(mode="python"))
+    fabrics = {f.fabric_id: f for f in config.fabrics}
+    if set(fabrics) != {f.fabric_id for f in graph.fabrics}:
+        raise ValueError("transport settings must cover exactly the graph fabrics")
+    for f in config.fabrics:
+        for link in (f.network_link, f.local_link):
+            if link.slowdowns:
+                raise ValueError("slowdowns require an explicit directed channel override")
+            if physical_flit_bytes != link.physical_flit_bytes:
+                raise ValueError("link physical width differs from memory packet layout")
+            if link.aci_clock_hz != aci_clock_hz:
+                raise ValueError("transport ACI clock differs from the admitted memory plan")
+        if (f.network_link.aci_clock_hz, f.network_link.noc_clock_hz) != (
+                f.local_link.aci_clock_hz, f.local_link.noc_clock_hz):
+            raise ValueError("local/network clocks disagree")
+    if len({f.network_link.aci_clock_hz for f in config.fabrics}) != 1:
+        raise ValueError("all fabrics must use one shared ACI clock")
+    overrides = {o.channel: o.settings for o in config.overrides}
+    graph_links = {(e.fabric_id, e.link_id): e for e in graph.links}
+    attachments = {e.endpoint_id: e for e in graph.attachments}
+    for channel, settings in overrides.items():
+        if channel.fabric_id not in fabrics:
+            raise ValueError("override uses an unknown fabric")
+        base = fabrics[channel.fabric_id].network_link
+        if physical_flit_bytes != settings.physical_flit_bytes or (settings.aci_clock_hz, settings.noc_clock_hz) != (
+                base.aci_clock_hz, base.noc_clock_hz):
+            raise ValueError("override changes admitted clock or physical width")
+        if channel.kind == "network":
+            edge = graph_links.get((channel.fabric_id, channel.identity))
+            if edge is None or edge.enabled is not True:
+                raise ValueError("slowdown/override requires an enabled directed network link")
+        else:
+            endpoint = attachments.get(channel.identity)
+            if endpoint is None or endpoint.fabric_id != channel.fabric_id or not endpoint.replay_enabled or (
+                endpoint.inject_port if channel.kind == "inject" else endpoint.eject_port
+            ) is None:
+                raise ValueError("override requires an admitted local channel")
+            if settings.slowdowns:
+                raise ValueError("slowdown cannot target a local channel")
+        previous = 0.0
+        unique(tuple(s[0] for s in settings.slowdowns), "directed slowdown identity")
+        for _, start, end, factor in settings.slowdowns:
+            if not all(math.isfinite(x) for x in (start, end, factor)) or start < previous or end <= start or factor < 1:
+                raise ValueError("invalid or overlapping directed slowdown interval")
+            previous = end
+            if any(not math.isfinite(settings.aci(native) * factor) for native in (
+                    settings.serialization_noc_cycles, settings.launch_interval_noc_cycles,
+                    settings.propagation_noc_cycles)):
+                raise ValueError("slowdown produces an unrepresentable service duration")

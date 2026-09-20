@@ -5,7 +5,37 @@
 > The [implementation audit](implementation-audit.md) supersedes those completion
 > claims. Shared transport/memory/compute execution and retained resume remain
 > incomplete. The initial correction retained 2/35 tasks; the subsequent tree
-> repair below brings the checklist to 3/35 fully verified.
+> repair brought the checklist to 3/35. The mixed-admission repair below
+> completes Part 1: 5/35 fully verified, with runtime tasks still open.
+
+## Mixed execution admission repair — 2026-09-20
+
+Tasks 1.2 and 1.4 are now verified. The strict opt-in runtime contract declares
+shared physical link/router settings, responder capacity, scalar control
+geometry, return inboxes, ordinary addressed operations, local data extents and
+wait gates. Pure compilation inventories every segment's injection/tree/ejection
+channels, recipient acknowledgement route, scalar request/return route and
+responder reservation. It reuses the existing route and physical-setting
+validators without allocating an environment or modifying output files.
+
+The initial mixed dependency graph checks physical-owner completion visibility,
+local full-extent producer versions, source/target and inter-operation conflicts,
+dedicated atomic granules/inboxes, cycles, finite threshold reachability and
+later-phase overtake. Tree reservation assumptions are explicitly recorded,
+separately from hardware facts. These admission checks do not establish the
+shared runtime or complete Parts 2–7.
+
+Validation:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_multicast_inventory simulator_detailed.tests.test_multicast_sync simulator_detailed.tests.test_multicast_tree_admission simulator_detailed.tests.test_multicast_admission simulator_detailed.tests.test_memory_packets simulator_detailed.tests.test_packet_runtime simulator_detailed.tests.test_torus simulator_detailed.tests.test_hardware_profile -q` — 81 passed in 8.990 s, including the existing exact serialized packet-runtime compatibility fingerprints.
+* `.venv/bin/pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json` — 0 errors, warnings or informations.
+* `.venv/bin/ruff check simulator_detailed/multicast*.py simulator_detailed/configs/schemas/multicast_sync.py simulator_detailed/memory_routes.py simulator_detailed/memory_transport.py simulator_detailed/tests/test_multicast*.py` — passed.
+* `openspec validate wormhole-multicast-sync --strict --no-interactive` and `git diff --check` — passed.
+
+An initial route-helper extraction failed import/type checks and was corrected
+before this checkpoint. No legacy workload/result schemas or hardware constants
+were changed. Runtime settings remain explicit and generic clocks/dimensions
+remain configurable. No commits were pushed.
 
 ## Tree and canonical admission repair — 2026-09-18
 
