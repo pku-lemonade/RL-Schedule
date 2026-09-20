@@ -1,0 +1,649 @@
+{
+  "kind": "wormhole_archive_identity",
+  "schema_version": 1,
+  "date": "2026-09-20",
+  "pre_archive_revision": "9a1e2b5254eef095c02f7f1f47a91d0df574e830",
+  "cli_version": "1.11.0",
+  "archive_flags": [
+    "--skip-specs",
+    "--yes",
+    "--json"
+  ],
+  "path_prefix_map": {
+    "openspec/changes/wormhole-hardware-profile": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile",
+    "openspec/changes/generic-heterogeneous-topology": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology",
+    "openspec/changes/wormhole-dual-noc-routing": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing",
+    "openspec/changes/wormhole-memory-transactions": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions",
+    "openspec/changes/wormhole-compute-dataflow": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow",
+    "openspec/changes/wormhole-validation-harness": "openspec/changes/archive/2026-09-20-wormhole-validation-harness",
+    "openspec/changes/wormhole-multicast-sync": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync",
+    "openspec/changes/wormhole-single-chip-simulation-plan": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan"
+  },
+  "completed_tasks": {
+    "wormhole-hardware-profile": 23,
+    "generic-heterogeneous-topology": 30,
+    "wormhole-dual-noc-routing": 35,
+    "wormhole-memory-transactions": 40,
+    "wormhole-compute-dataflow": 35,
+    "wormhole-validation-harness": 35,
+    "wormhole-multicast-sync": 35,
+    "wormhole-single-chip-simulation-plan": 38
+  },
+  "main_specs_unchanged": {
+    "openspec/specs/wormhole-multicast-sync/spec.md": "b59175d125e05526574ff9386110960be02cdf5eeb4ed7f07f933eb8721b1e23",
+    "openspec/specs/wormhole-memory-transactions/spec.md": "ff148cdd9970d9a7652c6d29259edc02796f3e0ed8a6470370db9b7a687a783c",
+    "openspec/specs/wormhole-hardware-profile/spec.md": "ce529967209edb1f53aec8f320213e8ed91b0b04e1fa5278207c69ab97b27b3a",
+    "openspec/specs/wormhole-validation/spec.md": "14176b977fc37787258dfe0c49264840a726bfcbbb0c5dec360e25fdc3a504a5",
+    "openspec/specs/wormhole-compute-dataflow/spec.md": "5101a690b2796be6718f735dfa482fced0d69a20de4a256b80367f3a46def5dc",
+    "openspec/specs/wormhole-validation-harness/spec.md": "7f87cc104da7b379633b2fa08b8b19f8c61590568efc2f90340ad202e96d63c0",
+    "openspec/specs/wormhole-topology-routing/spec.md": "f630ee8fbe59439dede42918fe1615ca6afc459a260da7f97f1bc6f9ebfa3ffd"
+  },
+  "deltas": [
+    {
+      "path": "openspec/changes/wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md",
+      "capability": "wormhole-hardware-profile",
+      "requirements": [
+        "HP-P01",
+        "HP-P02",
+        "HP-P03",
+        "HP-P04",
+        "HP-P05",
+        "HP-P06",
+        "HP-P07",
+        "HP-P08",
+        "HP-P09",
+        "HP-P10"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "e3a2001fae0ff67f5d9a5cdbe99adc3559ff296bd05d4e4494ac5c643a4445f6"
+    },
+    {
+      "path": "openspec/changes/generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md",
+      "capability": "wormhole-topology-routing",
+      "requirements": [
+        "TR-G01",
+        "TR-G02",
+        "TR-G03",
+        "TR-G04",
+        "TR-G05",
+        "TR-G06",
+        "TR-G07",
+        "TR-G08",
+        "TR-G09",
+        "TR-G10"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "e226d8bfdbf0b012b1dbce71a3a5b9b1384d810f7675c329e79a2eac060b1f0f"
+    },
+    {
+      "path": "openspec/changes/wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md",
+      "capability": "wormhole-topology-routing",
+      "requirements": [
+        "TR-D01",
+        "TR-D02",
+        "TR-D03",
+        "TR-D04",
+        "TR-D05",
+        "TR-D06",
+        "TR-D07",
+        "TR-D08",
+        "TR-D09",
+        "TR-D10"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "fb4f0d140b07fe65717706e207e76c7b6e1fa79eedff307db7eee19e38f13269"
+    },
+    {
+      "path": "openspec/changes/wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md",
+      "capability": "wormhole-memory-transactions",
+      "requirements": [
+        "MT-D01",
+        "MT-D02",
+        "MT-D03",
+        "MT-D04",
+        "MT-D05",
+        "MT-D06",
+        "MT-D07",
+        "MT-D08",
+        "MT-D09",
+        "MT-D10"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "6c160e3d26d84151042edc014285ecaa821b40d83f31fd42fe1bd3fc33369ea0"
+    },
+    {
+      "path": "openspec/changes/wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md",
+      "capability": "wormhole-compute-dataflow",
+      "requirements": [
+        "CD-D01",
+        "CD-D02",
+        "CD-D03",
+        "CD-D04",
+        "CD-D05",
+        "CD-D06",
+        "CD-D07",
+        "CD-D08",
+        "CD-D09",
+        "CD-D10"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "e3797a2c4ae33faf914f7af68b74e2ed55acabdb24c62168199b801be062974d"
+    },
+    {
+      "path": "openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md",
+      "capability": "wormhole-validation-harness",
+      "requirements": [
+        "VA-D01",
+        "VA-D02",
+        "VA-D03",
+        "VA-D04",
+        "VA-D05",
+        "VA-D06",
+        "VA-D07",
+        "VA-D08",
+        "VA-D09",
+        "VA-D10",
+        "VA-D11"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "4f82a63d981f839932494f49f2da5aed736676570342b7c7fed442a9c5421e1e"
+    },
+    {
+      "path": "openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md",
+      "capability": "wormhole-multicast-sync",
+      "requirements": [
+        "MS-01",
+        "MS-02",
+        "MS-03",
+        "MS-04",
+        "MS-05",
+        "MS-06",
+        "MS-07",
+        "MS-08",
+        "MS-09",
+        "MS-10",
+        "MS-11",
+        "MS-12"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "998802bcef7858b265e9f3b50be5ca72c78743ef0fbd522cbcf7ff5a1081c337"
+    },
+    {
+      "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "capability": "wormhole-compute-dataflow",
+      "requirements": [
+        "CD-01",
+        "CD-02",
+        "CD-03",
+        "CD-04",
+        "CD-05"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "5a18f12df132f74a42c46a67a966c00c8c6786b9bb4a68b5d9cf799e65413429"
+    },
+    {
+      "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "capability": "wormhole-hardware-profile",
+      "requirements": [
+        "HP-01",
+        "HP-02",
+        "HP-03",
+        "HP-04"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "699f2b57cface8d9e7c777f7728c3d1973ceea8c877a3ac76d5c91536f2cf1f8"
+    },
+    {
+      "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "capability": "wormhole-memory-transactions",
+      "requirements": [
+        "MT-01",
+        "MT-02",
+        "MT-03",
+        "MT-04",
+        "MT-05",
+        "MT-06"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "bc0b802d38a859a33d578df024e299ab7dac5cfefa51a2999a8936e1a2479285"
+    },
+    {
+      "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "capability": "wormhole-topology-routing",
+      "requirements": [
+        "TR-01",
+        "TR-02",
+        "TR-03",
+        "TR-04",
+        "TR-05"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "28695901cf1796aeb3e8bdf56ef96e47e69d778c9478df7ac18307a08cc4b919"
+    },
+    {
+      "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "capability": "wormhole-validation",
+      "requirements": [
+        "VA-01",
+        "VA-02",
+        "VA-03",
+        "VA-04",
+        "VA-05",
+        "VA-06",
+        "VA-07"
+      ],
+      "decision": "included; already synchronized, identical complete normative blocks",
+      "sha256": "7dd40e09319ce8c3c7cc95d32e9b497c7787876fe05c1cdd5fc7810ccc65c32e"
+    }
+  ],
+  "files": [
+    {
+      "original_path": "openspec/changes/wormhole-hardware-profile/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile/proposal.md",
+      "original_sha256": "ec0f48f5ac953365c108f39ec05075861176c9a3a7b2323770bed8bec8a30f0b",
+      "archived_sha256": "ec0f48f5ac953365c108f39ec05075861176c9a3a7b2323770bed8bec8a30f0b"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-hardware-profile/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile/design.md",
+      "original_sha256": "65a5f4997f812cdbe451a6db0541a24bfa1a31274de5bec2b4afba045965526d",
+      "archived_sha256": "65a5f4997f812cdbe451a6db0541a24bfa1a31274de5bec2b4afba045965526d"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-hardware-profile/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile/tasks.md",
+      "original_sha256": "57b5ae214ac57555f6151594e03002e6cea05153e250b043b6e1b3bec1522059",
+      "archived_sha256": "57b5ae214ac57555f6151594e03002e6cea05153e250b043b6e1b3bec1522059"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-hardware-profile/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile/.openspec.yaml",
+      "original_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618",
+      "archived_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md",
+      "original_sha256": "e3a2001fae0ff67f5d9a5cdbe99adc3559ff296bd05d4e4494ac5c643a4445f6",
+      "archived_sha256": "e3a2001fae0ff67f5d9a5cdbe99adc3559ff296bd05d4e4494ac5c643a4445f6"
+    },
+    {
+      "original_path": "openspec/changes/generic-heterogeneous-topology/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology/tasks.md",
+      "original_sha256": "2c8ac8cb06c1f1cdc57c05ae2582236113a0946f9b7633acf2355457df80c05b",
+      "archived_sha256": "2c8ac8cb06c1f1cdc57c05ae2582236113a0946f9b7633acf2355457df80c05b"
+    },
+    {
+      "original_path": "openspec/changes/generic-heterogeneous-topology/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology/proposal.md",
+      "original_sha256": "250fba46fe374501d320af611c267464cd37d7e88720d4e37b79be9685e9abf5",
+      "archived_sha256": "250fba46fe374501d320af611c267464cd37d7e88720d4e37b79be9685e9abf5"
+    },
+    {
+      "original_path": "openspec/changes/generic-heterogeneous-topology/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology/design.md",
+      "original_sha256": "ae0cde42fc87a5de41557b43858f7515a1bdc3b384866de0ee62e9563beeedef",
+      "archived_sha256": "ae0cde42fc87a5de41557b43858f7515a1bdc3b384866de0ee62e9563beeedef"
+    },
+    {
+      "original_path": "openspec/changes/generic-heterogeneous-topology/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology/.openspec.yaml",
+      "original_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618",
+      "archived_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618"
+    },
+    {
+      "original_path": "openspec/changes/generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md",
+      "original_sha256": "e226d8bfdbf0b012b1dbce71a3a5b9b1384d810f7675c329e79a2eac060b1f0f",
+      "archived_sha256": "e226d8bfdbf0b012b1dbce71a3a5b9b1384d810f7675c329e79a2eac060b1f0f"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/.openspec.yaml",
+      "original_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618",
+      "archived_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/delivery.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/delivery.md",
+      "original_sha256": "6cabd5862114e18b2a9955e60917251fb4177a293e13345df801e90ae8b7ce1d",
+      "archived_sha256": "c131ac264e387d6bf53707b2678422ca35269e79d6a764f3610502396f29596c"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/design.md",
+      "original_sha256": "96657a6ccd4c9d5971dab5dbbe10f571f1cbf47dfb49a9c24d210c0dfa50c43a",
+      "archived_sha256": "96657a6ccd4c9d5971dab5dbbe10f571f1cbf47dfb49a9c24d210c0dfa50c43a"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/proposal.md",
+      "original_sha256": "91c315355d427e0feef20346be4218dd7c0ba182d651663a8c4c0269399d0601",
+      "archived_sha256": "91c315355d427e0feef20346be4218dd7c0ba182d651663a8c4c0269399d0601"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/tasks.md",
+      "original_sha256": "1b06b8abd2073e59e34bec3113b46f30bee501207218fe4c6ef828ad1d089aa2",
+      "archived_sha256": "1b06b8abd2073e59e34bec3113b46f30bee501207218fe4c6ef828ad1d089aa2"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md",
+      "original_sha256": "fb4f0d140b07fe65717706e207e76c7b6e1fa79eedff307db7eee19e38f13269",
+      "archived_sha256": "fb4f0d140b07fe65717706e207e76c7b6e1fa79eedff307db7eee19e38f13269"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/proposal.md",
+      "original_sha256": "d4a1f5817fed59a3d9fc68583493e0f9f81ef26bcc210d2340e77bad5194e163",
+      "archived_sha256": "d4a1f5817fed59a3d9fc68583493e0f9f81ef26bcc210d2340e77bad5194e163"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/design.md",
+      "original_sha256": "311e26f3277420a3d2a075a0ba64700236dc627219d564962e41533491018c38",
+      "archived_sha256": "311e26f3277420a3d2a075a0ba64700236dc627219d564962e41533491018c38"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery.md",
+      "original_sha256": "6622dd6f55ba2427cb17409188eb05fc5b0327c60993fe4e06779c82ab36e03c",
+      "archived_sha256": "6622dd6f55ba2427cb17409188eb05fc5b0327c60993fe4e06779c82ab36e03c"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/.openspec.yaml",
+      "original_sha256": "50c36dfa766b2fc52e8a7d270b1d67cc487bcd95d1b4c8a5f929d62738e3c77e",
+      "archived_sha256": "50c36dfa766b2fc52e8a7d270b1d67cc487bcd95d1b4c8a5f929d62738e3c77e"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part5.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part5.md",
+      "original_sha256": "14196a71a39556ed904c3299191db23621cfe2fab0d74e222250c0685a72a32a",
+      "archived_sha256": "14196a71a39556ed904c3299191db23621cfe2fab0d74e222250c0685a72a32a"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/tasks.md",
+      "original_sha256": "e3aaff4fd23ad6ffdf73b637f160fb2a2d6d8df7a56fe29bed0f41191a33af67",
+      "archived_sha256": "e3aaff4fd23ad6ffdf73b637f160fb2a2d6d8df7a56fe29bed0f41191a33af67"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part4.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part4.md",
+      "original_sha256": "cb7be6dc0f75bfde20e72ec5c1ea42e89ff8372546ffa7edf7a47737bc173a57",
+      "archived_sha256": "cb7be6dc0f75bfde20e72ec5c1ea42e89ff8372546ffa7edf7a47737bc173a57"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part6.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part6.md",
+      "original_sha256": "be50daadfb2e4996fa83108759bf3ba19dbdc02b197df4750f39ea200eedd1f2",
+      "archived_sha256": "be50daadfb2e4996fa83108759bf3ba19dbdc02b197df4750f39ea200eedd1f2"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part7.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part7.md",
+      "original_sha256": "c60b5a6637e5b867475ae10b70780c17038994ba950577e9ec33c3a9955e192c",
+      "archived_sha256": "c60b5a6637e5b867475ae10b70780c17038994ba950577e9ec33c3a9955e192c"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part3.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part3.md",
+      "original_sha256": "494a58b6d8d729f491719b9b51807a4ef152b67f5c83c5fccdcd53aa8c60ea7b",
+      "archived_sha256": "494a58b6d8d729f491719b9b51807a4ef152b67f5c83c5fccdcd53aa8c60ea7b"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part2.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part2.md",
+      "original_sha256": "a4cf1b414e53150739b42d6644912b544b95ec46ef5fed83adf255675a5b544b",
+      "archived_sha256": "a4cf1b414e53150739b42d6644912b544b95ec46ef5fed83adf255675a5b544b"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/delivery-part1.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/delivery-part1.md",
+      "original_sha256": "95c1ecffee4d83b3e47fe0aaa9e3fcfd2abca38bf9a46bb6854d7ef08a3e90bb",
+      "archived_sha256": "95c1ecffee4d83b3e47fe0aaa9e3fcfd2abca38bf9a46bb6854d7ef08a3e90bb"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md",
+      "original_sha256": "6c160e3d26d84151042edc014285ecaa821b40d83f31fd42fe1bd3fc33369ea0",
+      "archived_sha256": "6c160e3d26d84151042edc014285ecaa821b40d83f31fd42fe1bd3fc33369ea0"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/design.md",
+      "original_sha256": "5c8d61812b9b7afe8b868bda442694d9977034212a92724ad0cb49d9ae48f370",
+      "archived_sha256": "5c8d61812b9b7afe8b868bda442694d9977034212a92724ad0cb49d9ae48f370"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/delivery.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/delivery.md",
+      "original_sha256": "231b7f5179c378bee5723ed3e1caff3072dc26f7bb186302b249be798bbeb2cf",
+      "archived_sha256": "41b71720d14d3be81d958817622a9e65a6a02ccb47682788a21b722f0e0960f4"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/tasks.md",
+      "original_sha256": "d03bebff971a1c8f69692635fde303ae8775ae8c7e81b4433bb09bdb68af5526",
+      "archived_sha256": "d03bebff971a1c8f69692635fde303ae8775ae8c7e81b4433bb09bdb68af5526"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/proposal.md",
+      "original_sha256": "f11dda6cd8ac64fe4b0aa7cc0250ed8e32f8732e097a6fe851941c159a5b7723",
+      "archived_sha256": "f11dda6cd8ac64fe4b0aa7cc0250ed8e32f8732e097a6fe851941c159a5b7723"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/progress.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/progress.md",
+      "original_sha256": "b5e5cc64db6e3f735267d04b9ae9920669f0d6581d0b05acf36bddcc2dd8e526",
+      "archived_sha256": "b5e5cc64db6e3f735267d04b9ae9920669f0d6581d0b05acf36bddcc2dd8e526"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/.openspec.yaml",
+      "original_sha256": "7ee91ca1618f6c409dd39de4c067d96a831da3cf7b53c10100da526527e71305",
+      "archived_sha256": "7ee91ca1618f6c409dd39de4c067d96a831da3cf7b53c10100da526527e71305"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md",
+      "original_sha256": "e3797a2c4ae33faf914f7af68b74e2ed55acabdb24c62168199b801be062974d",
+      "archived_sha256": "e3797a2c4ae33faf914f7af68b74e2ed55acabdb24c62168199b801be062974d"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/.openspec.yaml",
+      "original_sha256": "7ee91ca1618f6c409dd39de4c067d96a831da3cf7b53c10100da526527e71305",
+      "archived_sha256": "7ee91ca1618f6c409dd39de4c067d96a831da3cf7b53c10100da526527e71305"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/design.md",
+      "original_sha256": "827701908215949e25bf1fbaa88ec2f91b1df1af2c53b7e3747fcca094f41acf",
+      "archived_sha256": "827701908215949e25bf1fbaa88ec2f91b1df1af2c53b7e3747fcca094f41acf"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/delivery-identities.json",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/delivery-identities.json",
+      "original_sha256": "52634cdbfb2942a56d495589eef19dd43880c3a11fb755dd18b5e0ab908ebfcd",
+      "archived_sha256": "52634cdbfb2942a56d495589eef19dd43880c3a11fb755dd18b5e0ab908ebfcd"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/tasks.md",
+      "original_sha256": "583f69462e39ed167892e09eeca720cfda0e0baa8add27498ce640c7159b9c32",
+      "archived_sha256": "583f69462e39ed167892e09eeca720cfda0e0baa8add27498ce640c7159b9c32"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/progress.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/progress.md",
+      "original_sha256": "d41a3de2b37e5582a34496482d746a88143e03e0567082a6e584e2f877d4622d",
+      "archived_sha256": "d41a3de2b37e5582a34496482d746a88143e03e0567082a6e584e2f877d4622d"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/proposal.md",
+      "original_sha256": "07804f6980189abf7190e223a651898abd919196d4d41598728531073f280dcb",
+      "archived_sha256": "07804f6980189abf7190e223a651898abd919196d4d41598728531073f280dcb"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/delivery.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/delivery.md",
+      "original_sha256": "34662f3819a12f448e92b9c4d0f487b4f1bc855cbff4dbf1356480d26a9e8a51",
+      "archived_sha256": "42f23abb93f9d5ca192bf7937059024968f43b2d8e3681c896ebcae2733d5bcd"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-validation-harness/specs/wormhole-validation-harness/spec.md",
+      "original_sha256": "4f82a63d981f839932494f49f2da5aed736676570342b7c7fed442a9c5421e1e",
+      "archived_sha256": "4f82a63d981f839932494f49f2da5aed736676570342b7c7fed442a9c5421e1e"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/tasks.md",
+      "original_sha256": "707188a56984faeb2afbafcc1182951cfc37708964260d0944af4e574a29bf00",
+      "archived_sha256": "707188a56984faeb2afbafcc1182951cfc37708964260d0944af4e574a29bf00"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/implementation-audit.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/implementation-audit.md",
+      "original_sha256": "ab85327acffa7178f92dd152b76aa209b0fa85c4e5429a2c4c64dccf0b8aed6b",
+      "archived_sha256": "ab85327acffa7178f92dd152b76aa209b0fa85c4e5429a2c4c64dccf0b8aed6b"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/progress.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/progress.md",
+      "original_sha256": "4950c6f5fa40d1e0e7f27274730471b72d9af87879b07f780e96eca47bd5118a",
+      "archived_sha256": "4950c6f5fa40d1e0e7f27274730471b72d9af87879b07f780e96eca47bd5118a"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/design.md",
+      "original_sha256": "55f726c023645eb0996d15cf7817f4a4f9b2d4457ce9c2fedd1c1d37dce6c1cc",
+      "archived_sha256": "55f726c023645eb0996d15cf7817f4a4f9b2d4457ce9c2fedd1c1d37dce6c1cc"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/.openspec.yaml",
+      "original_sha256": "dc276ca1f5af9fc6062b02d4253186f254288dcf61711e1a8ec3573e8587440a",
+      "archived_sha256": "dc276ca1f5af9fc6062b02d4253186f254288dcf61711e1a8ec3573e8587440a"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/proposal.md",
+      "original_sha256": "6b7313e632e1f763e3a4c675da24ce7cbef68293ca778656799891cf0e325c2c",
+      "archived_sha256": "6b7313e632e1f763e3a4c675da24ce7cbef68293ca778656799891cf0e325c2c"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/delivery-identities.json",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/delivery-identities.json",
+      "original_sha256": "21580b20fa29a7310759d88514ea39231de39cbb5f4c06f5d6826ec25ca83b19",
+      "archived_sha256": "21580b20fa29a7310759d88514ea39231de39cbb5f4c06f5d6826ec25ca83b19"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/delivery.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/delivery.md",
+      "original_sha256": "3c9c3f5d13da7e8cd64e2eea9b79e09a9df301b8bb64529f655c549c87007539",
+      "archived_sha256": "81c21fe11db98a69e0f684accac09a3ebabab95c0c387145af553bf67d317974"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md",
+      "original_sha256": "998802bcef7858b265e9f3b50be5ca72c78743ef0fbd522cbcf7ff5a1081c337",
+      "archived_sha256": "998802bcef7858b265e9f3b50be5ca72c78743ef0fbd522cbcf7ff5a1081c337"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/evidence-map.json",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/evidence-map.json",
+      "original_sha256": "86ba2a637308ca5d6adabe6f95c0958eb54b41a83506ab7bc8e0cfea3c0d4882",
+      "archived_sha256": "86ba2a637308ca5d6adabe6f95c0958eb54b41a83506ab7bc8e0cfea3c0d4882"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/tasks.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/tasks.md",
+      "original_sha256": "d392341d1a0efc5ea3e7981e42e2f3206287177b3fd3703d10862a5feb293b6c",
+      "archived_sha256": "ff5cf29a2a324b9566f4cb993b74a505426380c7e4cd72c17d4a1b13a382ae1f"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/verification.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/verification.md",
+      "original_sha256": "41710b53274c60aaa1305ad53b2c20ef2fd3e1a9d7a2482d598ce048cf2a8584",
+      "archived_sha256": "9749651d87cff6469428fded271eccb10905f0182075133626c3095e954ec39d"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/design.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/design.md",
+      "original_sha256": "e0a120b1a21aa4dbdf856b7ffa623fe6c2cbcd03d9dfc2c68aac326767b95736",
+      "archived_sha256": "e0a120b1a21aa4dbdf856b7ffa623fe6c2cbcd03d9dfc2c68aac326767b95736"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/reconciliation.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/reconciliation.md",
+      "original_sha256": "5d1a5dda7a5dcb3ada13975e16cdcafb5d3478c49fe110dfba76f422e11f65f8",
+      "archived_sha256": "b707de836d18bda8c7dee82a9e2ed319145c086d005e64346b46e88e811baf64"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/.openspec.yaml",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/.openspec.yaml",
+      "original_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618",
+      "archived_sha256": "7cbda91d0db42e7f3a4c0edd23a86fbf0cb02498c21edb9ec0b20199c529e618"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/spec-sync-identities.json",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/spec-sync-identities.json",
+      "original_sha256": "2db6ee00b20492d687c4a79dc2a00aab8fe4e3ddb64354dcace2eb76a5b35688",
+      "archived_sha256": "2db6ee00b20492d687c4a79dc2a00aab8fe4e3ddb64354dcace2eb76a5b35688"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/proposal.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/proposal.md",
+      "original_sha256": "4939d1d8c0290c4e1942f7a7674390b12d595d3dd4c07c6fe8280bacba8be4a6",
+      "archived_sha256": "4939d1d8c0290c4e1942f7a7674390b12d595d3dd4c07c6fe8280bacba8be4a6"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "original_sha256": "28695901cf1796aeb3e8bdf56ef96e47e69d778c9478df7ac18307a08cc4b919",
+      "archived_sha256": "28695901cf1796aeb3e8bdf56ef96e47e69d778c9478df7ac18307a08cc4b919"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "original_sha256": "5a18f12df132f74a42c46a67a966c00c8c6786b9bb4a68b5d9cf799e65413429",
+      "archived_sha256": "5a18f12df132f74a42c46a67a966c00c8c6786b9bb4a68b5d9cf799e65413429"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "original_sha256": "7dd40e09319ce8c3c7cc95d32e9b497c7787876fe05c1cdd5fc7810ccc65c32e",
+      "archived_sha256": "7dd40e09319ce8c3c7cc95d32e9b497c7787876fe05c1cdd5fc7810ccc65c32e"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "original_sha256": "bc0b802d38a859a33d578df024e299ab7dac5cfefa51a2999a8936e1a2479285",
+      "archived_sha256": "bc0b802d38a859a33d578df024e299ab7dac5cfefa51a2999a8936e1a2479285"
+    },
+    {
+      "original_path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "archived_path": "openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "original_sha256": "699f2b57cface8d9e7c777f7728c3d1973ceea8c877a3ac76d5c91536f2cf1f8",
+      "archived_sha256": "699f2b57cface8d9e7c777f7728c3d1973ceea8c877a3ac76d5c91536f2cf1f8"
+    }
+  ],
+  "checks": {
+    "strict_changes": 8,
+    "strict_main_specs": 7,
+    "identity_tests_passed": 12,
+    "pyright_errors": 0,
+    "scoped_ruff_paths": 45,
+    "resolved_local_markdown_links": 196,
+    "unchanged_detailed_python_files": 167,
+    "unchanged_root_smoke_python_files": 18,
+    "unchanged_assets": 14
+  },
+  "historical_identity_policy": "Original JSON evidence and delta hashes remain unchanged. Resolve old logical paths through path_prefix_map; use pre_archive_revision for original Markdown bytes."
+}

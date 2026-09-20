@@ -183,7 +183,7 @@ execute a general workload. Worker inventory and a passing example are not a
 full-profile implementation.
 
 Public architectural anchors and verified source hashes are recorded in the
-change's [design](../../openspec/changes/wormhole-compute-dataflow/design.md#9-record-primary-source-anchors-without-turning-peaks-into-fitted-rates).
+change's [design](../../openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/design.md#9-record-primary-source-anchors-without-turning-peaks-into-fitted-rates).
 Pinned Tensix/L1/matrix-unit documentation and TT-Metal reader/compute/writer
 examples motivate shared resources, explicit publication and stage separation.
 They do not establish this model's rate, queue, overlap or end-to-end timing
@@ -193,5 +193,5 @@ Numerical validation, kernels/ISA execution, detailed unpack/math/pack overlap,
 optimized independent circular buffers, exact NIU/bank/channel behavior,
 multicast/atomics/semaphores, general dynamic graphs, automatic operator
 lowering and interchip/host execution remain outside this implemented subset.
-See the [delivery evidence](../../openspec/changes/wormhole-compute-dataflow/delivery.md)
+See the [delivery evidence](../../openspec/changes/archive/2026-09-20-wormhole-compute-dataflow/delivery.md)
 for requirement coverage, reproducible checks and the validation-harness handoff.

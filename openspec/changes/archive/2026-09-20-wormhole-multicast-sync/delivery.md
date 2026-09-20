@@ -54,7 +54,7 @@ fully returned extra token so a clean final snapshot alone cannot pass it.
 
 The source manifest records Part 6 plus these exact hashed Part 7 bytes. The
 containing delivery commit is intentionally not embedded in its own hash.
-Find it with `git log -1 --oneline -- openspec/changes/wormhole-multicast-sync/delivery.md`.
+Find it with `git log -1 --oneline -- openspec/changes/archive/2026-09-20-wormhole-multicast-sync/delivery.md`.
 
 ## Executed validation
 

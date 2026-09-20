@@ -8,7 +8,7 @@ Earlier sections retain their checkpoint-specific status and evidence.
 
 Tasks 1.1–1.5 are delivered in the commit containing this section, titled
 `feat: add versioned torus transport contracts`, based on `c1655ba`.
-See [implementation scope and evidence](../../../simulator_detailed/docs/torus_transport.md).
+See [implementation scope and evidence](../../../../simulator_detailed/docs/torus_transport.md).
 The remaining 30 tasks are not implemented; this is not completion of TR-D01..10.
 
 | Requirement subset | Implemented evidence |

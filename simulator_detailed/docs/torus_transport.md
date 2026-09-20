@@ -43,7 +43,7 @@ only channels and router pipelines used by the admitted routes.
 
 The sections below describe the seven implementation parts. Validation and
 requirement mappings are recorded in
-[the child delivery report](../../openspec/changes/wormhole-dual-noc-routing/delivery.md).
+[the child delivery report](../../openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/delivery.md).
 
 ## What part 1 implements
 
@@ -147,7 +147,7 @@ in the commit titled `feat: add versioned torus transport contracts`. The existi
 84-test baseline grows to **95 passing detailed tests**, including 11 new contract
 tests. Strict Pyright reports **0 errors / 0 warnings**, scoped Ruff passes, and
 OpenSpec strict validation and diff checks pass. Commands are recorded in the
-[change delivery notes](../../openspec/changes/wormhole-dual-noc-routing/delivery.md).
+[change delivery notes](../../openspec/changes/archive/2026-09-20-wormhole-dual-noc-routing/delivery.md).
 
 The new tests cover version/field/unit admission, immutable round trips, role and
 slowdown constraints, relative loading, evidence/override resolution, clock extremes,

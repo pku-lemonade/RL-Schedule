@@ -157,7 +157,7 @@ Packet evidence is pinned to
 [tt-isa-documentation revision acaf010519f4fdd323df5077e45b8695f70e4279](https://github.com/tenstorrent/tt-isa-documentation/tree/acaf010519f4fdd323df5077e45b8695f70e4279/WormholeB0).
 The example embeds the NoC overview, memory-map and alignment URLs, immutable
 revision and SHA-256 values. Full packet/order/L1/DRAM source identities and the
-limits of each claim are recorded in the [change design](../../openspec/changes/wormhole-memory-transactions/design.md).
+limits of each claim are recorded in the [change design](../../openspec/changes/archive/2026-09-20-wormhole-memory-transactions/design.md).
 Profile/coordinate evidence is inherited without discarding its provenance.
 
 These sources support structure and normal transaction semantics. Queue bounds,

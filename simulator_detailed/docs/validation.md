@@ -145,6 +145,6 @@ NIU/DRAM-bank/cache fidelity and measured device timing remain unvalidated.
 Historical root remap tests still refer to removed
 `LayerView.active_cores` and an inactive layer-5/core mapping; the separate passing
 root smoke does not repair or pass those tests. See the
-[child delivery evidence](../../openspec/changes/wormhole-validation-harness/delivery.md)
-and the [finite multicast child](../../openspec/changes/wormhole-multicast-sync/progress.md)
+[child delivery evidence](../../openspec/changes/archive/2026-09-20-wormhole-validation-harness/delivery.md)
+and the [finite multicast child](../../openspec/changes/archive/2026-09-20-wormhole-multicast-sync/progress.md)
 for exact checks and supported scope.

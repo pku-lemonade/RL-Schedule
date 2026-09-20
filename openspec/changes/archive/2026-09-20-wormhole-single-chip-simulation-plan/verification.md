@@ -1,5 +1,7 @@
 # Verification report: Wormhole single-chip simulation plan
 
+**Archive update (2026-09-20):** this completed change is now archived. Statements below about pending archival describe the prior delivery checkpoint. See the [archive record](../2026-09-20-wormhole-archive.md) for relocated evidence and preserved identities.
+
 **Closure update:** task 8.3 is now complete. The [reconciliation delivery](reconciliation.md) and [canonical identities](spec-sync-identities.json) record seven validated main specs, 100 preserved requirement IDs and 178 scenarios. The umbrella is **38/38**. The report below is the historical evidence audit at `9d5f000`; its 37/38 status, empty-main-spec finding and pending VA-07 baseline disposition describe that earlier checkpoint. That specification-closure issue is resolved. Optional ML, historical root local-remap and external accuracy limitations remain. No change has been archived or pushed.
 
 Reviewed on 2026-09-20 against `f6ca63b` and its exact source/input manifest.
@@ -44,13 +46,13 @@ cross-child disposition.
 
 | Parent milestones | Child / tasks | Delivery revision | Reviewed evidence and handoff |
 | --- | --- | --- | --- |
-| 1.1–1.5 | `wormhole-hardware-profile`, 23/23 | `9b4770b` | [Design and baseline](../wormhole-hardware-profile/design.md), [52-test delivery and topology handoff](../../../simulator_detailed/docs/hardware_profile.md#validation-environment-and-evidence); the original 29-test baseline and unavailable initial tools are distinguished from successful checks |
-| 2.1–2.5 | `generic-heterogeneous-topology`, 30/30 | `ff37a79` | [Design](../generic-heterogeneous-topology/design.md), [84-test delivery, independent graph/legacy oracles and routing handoff](../../../simulator_detailed/docs/topology.md#integrated-delivery-evidence-and-next-child-boundary) |
-| 3.1–3.5 | `wormhole-dual-noc-routing`, 35/35 | `a3cc2a4` | [Design](../wormhole-dual-noc-routing/design.md), [134-test delivery, route/resource argument, directed faults and memory boundary](../wormhole-dual-noc-routing/delivery.md) |
-| 4.1–4.5 | `wormhole-memory-transactions`, 40/40 | `694e9eb` | [Design](../wormhole-memory-transactions/design.md), [231 discovered / 230 passed / one optional skip, resource ownership and compute handoff](../wormhole-memory-transactions/delivery.md) |
-| 5.1–5.5 | `wormhole-compute-dataflow`, 35/35 | `007f4e5` | [Design](../wormhole-compute-dataflow/design.md), [315 discovered / 314 passed / one optional skip, finite pipelines, CLI and validation handoff](../wormhole-compute-dataflow/delivery.md) |
-| 6.1–6.5 | `wormhole-validation-harness`, 35/35 | `ca964a5` | [Design](../wormhole-validation-harness/design.md), [458 discovered / 457 passed / one optional skip, evidence/import/calibration gates and multicast handoff](../wormhole-validation-harness/delivery.md) |
-| 7.1–7.5 | `wormhole-multicast-sync`, 35/35 | `f6ca63b` | [Design](../wormhole-multicast-sync/design.md), [repaired implementation audit](../wormhole-multicast-sync/implementation-audit.md), [557 discovered / 556 passed / one optional skip and real shared-runtime delivery](../wormhole-multicast-sync/delivery.md) |
+| 1.1–1.5 | `wormhole-hardware-profile`, 23/23 | `9b4770b` | [Design and baseline](../2026-09-20-wormhole-hardware-profile/design.md), [52-test delivery and topology handoff](../../../../simulator_detailed/docs/hardware_profile.md#validation-environment-and-evidence); the original 29-test baseline and unavailable initial tools are distinguished from successful checks |
+| 2.1–2.5 | `generic-heterogeneous-topology`, 30/30 | `ff37a79` | [Design](../2026-09-20-generic-heterogeneous-topology/design.md), [84-test delivery, independent graph/legacy oracles and routing handoff](../../../../simulator_detailed/docs/topology.md#integrated-delivery-evidence-and-next-child-boundary) |
+| 3.1–3.5 | `wormhole-dual-noc-routing`, 35/35 | `a3cc2a4` | [Design](../2026-09-20-wormhole-dual-noc-routing/design.md), [134-test delivery, route/resource argument, directed faults and memory boundary](../2026-09-20-wormhole-dual-noc-routing/delivery.md) |
+| 4.1–4.5 | `wormhole-memory-transactions`, 40/40 | `694e9eb` | [Design](../2026-09-20-wormhole-memory-transactions/design.md), [231 discovered / 230 passed / one optional skip, resource ownership and compute handoff](../2026-09-20-wormhole-memory-transactions/delivery.md) |
+| 5.1–5.5 | `wormhole-compute-dataflow`, 35/35 | `007f4e5` | [Design](../2026-09-20-wormhole-compute-dataflow/design.md), [315 discovered / 314 passed / one optional skip, finite pipelines, CLI and validation handoff](../2026-09-20-wormhole-compute-dataflow/delivery.md) |
+| 6.1–6.5 | `wormhole-validation-harness`, 35/35 | `ca964a5` | [Design](../2026-09-20-wormhole-validation-harness/design.md), [458 discovered / 457 passed / one optional skip, evidence/import/calibration gates and multicast handoff](../2026-09-20-wormhole-validation-harness/delivery.md) |
+| 7.1–7.5 | `wormhole-multicast-sync`, 35/35 | `f6ca63b` | [Design](../2026-09-20-wormhole-multicast-sync/design.md), [repaired implementation audit](../2026-09-20-wormhole-multicast-sync/implementation-audit.md), [557 discovered / 556 passed / one optional skip and real shared-runtime delivery](../2026-09-20-wormhole-multicast-sync/delivery.md) |
 | 8.1 | 27 parent requirements / 30 scenarios | This audit | Exact code/test references and scope decisions in [evidence-map.json](evidence-map.json) |
 | 8.2 | Examples, exported contracts, retention and consumer assumptions | This audit | Workflow review below and byte-for-byte verification against the final delivery manifest |
 | 8.3 | Canonical specification baseline | Pending | [Concrete input inventory and merge policy](reconciliation.md); no main-spec writes or archival performed |
@@ -71,37 +73,37 @@ VA-07 is a documentation/process review, not a fabricated runtime test.
 
 | Parent target | Child contracts | Representative implementation / executable evidence |
 | --- | --- | --- |
-| HP-01 | HP-P01, HP-P02 | [normalize_profile](../../../simulator_detailed/hardware_profile.py#L216); [test_identity_versions_strict_ids_and_board_selection](../../../simulator_detailed/tests/test_hardware_profile.py#L171) |
-| HP-02 | HP-P05, HP-P06, HP-P07 | [override_parameter](../../../simulator_detailed/hardware_profile.py#L263); [test_overrides_preserve_provenance_and_recompute](../../../simulator_detailed/tests/test_hardware_profile.py#L383) |
-| HP-03 | HP-P03, HP-P04, HP-P09, TR-G01, TR-G02, TR-D01 | [topology_from_profile](../../../simulator_detailed/topology.py#L118); [test_profile_inventory_preserves_identity_and_unknowns](../../../simulator_detailed/tests/test_topology_adapters.py#L31) |
-| HP-04 | HP-P08, TR-G04, TR-G09, TR-D09, CD-D08, MS-12 | [require_executable_architecture](../../../simulator_detailed/hardware_profile.py#L463); [test_capabilities_are_implementation_owned_and_not_bypassable](../../../simulator_detailed/tests/test_hardware_profile.py#L456) |
-| TR-01 | TR-G01, TR-G02, TR-G03, TR-G04, TR-G08, TR-G09 | [Topology](../../../simulator_detailed/topology.py#L63); [test_profile_inventory_preserves_identity_and_unknowns](../../../simulator_detailed/tests/test_topology_adapters.py#L31) |
-| TR-02 | TR-D01, TR-D02 | [TorusRouting](../../../simulator_detailed/torus.py#L254); [test_all_pairs_match_independent_physical_coordinate_oracle](../../../simulator_detailed/tests/test_torus.py#L111) |
-| TR-03 | TR-G06, TR-G07, TR-D03, TR-D04, TR-D05 | [ResourceDependencies](../../../simulator_detailed/torus_dependencies.py#L52); [test_dependency_mutations_are_rejected_before_runtime](../../../simulator_detailed/tests/test_torus.py#L194) |
-| TR-04 | TR-G08, TR-D06, TR-D07, TR-D08 | [TorusTransport](../../../simulator_detailed/torus_transport.py#L111); [test_slowdown_half_open_snapshot_and_recovery](../../../simulator_detailed/tests/test_torus_transport.py#L150) |
-| TR-05 | MS-01, MS-02, MS-03, MS-04, MS-05, MS-10, MS-11 | [MulticastSyncPlan](../../../simulator_detailed/multicast_plan.py#L82); [test_capacity_one_exact_prefix_delivery_and_terminal_discard](../../../simulator_detailed/tests/test_tree_runtime.py#L87) |
-| MT-01 | MT-D01, MT-D02, MT-D06, MT-D08, CD-D03 | [MemorySession](../../../simulator_detailed/memory_runtime.py#L119); [test_segmented_transactions_both_fabrics_literal_byte_oracles](../../../simulator_detailed/tests/test_memory_runtime.py#L135) |
-| MT-02 | MT-D03 | [MemorySession](../../../simulator_detailed/memory_runtime.py#L119); [test_segmented_transactions_both_fabrics_literal_byte_oracles](../../../simulator_detailed/tests/test_memory_runtime.py#L135) |
-| MT-03 | MT-D02, MT-D04, MT-D05, MS-05, MS-06 | [MemoryResources](../../../simulator_detailed/memory_resources.py#L398); [test_aliases_share_one_capacity_and_teardown_restores_once](../../../simulator_detailed/tests/test_memory_resources.py#L72) |
-| MT-04 | MT-D04, MT-D06, MT-D07, MS-05, MS-08 | [MemorySession](../../../simulator_detailed/memory_runtime.py#L119); [test_posted_completion_keeps_pending_target_effects_and_capacity](../../../simulator_detailed/tests/test_memory_runtime.py#L154) |
-| MT-05 | MT-D09 | [LegacyDMAAdapter](../../../simulator_detailed/memory_adapters.py#L55); [test_exact_matrix_packets_issuers_finite_slots_and_drain](../../../simulator_detailed/tests/test_memory_adapters.py#L102) |
-| MT-06 | MS-06, MS-07, MS-08, MS-09, MS-10, MS-11 | [CounterState](../../../simulator_detailed/scalar_service.py#L63); [test_atomic_job_is_one_final_service_on_the_read_write_fifo](../../../simulator_detailed/tests/test_scalar_shared_runtime.py#L37) |
-| CD-01 | CD-D01, CD-D02 | [compute_cost](../../../simulator_detailed/compute_cost.py#L70); [test_subquantum_math_stays_positive_and_failed_math_cannot_publish](../../../simulator_detailed/tests/test_compute_runtime.py#L306) |
-| CD-02 | CD-D03, CD-D04 | [ComputeRuntime](../../../simulator_detailed/compute_runtime.py#L151); [test_longer_route_delays_compute_by_independently_counted_hops](../../../simulator_detailed/tests/test_compute_runtime.py#L145) |
-| CD-03 | CD-D05, CD-D07, MS-09, MS-10 | [ComputeBuffers](../../../simulator_detailed/compute_buffers.py#L98); [test_bounded_fifo_backpressure_and_many_generations](../../../simulator_detailed/tests/test_compute_buffers.py#L124) |
-| CD-04 | CD-D04, CD-D06 | [ComputeOverlapRuntime](../../../simulator_detailed/compute_runtime.py#L387); [test_independent_constant_service_depth_oracle](../../../simulator_detailed/tests/test_compute_overlap.py#L177) |
-| CD-05 | CD-D01, CD-D08, CD-D09, CD-D10, MS-12 | [import_legacy_fc](../../../simulator_detailed/compute_adapters.py#L117); [test_import_matches_direct_costs_stages_and_all_memory_evidence](../../../simulator_detailed/tests/test_compute_adapters.py#L61) |
-| VA-01 | VA-D02, VA-D07, VA-D08, VA-D09 | [requirement_coverage](../../../simulator_detailed/validation/reporting.py#L79); [test_ttsim_and_synthetic_origin_cannot_claim_hardware](../../../simulator_detailed/tests/test_validation_references.py#L143) |
-| VA-02 | HP-P05, HP-P06, VA-D03, VA-D07 | [collect_source_identity](../../../simulator_detailed/validation/identity.py#L94); [test_unknown_metadata_retained_but_blocks_comparison](../../../simulator_detailed/tests/test_validation_references.py#L132) |
-| VA-03 | HP-P10, TR-G10, TR-D10, MT-D10, CD-D10, VA-D06, MS-12 | [run_gate](../../../simulator_detailed/validation/gates.py#L59); [test_gate_missing_tool_is_blocked](../../../simulator_detailed/tests/test_validation_runner.py#L78) |
-| VA-04 | VA-D05, VA-D06, MS-11 | [MemoryService](../../../simulator_detailed/memory_service.py#L132); [test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap](../../../simulator_detailed/tests/test_memory_resources.py#L310) |
-| VA-05 | VA-D08 | [admit_calibration](../../../simulator_detailed/validation/calibration.py#L80); [test_perfect_fit_can_fail_heldout_without_refitting](../../../simulator_detailed/tests/test_validation_calibration.py#L100) |
-| VA-06 | HP-P07, HP-P08, VA-D09, VA-D10, VA-D11, MS-12 | [case_capabilities](../../../simulator_detailed/validation/reporting.py#L37); [test_fault_labels_and_requirement_scope](../../../simulator_detailed/tests/test_validation_cli.py#L161) |
+| HP-01 | HP-P01, HP-P02 | [normalize_profile](../../../../simulator_detailed/hardware_profile.py#L216); [test_identity_versions_strict_ids_and_board_selection](../../../../simulator_detailed/tests/test_hardware_profile.py#L171) |
+| HP-02 | HP-P05, HP-P06, HP-P07 | [override_parameter](../../../../simulator_detailed/hardware_profile.py#L263); [test_overrides_preserve_provenance_and_recompute](../../../../simulator_detailed/tests/test_hardware_profile.py#L383) |
+| HP-03 | HP-P03, HP-P04, HP-P09, TR-G01, TR-G02, TR-D01 | [topology_from_profile](../../../../simulator_detailed/topology.py#L118); [test_profile_inventory_preserves_identity_and_unknowns](../../../../simulator_detailed/tests/test_topology_adapters.py#L31) |
+| HP-04 | HP-P08, TR-G04, TR-G09, TR-D09, CD-D08, MS-12 | [require_executable_architecture](../../../../simulator_detailed/hardware_profile.py#L463); [test_capabilities_are_implementation_owned_and_not_bypassable](../../../../simulator_detailed/tests/test_hardware_profile.py#L456) |
+| TR-01 | TR-G01, TR-G02, TR-G03, TR-G04, TR-G08, TR-G09 | [Topology](../../../../simulator_detailed/topology.py#L63); [test_profile_inventory_preserves_identity_and_unknowns](../../../../simulator_detailed/tests/test_topology_adapters.py#L31) |
+| TR-02 | TR-D01, TR-D02 | [TorusRouting](../../../../simulator_detailed/torus.py#L254); [test_all_pairs_match_independent_physical_coordinate_oracle](../../../../simulator_detailed/tests/test_torus.py#L111) |
+| TR-03 | TR-G06, TR-G07, TR-D03, TR-D04, TR-D05 | [ResourceDependencies](../../../../simulator_detailed/torus_dependencies.py#L52); [test_dependency_mutations_are_rejected_before_runtime](../../../../simulator_detailed/tests/test_torus.py#L194) |
+| TR-04 | TR-G08, TR-D06, TR-D07, TR-D08 | [TorusTransport](../../../../simulator_detailed/torus_transport.py#L111); [test_slowdown_half_open_snapshot_and_recovery](../../../../simulator_detailed/tests/test_torus_transport.py#L150) |
+| TR-05 | MS-01, MS-02, MS-03, MS-04, MS-05, MS-10, MS-11 | [MulticastSyncPlan](../../../../simulator_detailed/multicast_plan.py#L82); [test_capacity_one_exact_prefix_delivery_and_terminal_discard](../../../../simulator_detailed/tests/test_tree_runtime.py#L87) |
+| MT-01 | MT-D01, MT-D02, MT-D06, MT-D08, CD-D03 | [MemorySession](../../../../simulator_detailed/memory_runtime.py#L119); [test_segmented_transactions_both_fabrics_literal_byte_oracles](../../../../simulator_detailed/tests/test_memory_runtime.py#L135) |
+| MT-02 | MT-D03 | [MemorySession](../../../../simulator_detailed/memory_runtime.py#L119); [test_segmented_transactions_both_fabrics_literal_byte_oracles](../../../../simulator_detailed/tests/test_memory_runtime.py#L135) |
+| MT-03 | MT-D02, MT-D04, MT-D05, MS-05, MS-06 | [MemoryResources](../../../../simulator_detailed/memory_resources.py#L398); [test_aliases_share_one_capacity_and_teardown_restores_once](../../../../simulator_detailed/tests/test_memory_resources.py#L72) |
+| MT-04 | MT-D04, MT-D06, MT-D07, MS-05, MS-08 | [MemorySession](../../../../simulator_detailed/memory_runtime.py#L119); [test_posted_completion_keeps_pending_target_effects_and_capacity](../../../../simulator_detailed/tests/test_memory_runtime.py#L154) |
+| MT-05 | MT-D09 | [LegacyDMAAdapter](../../../../simulator_detailed/memory_adapters.py#L55); [test_exact_matrix_packets_issuers_finite_slots_and_drain](../../../../simulator_detailed/tests/test_memory_adapters.py#L102) |
+| MT-06 | MS-06, MS-07, MS-08, MS-09, MS-10, MS-11 | [CounterState](../../../../simulator_detailed/scalar_service.py#L63); [test_atomic_job_is_one_final_service_on_the_read_write_fifo](../../../../simulator_detailed/tests/test_scalar_shared_runtime.py#L37) |
+| CD-01 | CD-D01, CD-D02 | [compute_cost](../../../../simulator_detailed/compute_cost.py#L70); [test_subquantum_math_stays_positive_and_failed_math_cannot_publish](../../../../simulator_detailed/tests/test_compute_runtime.py#L306) |
+| CD-02 | CD-D03, CD-D04 | [ComputeRuntime](../../../../simulator_detailed/compute_runtime.py#L151); [test_longer_route_delays_compute_by_independently_counted_hops](../../../../simulator_detailed/tests/test_compute_runtime.py#L145) |
+| CD-03 | CD-D05, CD-D07, MS-09, MS-10 | [ComputeBuffers](../../../../simulator_detailed/compute_buffers.py#L98); [test_bounded_fifo_backpressure_and_many_generations](../../../../simulator_detailed/tests/test_compute_buffers.py#L124) |
+| CD-04 | CD-D04, CD-D06 | [ComputeOverlapRuntime](../../../../simulator_detailed/compute_runtime.py#L387); [test_independent_constant_service_depth_oracle](../../../../simulator_detailed/tests/test_compute_overlap.py#L177) |
+| CD-05 | CD-D01, CD-D08, CD-D09, CD-D10, MS-12 | [import_legacy_fc](../../../../simulator_detailed/compute_adapters.py#L117); [test_import_matches_direct_costs_stages_and_all_memory_evidence](../../../../simulator_detailed/tests/test_compute_adapters.py#L61) |
+| VA-01 | VA-D02, VA-D07, VA-D08, VA-D09 | [requirement_coverage](../../../../simulator_detailed/validation/reporting.py#L79); [test_ttsim_and_synthetic_origin_cannot_claim_hardware](../../../../simulator_detailed/tests/test_validation_references.py#L143) |
+| VA-02 | HP-P05, HP-P06, VA-D03, VA-D07 | [collect_source_identity](../../../../simulator_detailed/validation/identity.py#L94); [test_unknown_metadata_retained_but_blocks_comparison](../../../../simulator_detailed/tests/test_validation_references.py#L132) |
+| VA-03 | HP-P10, TR-G10, TR-D10, MT-D10, CD-D10, VA-D06, MS-12 | [run_gate](../../../../simulator_detailed/validation/gates.py#L59); [test_gate_missing_tool_is_blocked](../../../../simulator_detailed/tests/test_validation_runner.py#L78) |
+| VA-04 | VA-D05, VA-D06, MS-11 | [MemoryService](../../../../simulator_detailed/memory_service.py#L132); [test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap](../../../../simulator_detailed/tests/test_memory_resources.py#L310) |
+| VA-05 | VA-D08 | [admit_calibration](../../../../simulator_detailed/validation/calibration.py#L80); [test_perfect_fit_can_fail_heldout_without_refitting](../../../../simulator_detailed/tests/test_validation_calibration.py#L100) |
+| VA-06 | HP-P07, HP-P08, VA-D09, VA-D10, VA-D11, MS-12 | [case_capabilities](../../../../simulator_detailed/validation/reporting.py#L37); [test_fault_labels_and_requirement_scope](../../../../simulator_detailed/tests/test_validation_cli.py#L161) |
 | VA-07 | VA-D11, MS-12 | [This process review](#findings-and-remaining-closure); canonical baseline pending in 8.3 |
 
 ## Supported workflow and compatibility review (8.2)
 
-The final multicast [delivery manifest](../wormhole-multicast-sync/delivery-identities.json)
+The final multicast [delivery manifest](../2026-09-20-wormhole-multicast-sync/delivery-identities.json)
 records exact argv, inputs, schema versions and outcomes for 18 actual replay/suite
 invocations plus six predecessor validation invocations. Their source and asset
 hashes still match this checkout. Those executions were reviewed, not rerun under
@@ -172,7 +174,7 @@ import json
 import unittest
 from pathlib import Path
 
-path = Path('openspec/changes/wormhole-single-chip-simulation-plan/evidence-map.json')
+path = Path('openspec/changes/archive/2026-09-20-wormhole-single-chip-simulation-plan/evidence-map.json')
 report = json.loads(path.read_text())
 names = sorted({test['unittest'] for requirement in report['requirements']
                 for test in requirement['tests']})
@@ -186,7 +188,7 @@ import json
 import subprocess
 from pathlib import Path
 
-path = Path('openspec/changes/wormhole-multicast-sync/delivery-identities.json')
+path = Path('openspec/changes/archive/2026-09-20-wormhole-multicast-sync/delivery-identities.json')
 subprocess.run(json.loads(path.read_text())['scoped_ruff_command'], check=True)
 PY
 openspec validate wormhole-single-chip-simulation-plan --strict --no-interactive

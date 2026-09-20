@@ -21,7 +21,7 @@ archived and no push is performed.
 
 Each part was validated and committed before proceeding. Detailed development
 oracles and decisions remain in [progress.md](progress.md). Final user-facing
-usage and contracts are in [compute_dataflow.md](../../../simulator_detailed/docs/compute_dataflow.md).
+usage and contracts are in [compute_dataflow.md](../../../../simulator_detailed/docs/compute_dataflow.md).
 
 Part 7 adds `replay_compute.py` with required workload/runtime settings and four
 JSON examples. Pure `load_plan()` resolves paths relative to the input and

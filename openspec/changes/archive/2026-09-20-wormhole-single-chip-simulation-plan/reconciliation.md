@@ -1,5 +1,7 @@
 # Specification reconciliation delivery (task 8.3)
 
+**Archive update (2026-09-20):** this completed change is now archived. Statements below about pending archival describe the prior delivery checkpoint. See the [archive record](../2026-09-20-wormhole-archive.md) for relocated evidence and preserved identities.
+
 Task 8.3 is complete on 2026-09-20. Seven canonical specifications now contain
 all **100 distinct requirement IDs and 178 scenarios** from the reviewed parent
 and seven children. All normative requirement/scenario bodies are preserved;
@@ -27,13 +29,13 @@ specs rules were configured. No duplicate IDs or dropped scenarios were found.
 
 | Canonical capability | Parent contracts | Child contracts | Requirements / scenarios |
 | --- | --- | --- | --- |
-| [wormhole-hardware-profile](../../specs/wormhole-hardware-profile/spec.md) | HP-01..04 | HP-P01..10 | 14 / 21 |
-| [wormhole-topology-routing](../../specs/wormhole-topology-routing/spec.md) | TR-01..05 | TR-G01..10, TR-D01..10 | 25 / 42 |
-| [wormhole-memory-transactions](../../specs/wormhole-memory-transactions/spec.md) | MT-01..06 | MT-D01..10 | 16 / 27 |
-| [wormhole-compute-dataflow](../../specs/wormhole-compute-dataflow/spec.md) | CD-01..05 | CD-D01..10 | 15 / 25 |
-| [wormhole-validation](../../specs/wormhole-validation/spec.md) | VA-01..07 | Cross-child evidence policy | 7 / 7 |
-| [wormhole-validation-harness](../../specs/wormhole-validation-harness/spec.md) | Parent VA policy applies | VA-D01..11 | 11 / 25 |
-| [wormhole-multicast-sync](../../specs/wormhole-multicast-sync/spec.md) | Parent TR-05/MT-06/VA-04 apply | MS-01..12 | 12 / 31 |
+| [wormhole-hardware-profile](../../../specs/wormhole-hardware-profile/spec.md) | HP-01..04 | HP-P01..10 | 14 / 21 |
+| [wormhole-topology-routing](../../../specs/wormhole-topology-routing/spec.md) | TR-01..05 | TR-G01..10, TR-D01..10 | 25 / 42 |
+| [wormhole-memory-transactions](../../../specs/wormhole-memory-transactions/spec.md) | MT-01..06 | MT-D01..10 | 16 / 27 |
+| [wormhole-compute-dataflow](../../../specs/wormhole-compute-dataflow/spec.md) | CD-01..05 | CD-D01..10 | 15 / 25 |
+| [wormhole-validation](../../../specs/wormhole-validation/spec.md) | VA-01..07 | Cross-child evidence policy | 7 / 7 |
+| [wormhole-validation-harness](../../../specs/wormhole-validation-harness/spec.md) | Parent VA policy applies | VA-D01..11 | 11 / 25 |
+| [wormhole-multicast-sync](../../../specs/wormhole-multicast-sync/spec.md) | Parent TR-05/MT-06/VA-04 apply | MS-01..12 | 12 / 31 |
 
 ## Applied merge decisions
 

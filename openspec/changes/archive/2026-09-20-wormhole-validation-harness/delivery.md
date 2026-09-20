@@ -75,7 +75,7 @@ These tests ran; none of the following claim a real external comparison.
 - Existing topology-v1, torus-v2, memory-v1 and compute-v1 CLI examples all returned **0/complete**, preserving their document versions; exact commands and result digests are in the manifest.
 - The separate actual root Darknet19 smoke **passed**. Source/input manifest verification passed; umbrella/spec/root/predictor/embedding/RL files were compared with `ea0115a` and remain unchanged (apart from this authorized handoff document).
 
-Reproducible commands are in [validation.md](../../../simulator_detailed/docs/validation.md), including the full unittest, strict Pyright and scoped Ruff invocations. OpenSpec was checked with `.venv/bin/openspec validate wormhole-validation-harness --strict`; whitespace with `git diff --check`. The pre-existing OpenSpec design-rules warning does not represent a validation failure and its configuration was not changed.
+Reproducible commands are in [validation.md](../../../../simulator_detailed/docs/validation.md), including the full unittest, strict Pyright and scoped Ruff invocations. OpenSpec was checked with `.venv/bin/openspec validate wormhole-validation-harness --strict`; whitespace with `git diff --check`. The pre-existing OpenSpec design-rules warning does not represent a validation failure and its configuration was not changed.
 
 The separate root gate ran `NetworkMapper(parse_mapping(...)).gen_dfg()`, root
 `simulator.architecture.Arch.execute()` and root `process_events(...)`, using
