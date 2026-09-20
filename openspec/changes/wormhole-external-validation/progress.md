@@ -1,5 +1,102 @@
 # Wormhole external validation progress
 
+## Part 7 - Consolidated external evidence and delivery checkpoint
+
+Status: offline implementation checkpoint on 2026-09-20; tasks 7.2, 7.3 and
+7.4 are complete. The change is 22/35. Tasks 7.1 and 7.5 remain open because
+the final clean external matrix and the actual-evidence delivery links cannot
+be produced on this host. This checkpoint is not final delivery and is not an
+archive candidate.
+
+Delivered and verified:
+
+- The portable report package now includes the campaign's simulator inputs and
+  each imported reference's raw bytes. It re-admits the copied campaign and
+  references before publication, rejects escaping or aliased raw paths, and
+  checks the raw digest again after copying.
+- `audit_external_report` independently recomputes the report identity, verifies
+  every declared byte and path, re-admits the packaged campaign, captures and
+  references, and reconstructs lineage as a rooted acyclic graph. It checks
+  exact case/producer coverage, source/build identity, canonical workload,
+  layout, fidelity, mapping, clocks, declared output roles and direct parentage
+  without trusting producer summary fields.
+- The audit ties each reference to exactly one direct capture bundle, requires
+  comparison lineage to include the model and reference, checks calibration
+  plan/result seals, and rejects passing timing based on non-hardware evidence.
+  Corruption tests cover changed bytes, missing packaged raw evidence,
+  re-sealed source/fidelity mutations and missing producer coverage.
+- Existing workflows remain offline and compatible. The root 4x4 Darknet19
+  smoke completed 37,888 nodes on 16 cores and 48 links across 11
+  JSON-round-tripped windows. The separate compatibility selection passed 45
+  tests with one optional dependency skip. The optional ML gate remained
+  visibly blocked because `torch` and `torch_geometric` are unavailable.
+- The offline validation suite passed all 123 checks in 19 cases. Its optional
+  ML gate remained blocked, and its functional-reference and silicon-timing
+  tiers remained unvalidated. No external tool or device was accessed.
+
+Implementation source SHA-256 identities before this progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `validation/external_campaign.py` | `c96c24ffdb10f7051a16043ac4c639112c6fc56138237b6b8591cce27d800c88` |
+| `validation/external_audit.py` | `e6477ec7be9fdb17a21170ab1fa08ff1de9acddb4c0cc63d3c6b6793a9b01f9f` |
+| `tests/test_external_campaign.py` | `4edb5e5bcd5b9db6ec357f94e96a223ca23f8ad18b2ca2923103f832b9ff86d0` |
+| `tests/test_external_audit.py` | `1e7607ac149ee09e69e4837d6d8c2d3ff7edc1430e2867da4f52448dd240658e` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_audit simulator_detailed.tests.test_external_campaign simulator_detailed.tests.test_external_calibration
+12 tests passed in 4.275s; 0 failures; 0 errors; 0 skips.
+
+root Darknet19 regression gate
+RegressionGate root_darknet19_smoke, EV-08, 180 seconds: passed;
+completed_nodes=37888, cores=16, links=48, windows=11,
+json_roundtrip=true.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_topology_consumers simulator_detailed.tests.test_memory_adapters simulator_detailed.tests.test_compute_adapters simulator_detailed.tests.test_multicast_validation
+46 tests discovered in 20.997s; 45 passed; 0 failures; 0 errors;
+1 optional skip.
+
+optional ML regression gate
+blocked; not executed; missing torch and torch_geometric.
+
+.venv/bin/python -m simulator_detailed.validate_wormhole --suite simulator_detailed/configs/validation/offline.json --output /tmp/wormhole-external-offline-20260920.json
+status pass; 19 cases; 123 checks passed; 0 failed; 0 blocked case
+checks; optional ML blocked; functional-reference and silicon-timing
+unvalidated; suite SHA-256
+3e17ba0f21ff9ee3a7d4c07f98bd2d1d0017596a2e55b406fcd2800f8b72ee7b.
+
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+606 tests discovered in 222.104s; 605 passed; 0 failures; 0 errors;
+1 optional skip.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check <13 affected implementation paths and 14 affected/predecessor test paths>
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --type change --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+delivery identity verifier
+33 source, test and fixture identities matched their recorded SHA-256 values
+and sizes where recorded; progress is 22/35 with 13 open tasks.
+
+git diff --check
+Passed with no output.
+```
+
+Blocked prerequisites observed on this host:
+
+- `/dev/tenstorrent` is absent, `tt-smi` is unavailable, and no ttsim shared
+  library or pinned TT-Metal checkout/build/binaries are present.
+- Task 7.1 requires fresh ttsim and Wormhole runs from clean kits. Task 7.5
+  requires those actual artifacts for its EV-02 through EV-07 evidence links.
+  The checkpoint manifest records the implementation and test identities but
+  does not substitute them for external capture identities.
+
 ## Part 6 - Measured fitting and sealed held-out evaluation
 
 Status: implementation checkpoint on 2026-09-20; tasks 6.1 and 6.2 are

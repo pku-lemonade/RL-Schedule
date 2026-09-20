@@ -70,8 +70,8 @@ def _environment(case: object, device: str) -> CaptureEnvironment:
             state="known", value=canonical_record({"worker_id": "unit-test"})
         ),
         device=Metadata[str](state="known", value=device),
-        software=Metadata[str](state="known", value="test-build"),
-        firmware=Metadata[str](state="unknown", reason="unit-test fixture"),
+        software=case.conditions.software,
+        firmware=case.conditions.firmware,
         clocks=Metadata[tuple[CanonicalJSON, ...]](
             state="known",
             value=(canonical_record({"domain_id": "tensix", "hz": 1_000_000_000}),),
@@ -82,11 +82,22 @@ def _environment(case: object, device: str) -> CaptureEnvironment:
 
 def _capture_pair(
     root: Path,
+    *,
+    case_id: str = "noc-64b",
+    narrow_campaign: bool = False,
 ) -> tuple[AdmittedExternalCampaign, AdmittedExternalCapture, AdmittedExternalCapture]:
     shutil.copytree(EXTERNAL, root, dirs_exist_ok=True)
     campaign_path = root / "campaign.valid.json"
+    if narrow_campaign:
+        document = json.loads(campaign_path.read_text())
+        document["cases"] = [
+            item for item in document["cases"] if item["case_id"] == case_id
+        ]
+        campaign_path.write_text(
+            json.dumps(document, sort_keys=True, separators=(",", ":"))
+        )
     campaign = admit_external_campaign(campaign_path)
-    case = next(item for item in campaign.document.cases if item.case_id == "noc-64b")
+    case = next(item for item in campaign.document.cases if item.case_id == case_id)
     build = campaign.document.builds[0]
     campaign_data = campaign_path.read_bytes()
     campaign_identity = ExternalArtifactIdentity(
@@ -96,16 +107,27 @@ def _capture_pair(
         size_bytes=len(campaign_data),
     )
 
-    ttsim_data = b'{"unit_test":"ttsim functional bytes"}\n'
-    ttsim_raw = root / "raw/ttsim-functional.json"
-    ttsim_raw.parent.mkdir(exist_ok=True)
-    ttsim_raw.write_bytes(ttsim_data)
-    ttsim_artifact = ExternalArtifactIdentity(
-        artifact_id="unit-ttsim-functional",
-        logical_path="raw/ttsim-functional.json",
-        sha256=bytes_digest(ttsim_data),
-        size_bytes=len(ttsim_data),
+    ttsim_binding = next(
+        item for item in case.producers if item.producer_id == "ttsim-functional"
     )
+    ttsim_artifacts: list[ExternalArtifactIdentity] = []
+    for declaration in ttsim_binding.outputs:
+        data = (
+            b'{"unit_test":"ttsim functional bytes"}\n'
+            if declaration.role == "functional_record"
+            else b'{"unit_test":"ttsim worker manifest"}\n'
+        )
+        artifact_path = root / declaration.logical_path
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_bytes(data)
+        ttsim_artifacts.append(
+            ExternalArtifactIdentity(
+                artifact_id=declaration.artifact_id,
+                logical_path=declaration.logical_path,
+                sha256=bytes_digest(data),
+                size_bytes=len(data),
+            )
+        )
     ttsim_document = ExternalCaptureBundle(
         kind="external_capture_bundle",
         schema_version=1,
@@ -126,16 +148,17 @@ def _capture_pair(
             executed=True,
             case_id=case.case_id,
             producer_id="ttsim-functional",
-            artifact_ids=(ttsim_artifact.artifact_id,),
+            artifact_ids=tuple(item.artifact_id for item in ttsim_artifacts),
         ),
-        raw_artifacts=(ttsim_artifact,),
+        raw_artifacts=tuple(ttsim_artifacts),
         counters=(CaptureCounter(name="repetitions", value=2, unit="count"),),
-        lineage=(
+        lineage=tuple(
             ArtifactLineage(
-                artifact_id=ttsim_artifact.artifact_id,
+                artifact_id=item.artifact_id,
                 derived_from=("campaign",),
                 transform="unit_test_capture",
-            ),
+            )
+            for item in ttsim_artifacts
         ),
         diagnostics=("unit-test data; not external evidence",),
     )

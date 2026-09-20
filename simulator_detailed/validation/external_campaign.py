@@ -38,16 +38,18 @@ from ..configs.schemas.validation import (
 )
 from .adapters import Admission
 from .comparison import compare
-from .data import require
+from .data import parse, require
 from .external import (
     AdmittedExternalCampaign,
     AdmittedExternalCapture,
+    admit_external_campaign,
     admit_external_capture,
 )
 from .external_capture import FunctionalReferenceConversion
-from .identity import bytes_digest, canonical_record, content_digest
+from .identity import bytes_digest, canonical_record, content_digest, resolve_asset
 from .matching import functional_match
 from .outcomes import ReportStatus
+from .references import import_reference
 
 _STAGES: tuple[CampaignStage, ...] = (
     "planned",
@@ -655,6 +657,13 @@ def write_external_report(
         staged.mkdir()
         campaign_path = staged / "campaign.json"
         campaign_path.write_bytes(campaign_data)
+        for case, source in zip(
+            campaign.document.cases, campaign.input_paths, strict=True
+        ):
+            destination = staged / case.simulator_input.logical_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source.read_bytes())
+        admit_external_campaign(campaign_path)
         campaign_identity = ExternalArtifactIdentity(
             artifact_id="campaign",
             logical_path="campaign.json",
@@ -708,10 +717,32 @@ def write_external_report(
         artifact_identities: list[ExternalArtifactIdentity] = []
         for index, (artifact, data) in enumerate(artifact_data):
             suffix = artifact.path.suffix if artifact.path.suffix else ".bin"
-            logical_path = f"artifacts/{index}-{bytes_digest(data)}{suffix}"
+            logical_path = f"artifacts/{index}/{bytes_digest(data)}{suffix}"
             destination = staged / logical_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(data)
+            try:
+                document = parse(data.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+                document = None
+            if document is not None and document.get("kind") == "validation_reference":
+                reference = ValidationReference.model_validate_json(data)
+                raw_source = resolve_asset(
+                    artifact.path, reference.provenance.raw_artifact.path
+                )
+                raw_destination = (
+                    destination.parent / reference.provenance.raw_artifact.path
+                ).resolve()
+                if not raw_destination.is_relative_to(destination.parent.resolve()):
+                    raise ValueError("reference raw artifact escapes its report package")
+                if raw_destination == destination.resolve():
+                    raise ValueError("reference raw artifact aliases its document")
+                raw_data = raw_source.read_bytes()
+                if bytes_digest(raw_data) != reference.provenance.raw_artifact.sha256:
+                    raise ValueError("reference raw artifact changed before report packaging")
+                raw_destination.parent.mkdir(parents=True, exist_ok=True)
+                raw_destination.write_bytes(raw_data)
+                import_reference(destination)
             artifact_identities.append(
                 ExternalArtifactIdentity(
                     artifact_id=artifact.artifact_id,

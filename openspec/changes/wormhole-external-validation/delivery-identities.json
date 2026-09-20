@@ -1,0 +1,247 @@
+{
+  "kind": "wormhole_external_validation_delivery_checkpoint",
+  "schema_version": 1,
+  "recorded_at": "2026-09-20",
+  "base_revision": "c5e9cb8515e501cdb2a257636ad5e5389f81c4cf",
+  "progress": {
+    "complete": 22,
+    "total": 35,
+    "final_delivery": false
+  },
+  "incremental_commits": [
+    "c4884ca772fc7eb9edd89283f0a77d81b993590f",
+    "db13ecb3f8892afe4ef271104deeb352c9edcdc0",
+    "cecaa96e811f37f038e41c9709275a765c95b3d1",
+    "56bf6130f7bb9f7adf153216768aadf8df014bb1",
+    "aa11a7fe633907d9d2d41de570a45274ce5ac3e9",
+    "c5e9cb8515e501cdb2a257636ad5e5389f81c4cf"
+  ],
+  "source_files": [
+    {
+      "logical_path": "simulator_detailed/configs/schemas/external_validation.py",
+      "sha256": "5c203ce9fa99a80b763217a7fb1fcff67f589d4ae852d15c28f8869873a7cc92",
+      "size_bytes": 45810
+    },
+    {
+      "logical_path": "simulator_detailed/configs/schemas/validation.py",
+      "sha256": "c51bea93b96d64d882248817ed8538c8bd5b89f439cfbad8dbe52af7b94c41dd",
+      "size_bytes": 48563
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external.py",
+      "sha256": "af5b679027d9b7089fa81459ef0735fc8f8e67c5471243b3bcaa1a35f2ca42b4",
+      "size_bytes": 12737
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external_capture.py",
+      "sha256": "4f9512aa3cb36457207d7319f56ee80266f16ff9b004421214f505e9b4af6196",
+      "size_bytes": 36029
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external_collector.py",
+      "sha256": "52f549ae47aa14f94a97659331bba4d69edc54a7592d2b71d6690149e9861485",
+      "size_bytes": 21903
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external_campaign.py",
+      "sha256": "c96c24ffdb10f7051a16043ac4c639112c6fc56138237b6b8591cce27d800c88",
+      "size_bytes": 30388
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external_calibration.py",
+      "sha256": "a3f12db9a5d8733ad27920a57306e16941af1e39259becd5966c28b061ae208c",
+      "size_bytes": 24497
+    },
+    {
+      "logical_path": "simulator_detailed/validation/external_audit.py",
+      "sha256": "e6477ec7be9fdb17a21170ab1fa08ff1de9acddb4c0cc63d3c6b6793a9b01f9f",
+      "size_bytes": 14594
+    },
+    {
+      "logical_path": "simulator_detailed/validation/normalize.py",
+      "sha256": "8737cadb3d7746ef9a92066c3d772ff844b420b2a9c5e693f74f85276ed6ba57",
+      "size_bytes": 22757
+    },
+    {
+      "logical_path": "simulator_detailed/validation/comparison.py",
+      "sha256": "a2ba74a896316166a4335bf7b53ca9d4e15a3c21f30cd609fe2e01ac52536352",
+      "size_bytes": 12523
+    },
+    {
+      "logical_path": "simulator_detailed/validation/references.py",
+      "sha256": "8c320e583270c9d71c6141fcac16a993c4345b28199107771e8102b1fdb734a0",
+      "size_bytes": 10908
+    },
+    {
+      "logical_path": "simulator_detailed/validation/calibration.py",
+      "sha256": "f31574f2ce8644fe9cf20422281d55640cc7831fde6c97575f6953593e8a947c",
+      "size_bytes": 20182
+    },
+    {
+      "logical_path": "simulator_detailed/validation/gates.py",
+      "sha256": "75f3828e101eb8a66f4cabae355576d627c4c8e4776614516f93fb23c5b2de61",
+      "size_bytes": 4949
+    }
+  ],
+  "test_files": [
+    {
+      "logical_path": "simulator_detailed/tests/test_external_validation_contracts.py",
+      "sha256": "c3c6f539c4736ba5ff4363c7b8495dff44e0f0fb787741ff7e8b839687950f12"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_validation_intervals.py",
+      "sha256": "d6c29b0831992ff64bea9070b01cdc31097415a5658f751cdfb9c41bc8f4f31a"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_capture_kit.py",
+      "sha256": "9e1d59b821abac7d38486aec4abea2d5c9f862a5689ff7b24297c61aa6208351"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_wormhole_collector.py",
+      "sha256": "8d6318aedcd3523e5835ac42e5d4f3647d5a39f6987dc0d60d69a521483c2b40"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_campaign.py",
+      "sha256": "4edb5e5bcd5b9db6ec357f94e96a223ca23f8ad18b2ca2923103f832b9ff86d0"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_calibration.py",
+      "sha256": "b4d17073954c12714eca5ee53a94a4e8b36384ed78ee214db02488812886378b"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_external_audit.py",
+      "sha256": "1e7607ac149ee09e69e4837d6d8c2d3ff7edc1430e2867da4f52448dd240658e"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_validation_calibration.py",
+      "sha256": "597835ce8cae5c8d0e3c6b45bfb6e23365d8dbecb846037c0d44eb1bdcaae82a"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_validation_references.py",
+      "sha256": "15005fcf3ce4bc1a6eda1fb0cef408204cc65d12c40185e0ec489d08f04f408a"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_validation_cli.py",
+      "sha256": "002fb3d0a7621af723974e99b759bd205b851a341573cbbcbd5e137bd6bf3ca9"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_topology_consumers.py",
+      "sha256": "24cdacda1f6cb6505adcb8cd4940ea5e3dff32cfcfbf9b20f461cf5b763f294d"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_memory_adapters.py",
+      "sha256": "543b9d6df941859d38156dbdca4bdeafdfc97ca9da095b5076742652cf37ec72"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_compute_adapters.py",
+      "sha256": "7e1d08b348a5e84a83b8d5c30552587766f61a500e1992c9804d521c5024d61d"
+    },
+    {
+      "logical_path": "simulator_detailed/tests/test_multicast_validation.py",
+      "sha256": "101266b7668f37438b750e843313497d6a20c7e17f2d976676a97d1d0f5a7aea"
+    }
+  ],
+  "fixture_files": [
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/campaign.valid.json",
+      "sha256": "36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5"
+    },
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/campaign.adversarial.json",
+      "sha256": "7383637d2e258e8b777fca89382149a05fc7ac08b1f166e2defb26c5d41899ac"
+    },
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/capture.valid.json",
+      "sha256": "e2662ac44210a0361af5af2e0453f98ecc9ca7d5a2ec1f438dae0df7209f3672"
+    },
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/capture.unavailable.json",
+      "sha256": "7d0a5e58a745118b9d2eb4f5fafb7e3d130c18c0592cabe672054826bc108f4e"
+    },
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/capture.adversarial.json",
+      "sha256": "b835cdc0ce13d3ce9ac1f4a07a1385a4992d13a4181e4c355cec6fec76f09541"
+    },
+    {
+      "logical_path": "simulator_detailed/configs/validation/external/report.blocked.json",
+      "sha256": "224581cca68bf638689807217a6beaa31820102007b4299d7ca21f7b77cf050f"
+    }
+  ],
+  "requirements": [
+    {
+      "requirement_id": "EV-01",
+      "implementation": ["external_validation.py", "external.py", "external_capture.py"],
+      "tests": ["test_external_validation_contracts.py", "test_external_capture_kit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-02",
+      "implementation": ["external_validation.py", "external.py", "external_campaign.py", "external_audit.py"],
+      "tests": ["test_external_validation_contracts.py", "test_external_campaign.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-03",
+      "implementation": ["external_campaign.py", "external_audit.py"],
+      "tests": ["test_external_campaign.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-04",
+      "implementation": ["external_capture.py", "external_campaign.py", "external_audit.py"],
+      "tests": ["test_external_capture_kit.py", "test_external_campaign.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-05",
+      "implementation": ["normalize.py", "comparison.py", "external_collector.py", "external_audit.py"],
+      "tests": ["test_external_validation_intervals.py", "test_external_wormhole_collector.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-06",
+      "implementation": ["external_calibration.py", "calibration.py", "external_audit.py"],
+      "tests": ["test_external_calibration.py", "test_validation_calibration.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-07",
+      "implementation": ["external_campaign.py", "external_calibration.py", "external_audit.py"],
+      "tests": ["test_external_campaign.py", "test_external_calibration.py", "test_external_audit.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    },
+    {
+      "requirement_id": "EV-08",
+      "implementation": ["validation.py", "gates.py"],
+      "tests": ["test_validation_cli.py", "test_topology_consumers.py", "test_memory_adapters.py", "test_compute_adapters.py", "test_multicast_validation.py"],
+      "offline_status": "verified",
+      "external_evidence": []
+    }
+  ],
+  "checks": {
+    "focused_tests": {"discovered": 12, "passed": 12, "failed": 0, "errors": 0, "skipped": 0},
+    "full_tests": {"discovered": 606, "passed": 605, "failed": 0, "errors": 0, "skipped": 1},
+    "compatibility_tests": {"discovered": 46, "passed": 45, "failed": 0, "errors": 0, "skipped": 1},
+    "offline_validation": {"cases": 19, "checks": 123, "passed": 123, "failed": 0},
+    "root_darknet19": {"status": "pass", "completed_nodes": 37888, "cores": 16, "links": 48, "windows": 11},
+    "optional_ml": {"status": "blocked", "missing": ["torch", "torch_geometric"]},
+    "pyright": "pass",
+    "ruff": "pass",
+    "openspec_strict": "pass",
+    "diff_check": "pass"
+  },
+  "environment": {
+    "tenstorrent_device": "absent",
+    "tt_smi": "unavailable",
+    "ttsim_shared_library": "unavailable",
+    "pinned_tt_metal_checkout": "unavailable"
+  },
+  "open_tasks": ["3.2", "3.4", "3.5", "4.3", "4.4", "4.5", "5.4", "5.5", "6.3", "6.4", "6.5", "7.1", "7.5"]
+}
