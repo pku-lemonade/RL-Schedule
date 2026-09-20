@@ -7,8 +7,8 @@ Prepared on 2026-09-17 for continuing this work on another machine; delivery sta
 - Repository: `git@github.com:pku-lemonade/RL-Schedule.git` (HTTPS alternative: `https://github.com/pku-lemonade/RL-Schedule.git`).
 - Working branch: **`feiyang-dev`**.
 - Latest planning commit before this handoff: **`7af97842c879a82a77af79596192eb5de2cb25d9`**, `docs: plan Wormhole validation harness and evidence gates`.
-- Latest completed child: **`wormhole-multicast-sync`**, **35/35 tasks**, **12 requirements and 31 acceptance scenarios**. Shared bounded tree/unicast transport, canonical memory and scalar service, local waits, attached compute, retained resume, real assumed-profile fixtures and independent CLI/harness audits are delivered. See [delivery.md](openspec/changes/wormhole-multicast-sync/delivery.md), [progress.md](openspec/changes/wormhole-multicast-sync/progress.md), [verified audit](openspec/changes/wormhole-multicast-sync/implementation-audit.md) and [exact identities](openspec/changes/wormhole-multicast-sync/delivery-identities.json). Part 6 is `31f9526`; the final delivery is the commit containing this update. Earlier serial-prototype completion claims were audited and repaired, without reducing the approved scope.
-- Next separate action: reconcile **`wormhole-single-chip-simulation-plan`** against all seven completed child deliveries: 27 parent requirements, 38 unchecked milestones and overlapping deltas. No umbrella specification or task has been synchronized or archived. The validation predecessor remains complete at 35/35; its [delivery](openspec/changes/wormhole-validation-harness/delivery.md) remains the record for references/calibration/report contracts.
+- Latest completed child: **`wormhole-multicast-sync`**, **35/35 tasks**, **12 requirements and 31 acceptance scenarios**. Shared bounded tree/unicast transport, canonical memory and scalar service, local waits, attached compute, retained resume, real assumed-profile fixtures and independent CLI/harness audits are delivered. See [delivery.md](openspec/changes/wormhole-multicast-sync/delivery.md), [progress.md](openspec/changes/wormhole-multicast-sync/progress.md), [verified audit](openspec/changes/wormhole-multicast-sync/implementation-audit.md) and [exact identities](openspec/changes/wormhole-multicast-sync/delivery-identities.json). Part 6 is `31f9526`; the final multicast delivery is `f6ca63b`. Earlier serial-prototype completion claims were audited and repaired, without reducing the approved scope.
+- The umbrella evidence audit is complete: **`wormhole-single-chip-simulation-plan`**, **37/38 milestones**, all 27 parent requirements and 30 scenarios mapped to the seven completed children (233/233 tasks). See the [verification report](openspec/changes/wormhole-single-chip-simulation-plan/verification.md) and [exact evidence map](openspec/changes/wormhole-single-chip-simulation-plan/evidence-map.json). Next is **task 8.3**, reconciling the 12 parent/child delta documents into seven main capability specs; the [reconciliation plan](openspec/changes/wormhole-single-chip-simulation-plan/reconciliation.md) records inputs and merge decisions. Main specs remain empty; nothing has been synchronized or archived. The validation predecessor remains complete at 35/35; its [delivery](openspec/changes/wormhole-validation-harness/delivery.md) records reference/calibration/report contracts.
 - The original migration authorized a transfer push. That historical authorization is not an unlimited future push policy. **The validation and multicast implementation parts were committed locally and were not pushed.** Push only on a new request. Obtain this document's commit with `git log -1 --oneline -- WORMHOLE_HANDOFF.md`.
 
 ## Working agreement
@@ -18,13 +18,13 @@ Prepared on 2026-09-17 for continuing this work on another machine; delivery sta
 3. Prefer small, incremental fixes. **Commit every completed, validated implementation part before continuing.** Run relevant tests, strict type checks and scoped lint checks; record actual outcomes. Push future changes when requested; this migration explicitly authorizes the transfer push, not an unlimited future push policy.
 4. Keep hardware dimensions, clocks, widths, capacities, effective rates and thresholds configurable. Do not silently turn example assumptions into device facts.
 5. Distinguish implemented execution from fields merely represented in schemas, unsupported operations, synthetic evidence and measured hardware validation. A passing model test does not establish silicon timing accuracy.
-6. Follow the approved sequence: explore a child using the preceding child's findings, create/validate its concrete change, apply and validate/commit its parts, then explore the next child. The multicast child is now complete; perform the separate umbrella evidence audit before selecting any remaining implementation.
+6. Follow the approved sequence: explore a child using the preceding child's findings, create/validate its concrete change, apply and validate/commit its parts, then explore the next child. All seven children and the umbrella evidence audit are complete; follow the reviewed specification reconciliation plan for task 8.3 before umbrella closure.
 7. Do not make unrelated changes, create backups, repeat the already completed cleanup/history rewrite, or force-push. Keep generated traces/logs in temporary directories. Preserve unrelated user changes if any appear on the destination machine.
-8. Do not sync/archive the umbrella prematurely or mark it delivered merely because its planning files exist. Parent/child requirements need a later evidence-based reconciliation.
+8. Do not sync/archive the umbrella prematurely or mark it delivered merely because its planning files exist. The parent/child evidence map is reviewed; canonical main-spec reconciliation remains task 8.3.
 
 ## Completed work and remaining roadmap
 
-The umbrella is [wormhole-single-chip-simulation-plan](openspec/changes/wormhole-single-chip-simulation-plan/tasks.md). Its 38 milestone boxes are still unchecked pending reconciliation; that does **not** mean the completed children below are unimplemented. Likewise, OpenSpec `status` can say `isComplete: true` for complete planning artifacts; use `instructions apply` and task boxes to inspect implementation progress.
+The umbrella is [wormhole-single-chip-simulation-plan](openspec/changes/wormhole-single-chip-simulation-plan/tasks.md). Its evidence audit verifies **37/38 milestones**; only canonical main-spec reconciliation (8.3) is incomplete. The seven children total **233/233 completed tasks**. Likewise, OpenSpec `status` can say `isComplete: true` for complete planning artifacts; use `instructions apply` and task boxes to inspect implementation progress.
 
 | Child | Progress at handoff | Delivered or planned scope |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ The umbrella is [wormhole-single-chip-simulation-plan](openspec/changes/wormhole
 | `wormhole-compute-dataflow` | 35/35 | Finite FC/matmul costs, real memory traffic, shared sessions, reusable slots, causal reader/compute/writer overlap and CLI/examples |
 | **`wormhole-validation-harness`** | **35/35; delivered** | Unified reproducible model validation, reference imports, comparison admission, bounded calibration/held-out evaluation and reports |
 | **`wormhole-multicast-sync`** | **35/35; delivered** | Shared multicast transport/memory/scalars/compute, causal two-round pipelines, retained resume, public replay and independent harness audits |
-| Umbrella final audit | Pending | Audit 27 parent target requirements, reconcile overlapping deltas and delivered evidence before eventual sync/archive |
+| Umbrella audit / closure | 37/38 | All 27 parent requirements and 30 scenarios reviewed; task 8.3 must deliver the reconciled main-spec baseline before archival |
 
 The separate `improve-rl-local-remap` change is already 12/12 and is not the active task. Do not select it just because multiple OpenSpec changes exist.
 
@@ -80,6 +80,10 @@ Key invariants already implemented:
 Unsupported or unvalidated: numerical tensors, TT-Metal/RISC-V/ISA execution, detailed unpack/math/pack engines, automatic tilize/conversion/general operator lowering, split-K/reductions, arbitrary cross-worker notifications, exact NIU/DRAM-bank/channel/cache behavior, general multicast/atomics/semaphores beyond the scoped child policies, dynamic kernels, interchip/host/PCIe modeling, new predictor/RL models and calibrated silicon timing. No ttsim run or physical hardware measurement has been performed.
 
 The explicit legacy FC-chain adapter is supported with complete sidecar metadata. Detailed direct legacy FC now reports an unsupported-mode error instead of silently doing no work. Preserve existing supported conv/pool, LOAD/STORE/SEND/RECV, mesh/DMA and fail-slow behavior. Do not conflate root modules with similarly named modules under `simulator_detailed/`.
+
+## Umbrella evidence audit
+
+The documentation-only audit ran 77 existing cross-child tests in two batches; all passed with no skips (75 initial tests plus two explicit admission/legacy-baseline checks). Strict Pyright, the recorded 45-path Ruff scope, all eight related OpenSpec changes, evidence references and whitespace checks pass. Exact hashes still match all 167 detailed Python files, 18 root smoke source files and 14 assets in the final multicast manifest. The full 557-test result below is the prior delivery run, not a rerun for this audit. The audit commit contains the updated parent checklist and reviewed specification reconciliation plan.
 
 ## Completed multicast child: current execution evidence
 
@@ -128,7 +132,7 @@ Keep these design decisions intact:
 - Fit and held-out cases are disjoint by semantic workload/condition and capture-group identity, not just names. Declare metrics/tolerances first, select using fitting cases only, freeze the winner before evaluation, retain held-out failures and ambiguous fits.
 - Keep legacy traces/model contracts intact. Detailed runtime/hardware features remain 7-D/4-D. Root RL uses four-coordinate actions `[layer, source core, destination core, operation]` with `replace/split/shift/remove`; do not infer new Wormhole training support.
 
-The separately delivered multicast child now supplies the scoped tree/scalar/compute mechanisms. Continue with umbrella evidence reconciliation, preserving both children's separate delivery and evidence boundaries.
+The separately delivered multicast child now supplies the scoped tree/scalar/compute mechanisms. The umbrella evidence audit is now recorded; continue with task 8.3 specification reconciliation, preserving both children's separate delivery and evidence boundaries.
 
 ## Clone and recreate local tooling
 
@@ -210,5 +214,5 @@ Known baseline limitations:
 ## Short prompt for the next agent
 
 ```text
-Continue the Wormhole simulator work in this RL-Schedule checkout on feiyang-dev. Read WORMHOLE_HANDOFF.md and the planning artifacts, implementation-audit.md and progress.md in openspec/changes/wormhole-multicast-sync/. The validation predecessor is delivered (35/35). The multicast child has 25/35 fully verified tasks after correcting overstated prototype completion claims and repairing tree admission. Parts 1–5 are repaired; integrate the real shared runtime into CLI/harness and consolidate acceptance evidence. Test, type-check, lint and commit each completed part before proceeding. Preserve compatibility, configurable hardware parameters and honest evidence tiers. Respond in English first, then Chinese. Do not recreate the plan, repeat the history cleanup, or push future commits unless requested.
+Continue the Wormhole simulator work in this RL-Schedule checkout on feiyang-dev. Read WORMHOLE_HANDOFF.md and verification.md, evidence-map.json, reconciliation.md and the planning artifacts in openspec/changes/wormhole-single-chip-simulation-plan/. All seven children are delivered (233/233 tasks), including validation and multicast at 35/35 each. The umbrella evidence audit verifies 37/38 milestones and all 27 parent requirements / 30 scenarios. Next is task 8.3: reconcile the reviewed parent/child delta contracts into the canonical main specs and validate the result; main specs are currently empty. Do not repeat completed implementation or equate planning status with delivery. Test, type-check, lint and commit each completed part before proceeding. Preserve compatibility, configurable hardware parameters and honest evidence tiers. Respond in English first, then Chinese. Do not archive implicitly, repeat history cleanup, or push unless requested.
 ```

@@ -1,0 +1,1729 @@
+{
+  "kind": "wormhole_umbrella_evidence_audit",
+  "schema_version": 1,
+  "audit_date": "2026-09-20",
+  "reviewed_revision": "f6ca63b8782b8a751a67254460ab6b6f631cf21e",
+  "scope": "Delivered finite single-ASIC model evidence; no main-spec synchronization, archival or hardware accuracy claim.",
+  "child_tasks": 233,
+  "children": [
+    {
+      "change": "wormhole-hardware-profile",
+      "completed_tasks": 23,
+      "total_tasks": 23,
+      "requirements": [
+        "HP-P01",
+        "HP-P02",
+        "HP-P03",
+        "HP-P04",
+        "HP-P05",
+        "HP-P06",
+        "HP-P07",
+        "HP-P08",
+        "HP-P09",
+        "HP-P10"
+      ],
+      "scenario_count": 15
+    },
+    {
+      "change": "generic-heterogeneous-topology",
+      "completed_tasks": 30,
+      "total_tasks": 30,
+      "requirements": [
+        "TR-G01",
+        "TR-G02",
+        "TR-G03",
+        "TR-G04",
+        "TR-G05",
+        "TR-G06",
+        "TR-G07",
+        "TR-G08",
+        "TR-G09",
+        "TR-G10"
+      ],
+      "scenario_count": 20
+    },
+    {
+      "change": "wormhole-dual-noc-routing",
+      "completed_tasks": 35,
+      "total_tasks": 35,
+      "requirements": [
+        "TR-D01",
+        "TR-D02",
+        "TR-D03",
+        "TR-D04",
+        "TR-D05",
+        "TR-D06",
+        "TR-D07",
+        "TR-D08",
+        "TR-D09",
+        "TR-D10"
+      ],
+      "scenario_count": 17
+    },
+    {
+      "change": "wormhole-memory-transactions",
+      "completed_tasks": 40,
+      "total_tasks": 40,
+      "requirements": [
+        "MT-D01",
+        "MT-D02",
+        "MT-D03",
+        "MT-D04",
+        "MT-D05",
+        "MT-D06",
+        "MT-D07",
+        "MT-D08",
+        "MT-D09",
+        "MT-D10"
+      ],
+      "scenario_count": 20
+    },
+    {
+      "change": "wormhole-compute-dataflow",
+      "completed_tasks": 35,
+      "total_tasks": 35,
+      "requirements": [
+        "CD-D01",
+        "CD-D02",
+        "CD-D03",
+        "CD-D04",
+        "CD-D05",
+        "CD-D06",
+        "CD-D07",
+        "CD-D08",
+        "CD-D09",
+        "CD-D10"
+      ],
+      "scenario_count": 20
+    },
+    {
+      "change": "wormhole-validation-harness",
+      "completed_tasks": 35,
+      "total_tasks": 35,
+      "requirements": [
+        "VA-D01",
+        "VA-D02",
+        "VA-D03",
+        "VA-D04",
+        "VA-D05",
+        "VA-D06",
+        "VA-D07",
+        "VA-D08",
+        "VA-D09",
+        "VA-D10",
+        "VA-D11"
+      ],
+      "scenario_count": 25
+    },
+    {
+      "change": "wormhole-multicast-sync",
+      "completed_tasks": 35,
+      "total_tasks": 35,
+      "requirements": [
+        "MS-01",
+        "MS-02",
+        "MS-03",
+        "MS-04",
+        "MS-05",
+        "MS-06",
+        "MS-07",
+        "MS-08",
+        "MS-09",
+        "MS-10",
+        "MS-11",
+        "MS-12"
+      ],
+      "scenario_count": 31
+    }
+  ],
+  "requirements": [
+    {
+      "id": "CD-01",
+      "title": "Configurable abstract compute costs",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "CD-D01",
+        "CD-D02"
+      ],
+      "implementation": [
+        {
+          "symbol": "compute_cost",
+          "location": "simulator_detailed/compute_cost.py:70"
+        },
+        {
+          "symbol": "checked_compute_finish",
+          "location": "simulator_detailed/compute_cost.py:58"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_subquantum_math_stays_positive_and_failed_math_cannot_publish",
+          "location": "simulator_detailed/tests/test_compute_runtime.py:306"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_fc_uses_the_same_admitted_math_and_memory_stages",
+          "location": "simulator_detailed/tests/test_compute_runtime.py:183"
+        }
+      ],
+      "boundary": "Configurable effective FC/matmul work, dtype/rates and positive quanta; numerical tensors and ISA execution remain unsupported.",
+      "scenarios": [
+        {
+          "name": "Small nonempty matrix operation",
+          "tests": [
+            "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_subquantum_math_stays_positive_and_failed_math_cannot_publish",
+            "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_fc_uses_the_same_admitted_math_and_memory_stages"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "CD-02",
+      "title": "Loads and stores generate memory traffic",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "CD-D03",
+        "CD-D04"
+      ],
+      "implementation": [
+        {
+          "symbol": "ComputeRuntime",
+          "location": "simulator_detailed/compute_runtime.py:151"
+        },
+        {
+          "symbol": "_MemoryPipelineStages",
+          "location": "simulator_detailed/compute_runtime.py:318"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_longer_route_delays_compute_by_independently_counted_hops",
+          "location": "simulator_detailed/tests/test_compute_runtime.py:145"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_local_fractional_oracle_and_no_legacy_charges",
+          "location": "simulator_detailed/tests/test_compute_runtime.py:88"
+        }
+      ],
+      "boundary": "Remote LOAD/STORE uses actual admitted memory traffic; local stages share declared L1 service.",
+      "scenarios": [
+        {
+          "name": "Same computation uses a more distant DRAM attachment",
+          "tests": [
+            "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_longer_route_delays_compute_by_independently_counted_hops",
+            "simulator_detailed.tests.test_compute_runtime.ComputeRuntimeTests.test_local_fractional_oracle_and_no_legacy_charges"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "CD-03",
+      "title": "Bounded producer-consumer buffer semantics",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "CD-D05",
+        "CD-D07",
+        "MS-09",
+        "MS-10"
+      ],
+      "implementation": [
+        {
+          "symbol": "ComputeBuffers",
+          "location": "simulator_detailed/compute_buffers.py:98"
+        },
+        {
+          "symbol": "MixedComputeComponent",
+          "location": "simulator_detailed/mixed_compute_runtime.py:51"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_compute_buffers.ComputeBufferTests.test_bounded_fifo_backpressure_and_many_generations",
+          "location": "simulator_detailed/tests/test_compute_buffers.py:124"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_buffers.ComputeBufferTests.test_binding_reuses_reservations_and_excludes_duplicate_ledgers",
+          "location": "simulator_detailed/tests/test_compute_buffers.py:71"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_mixed_compute_runtime.MixedComputeTests.test_resume_retains_compute_slot_and_no_duplicate_capacity",
+          "location": "simulator_detailed/tests/test_mixed_compute_runtime.py:123"
+        }
+      ],
+      "boundary": "Finite FIFO A/B/C bundles have one physical owner and safe generations; not the full TT-Metal circular-buffer API.",
+      "scenarios": [
+        {
+          "name": "Producer outruns consumer",
+          "tests": [
+            "simulator_detailed.tests.test_compute_buffers.ComputeBufferTests.test_bounded_fifo_backpressure_and_many_generations",
+            "simulator_detailed.tests.test_compute_buffers.ComputeBufferTests.test_binding_reuses_reservations_and_excludes_duplicate_ledgers",
+            "simulator_detailed.tests.test_mixed_compute_runtime.MixedComputeTests.test_resume_retains_compute_slot_and_no_duplicate_capacity"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "CD-04",
+      "title": "Reader compute writer overlap follows dependencies",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "CD-D04",
+        "CD-D06"
+      ],
+      "implementation": [
+        {
+          "symbol": "ComputeOverlapRuntime",
+          "location": "simulator_detailed/compute_runtime.py:387"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_independent_constant_service_depth_oracle",
+          "location": "simulator_detailed/tests/test_compute_overlap.py:177"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_integrated_same_router_read_and_local_compute_oracle",
+          "location": "simulator_detailed/tests/test_compute_overlap.py:198"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_shared_engine_serialization_and_independent_workers",
+          "location": "simulator_detailed/tests/test_compute_overlap.py:223"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_two_declared_engines_still_share_one_l1_server",
+          "location": "simulator_detailed/tests/test_compute_overlap.py:235"
+        }
+      ],
+      "boundary": "Reader/math/writer overlap follows dependencies and shared service; no detailed unpack/pack engine model.",
+      "scenarios": [
+        {
+          "name": "Double buffering permits overlap",
+          "tests": [
+            "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_independent_constant_service_depth_oracle",
+            "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_integrated_same_router_read_and_local_compute_oracle",
+            "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_shared_engine_serialization_and_independent_workers",
+            "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_two_declared_engines_still_share_one_l1_server"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "CD-05",
+      "title": "Workload and consumer compatibility is declared",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "CD-D01",
+        "CD-D08",
+        "CD-D09",
+        "CD-D10",
+        "MS-12"
+      ],
+      "implementation": [
+        {
+          "symbol": "import_legacy_fc",
+          "location": "simulator_detailed/compute_adapters.py:117"
+        },
+        {
+          "symbol": "reject_validation_document",
+          "location": "simulator_detailed/topology_compatibility.py:20"
+        },
+        {
+          "symbol": "require_legacy_topology",
+          "location": "simulator_detailed/topology_compatibility.py:28"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_import_matches_direct_costs_stages_and_all_memory_evidence",
+          "location": "simulator_detailed/tests/test_compute_adapters.py:61"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_missing_or_unmatched_sidecar_metadata_rejected_before_allocation",
+          "location": "simulator_detailed/tests/test_compute_adapters.py:89"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_actual_public_consumer_guards_run_without_optional_model_imports",
+          "location": "simulator_detailed/tests/test_compute_adapters.py:175"
+        }
+      ],
+      "boundary": "Explicit FC-chain sidecar only; 7-D/4-D features and four-coordinate root actions retained. New heterogeneous predictor/RL training is not delivered.",
+      "scenarios": [
+        {
+          "name": "Mesh-trained consumer receives a heterogeneous workload",
+          "tests": [
+            "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_import_matches_direct_costs_stages_and_all_memory_evidence",
+            "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_missing_or_unmatched_sidecar_metadata_rejected_before_allocation",
+            "simulator_detailed.tests.test_compute_adapters.ComputeAdapterTests.test_actual_public_consumer_guards_run_without_optional_model_imports"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "HP-01",
+      "title": "Single-ASIC identity and scope",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P01",
+        "HP-P02"
+      ],
+      "implementation": [
+        {
+          "symbol": "normalize_profile",
+          "location": "simulator_detailed/hardware_profile.py:216"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_identity_versions_strict_ids_and_board_selection",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:171"
+        }
+      ],
+      "boundary": "Exactly one selected ASIC; no board-wide capacity aggregation or interchip execution.",
+      "scenarios": [
+        {
+          "name": "Dual-ASIC board requested in single-chip mode",
+          "tests": [
+            "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_identity_versions_strict_ids_and_board_selection"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "HP-02",
+      "title": "Configurable hardware parameters with provenance",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P05",
+        "HP-P06",
+        "HP-P07"
+      ],
+      "implementation": [
+        {
+          "symbol": "override_parameter",
+          "location": "simulator_detailed/hardware_profile.py:263"
+        },
+        {
+          "symbol": "inspect_profile",
+          "location": "simulator_detailed/hardware_profile.py:345"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_overrides_preserve_provenance_and_recompute",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:383"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_source_pins_and_all_evidence_references",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:226"
+        }
+      ],
+      "boundary": "Units, sources and override history remain explicit; assumptions are not calibrated device facts.",
+      "scenarios": [
+        {
+          "name": "Clock or assumed latency is changed",
+          "tests": [
+            "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_overrides_preserve_provenance_and_recompute",
+            "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_source_pins_and_all_evidence_references"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "HP-03",
+      "title": "Physical layout and enabled compute are distinct",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P03",
+        "HP-P04",
+        "HP-P09",
+        "TR-G01",
+        "TR-G02",
+        "TR-D01"
+      ],
+      "implementation": [
+        {
+          "symbol": "topology_from_profile",
+          "location": "simulator_detailed/topology.py:118"
+        },
+        {
+          "symbol": "bind_torus_graph",
+          "location": "simulator_detailed/torus.py:145"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_topology_adapters.TopologyAdapterTests.test_profile_inventory_preserves_identity_and_unknowns",
+          "location": "simulator_detailed/tests/test_topology_adapters.py:31"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_unique_capacities_and_disabled_worker_inventory",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:363"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_layout_and_selection_reject_invalid_inventory",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:247"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.WormholeConformanceTests.test_raw_fabric_maps_and_explicit_assumed_mask",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:724"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus.TorusBindingTests.test_profile_inventory_and_endpoint_admission",
+          "location": "simulator_detailed/tests/test_torus.py:88"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus.TorusBindingTests.test_all_pairs_match_independent_physical_coordinate_oracle",
+          "location": "simulator_detailed/tests/test_torus.py:111"
+        }
+      ],
+      "boundary": "Physical routers and aliases survive harvesting; the example enabled mask is explicitly assumed, not inferred from a worker count.",
+      "scenarios": [
+        {
+          "name": "Harvested compute tile on a transit route",
+          "tests": [
+            "simulator_detailed.tests.test_topology_adapters.TopologyAdapterTests.test_profile_inventory_preserves_identity_and_unknowns",
+            "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_unique_capacities_and_disabled_worker_inventory",
+            "simulator_detailed.tests.test_torus.TorusBindingTests.test_profile_inventory_and_endpoint_admission",
+            "simulator_detailed.tests.test_torus.TorusBindingTests.test_all_pairs_match_independent_physical_coordinate_oracle"
+          ],
+          "evidence_kind": "executable_regression"
+        },
+        {
+          "name": "Enabled count is known but layout is unavailable",
+          "tests": [
+            "simulator_detailed.tests.test_hardware_profile.ProfileSchemaTests.test_layout_and_selection_reject_invalid_inventory",
+            "simulator_detailed.tests.test_hardware_profile.WormholeConformanceTests.test_raw_fabric_maps_and_explicit_assumed_mask"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "HP-04",
+      "title": "Explicit compatibility and feature support",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P08",
+        "TR-G04",
+        "TR-G09",
+        "TR-D09",
+        "CD-D08",
+        "MS-12"
+      ],
+      "implementation": [
+        {
+          "symbol": "require_executable_architecture",
+          "location": "simulator_detailed/hardware_profile.py:463"
+        },
+        {
+          "symbol": "require_legacy_topology",
+          "location": "simulator_detailed/topology_compatibility.py:28"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_capabilities_are_implementation_owned_and_not_bypassable",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:456"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_hardware_profile.ProfileExecutionGateTests.test_direct_constructor_gate_and_positive_legacy_construction",
+          "location": "simulator_detailed/tests/test_hardware_profile.py:609"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_topology_consumers.TopologyConsumerTests.test_mesh_order_and_path_nodes_against_independent_baseline",
+          "location": "simulator_detailed/tests/test_topology_consumers.py:109"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_topology_baseline.LegacyTopologyBaselineTests.test_custom_mesh_route_timing_and_slowdown_baseline",
+          "location": "simulator_detailed/tests/test_topology_baseline.py:69"
+        }
+      ],
+      "boundary": "Admitted replay adapters execute; the general full-profile legacy scheduler remains gated. Optional model inference is unvalidated.",
+      "scenarios": [
+        {
+          "name": "Profile precedes its runtime implementation",
+          "tests": [
+            "simulator_detailed.tests.test_hardware_profile.ProfileInspectionTests.test_capabilities_are_implementation_owned_and_not_bypassable",
+            "simulator_detailed.tests.test_hardware_profile.ProfileExecutionGateTests.test_direct_constructor_gate_and_positive_legacy_construction"
+          ],
+          "evidence_kind": "executable_regression"
+        },
+        {
+          "name": "Existing supported mesh example",
+          "tests": [
+            "simulator_detailed.tests.test_hardware_profile.ProfileExecutionGateTests.test_direct_constructor_gate_and_positive_legacy_construction",
+            "simulator_detailed.tests.test_topology_consumers.TopologyConsumerTests.test_mesh_order_and_path_nodes_against_independent_baseline",
+            "simulator_detailed.tests.test_topology_baseline.LegacyTopologyBaselineTests.test_custom_mesh_route_timing_and_slowdown_baseline"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-01",
+      "title": "Initiators and transaction paths",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MT-D01",
+        "MT-D02",
+        "MT-D06",
+        "MT-D08",
+        "CD-D03"
+      ],
+      "implementation": [
+        {
+          "symbol": "MemorySession",
+          "location": "simulator_detailed/memory_runtime.py:119"
+        },
+        {
+          "symbol": "MemoryRuntime",
+          "location": "simulator_detailed/memory_runtime.py:671"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_segmented_transactions_both_fabrics_literal_byte_oracles",
+          "location": "simulator_detailed/tests/test_memory_runtime.py:135"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_read_wire_arrival_precedes_local_write_and_descriptor_retirement",
+          "location": "simulator_detailed/tests/test_memory_runtime.py:174"
+        }
+      ],
+      "boundary": "Actual requests, target service, responses and local writes; addressed replay is an aggregate memory abstraction.",
+      "scenarios": [
+        {
+          "name": "Compute reads remote DRAM",
+          "tests": [
+            "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_segmented_transactions_both_fabrics_literal_byte_oracles",
+            "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_read_wire_arrival_precedes_local_write_and_descriptor_retirement"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-02",
+      "title": "Packet overhead and segmentation are executable",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MT-D03"
+      ],
+      "implementation": [
+        {
+          "symbol": "MemorySession",
+          "location": "simulator_detailed/memory_runtime.py:119"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_segmented_transactions_both_fabrics_literal_byte_oracles",
+          "location": "simulator_detailed/tests/test_memory_runtime.py:135"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_multicast_memory_runtime.MulticastMemoryRuntimeTests.test_segment_boundaries_charge_source_once_and_each_destination_service",
+          "location": "simulator_detailed/tests/test_multicast_memory_runtime.py:69"
+        }
+      ],
+      "boundary": "Executable physical headers/padding/software segmentation; automatic NIU splitting and linked forms remain unsupported.",
+      "scenarios": [
+        {
+          "name": "Payload exceeds one packet",
+          "tests": [
+            "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_segmented_transactions_both_fabrics_literal_byte_oracles",
+            "simulator_detailed.tests.test_multicast_memory_runtime.MulticastMemoryRuntimeTests.test_segment_boundaries_charge_source_once_and_each_destination_service"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-03",
+      "title": "Shared memory capacity and service",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MT-D02",
+        "MT-D04",
+        "MT-D05",
+        "MS-05",
+        "MS-06"
+      ],
+      "implementation": [
+        {
+          "symbol": "MemoryResources",
+          "location": "simulator_detailed/memory_resources.py:398"
+        },
+        {
+          "symbol": "MemoryService",
+          "location": "simulator_detailed/memory_service.py:132"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_resources.MemoryOwnershipTests.test_aliases_share_one_capacity_and_teardown_restores_once",
+          "location": "simulator_detailed/tests/test_memory_resources.py:72"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_resources.MemoryServiceTests.test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap",
+          "location": "simulator_detailed/tests/test_memory_resources.py:310"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_local_and_both_fabrics_contend_for_one_l1_service",
+          "location": "simulator_detailed/tests/test_memory_ordering.py:119"
+        }
+      ],
+      "boundary": "One capacity owner and combined FIFO service per physical resource; no per-bank/channel/cache precision.",
+      "scenarios": [
+        {
+          "name": "DRAM aliases are used concurrently",
+          "tests": [
+            "simulator_detailed.tests.test_memory_resources.MemoryOwnershipTests.test_aliases_share_one_capacity_and_teardown_restores_once",
+            "simulator_detailed.tests.test_memory_resources.MemoryServiceTests.test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap"
+          ],
+          "evidence_kind": "executable_regression"
+        },
+        {
+          "name": "Both fabrics target one local memory resource",
+          "tests": [
+            "simulator_detailed.tests.test_memory_resources.MemoryServiceTests.test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap",
+            "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_local_and_both_fabrics_contend_for_one_l1_service"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-04",
+      "title": "Completion, readiness, and ordering are explicit",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MT-D04",
+        "MT-D06",
+        "MT-D07",
+        "MS-05",
+        "MS-08"
+      ],
+      "implementation": [
+        {
+          "symbol": "MemorySession",
+          "location": "simulator_detailed/memory_runtime.py:119"
+        },
+        {
+          "symbol": "MemoryResource",
+          "location": "simulator_detailed/memory_resources.py:174"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_posted_completion_keeps_pending_target_effects_and_capacity",
+          "location": "simulator_detailed/tests/test_memory_runtime.py:154"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_cross_fabric_ack_fence_then_read_producer_version",
+          "location": "simulator_detailed/tests/test_memory_ordering.py:136"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_destination_local_readiness_is_not_remote_sender_notification",
+          "location": "simulator_detailed/tests/test_memory_ordering.py:220"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_physical_alias_conflicts_require_effects_not_list_order_or_start_times",
+          "location": "simulator_detailed/tests/test_memory_ordering.py:287"
+        }
+      ],
+      "boundary": "Handoff, effects, replies, versions and fences have explicit scopes; timestamps and list order do not imply global ordering.",
+      "scenarios": [
+        {
+          "name": "A consumer follows an asynchronous write",
+          "tests": [
+            "simulator_detailed.tests.test_memory_runtime.MemoryRuntimeTests.test_posted_completion_keeps_pending_target_effects_and_capacity",
+            "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_cross_fabric_ack_fence_then_read_producer_version",
+            "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_destination_local_readiness_is_not_remote_sender_notification",
+            "simulator_detailed.tests.test_memory_ordering.MemoryOrderingTests.test_physical_alias_conflicts_require_effects_not_list_order_or_start_times"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-05",
+      "title": "Existing DMA contracts remain distinguishable",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MT-D09"
+      ],
+      "implementation": [
+        {
+          "symbol": "LegacyDMAAdapter",
+          "location": "simulator_detailed/memory_adapters.py:55"
+        },
+        {
+          "symbol": "ScratchpadCapacityAdapter",
+          "location": "simulator_detailed/memory_adapters.py:119"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_adapters.LegacyDMAAdapterTests.test_exact_matrix_packets_issuers_finite_slots_and_drain",
+          "location": "simulator_detailed/tests/test_memory_adapters.py:102"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_adapters.LegacyDMAAdapterTests.test_adapter_delegates_once_and_retains_native_result",
+          "location": "simulator_detailed/tests/test_memory_adapters.py:126"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_memory_adapters.ScratchpadCapacityAdapterTests.test_original_container_delay_charged_once_and_drained_detach",
+          "location": "simulator_detailed/tests/test_memory_adapters.py:234"
+        }
+      ],
+      "boundary": "Legacy DMA issue/slots/datapaths/commands remain distinct; adapters do not add addressed visibility or duplicate LSU cost.",
+      "scenarios": [
+        {
+          "name": "Legacy and Wormhole transfers use shared transport",
+          "tests": [
+            "simulator_detailed.tests.test_memory_adapters.LegacyDMAAdapterTests.test_exact_matrix_packets_issuers_finite_slots_and_drain",
+            "simulator_detailed.tests.test_memory_adapters.LegacyDMAAdapterTests.test_adapter_delegates_once_and_retains_native_result",
+            "simulator_detailed.tests.test_memory_adapters.ScratchpadCapacityAdapterTests.test_original_container_delay_charged_once_and_drained_detach"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "MT-06",
+      "title": "Scalar synchronization has resource cost",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MS-06",
+        "MS-07",
+        "MS-08",
+        "MS-09",
+        "MS-10",
+        "MS-11"
+      ],
+      "implementation": [
+        {
+          "symbol": "CounterState",
+          "location": "simulator_detailed/scalar_service.py:63"
+        },
+        {
+          "symbol": "MemoryService",
+          "location": "simulator_detailed/memory_service.py:132"
+        },
+        {
+          "symbol": "MixedComputeComponent",
+          "location": "simulator_detailed/mixed_compute_runtime.py:51"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_atomic_job_is_one_final_service_on_the_read_write_fifo",
+          "location": "simulator_detailed/tests/test_scalar_shared_runtime.py:37"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_generic_word_widths_and_returned_integer_values_are_exact",
+          "location": "simulator_detailed/tests/test_scalar_shared_runtime.py:59"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_observation_update_race_and_data_not_ready_do_not_release_early",
+          "location": "simulator_detailed/tests/test_scalar_shared_runtime.py:98"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_mixed_compute_runtime.MixedComputeTests.test_two_rounds_slot_reuse_shared_service_and_causal_collection",
+          "location": "simulator_detailed/tests/test_mixed_compute_runtime.py:100"
+        }
+      ],
+      "boundary": "Initialized monotonic increment-by-one counters and serviced local threshold/data waits; no reset/decrement/CAS, tensor reduction or general semaphore API.",
+      "scenarios": [
+        {
+          "name": "Producers signal one consumer",
+          "tests": [
+            "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_atomic_job_is_one_final_service_on_the_read_write_fifo",
+            "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_generic_word_widths_and_returned_integer_values_are_exact",
+            "simulator_detailed.tests.test_scalar_shared_runtime.SharedScalarTests.test_observation_update_race_and_data_not_ready_do_not_release_early",
+            "simulator_detailed.tests.test_mixed_compute_runtime.MixedComputeTests.test_two_rounds_slot_reuse_shared_service_and_causal_collection"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "TR-01",
+      "title": "Canonical heterogeneous directed topology",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "TR-G01",
+        "TR-G02",
+        "TR-G03",
+        "TR-G04",
+        "TR-G08",
+        "TR-G09"
+      ],
+      "implementation": [
+        {
+          "symbol": "Topology",
+          "location": "simulator_detailed/topology.py:63"
+        },
+        {
+          "symbol": "topology_from_profile",
+          "location": "simulator_detailed/topology.py:118"
+        },
+        {
+          "symbol": "require_legacy_topology",
+          "location": "simulator_detailed/topology_compatibility.py:28"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_topology_adapters.TopologyAdapterTests.test_profile_inventory_preserves_identity_and_unknowns",
+          "location": "simulator_detailed/tests/test_topology_adapters.py:31"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_topology_replay.TopologyReplayTests.test_real_example_independent_routes_bytes_resources_and_trace_identity",
+          "location": "simulator_detailed/tests/test_topology_replay.py:35"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_topology_consumers.TopologyConsumerTests.test_same_counts_different_roles_edges_and_spoofed_origins_rejected",
+          "location": "simulator_detailed/tests/test_topology_consumers.py:72"
+        }
+      ],
+      "boundary": "One canonical directed graph; export does not establish compatibility with a mesh-trained checkpoint.",
+      "scenarios": [
+        {
+          "name": "Export includes memory-only and transit routers",
+          "tests": [
+            "simulator_detailed.tests.test_topology_adapters.TopologyAdapterTests.test_profile_inventory_preserves_identity_and_unknowns",
+            "simulator_detailed.tests.test_topology_replay.TopologyReplayTests.test_real_example_independent_routes_bytes_resources_and_trace_identity",
+            "simulator_detailed.tests.test_topology_consumers.TopologyConsumerTests.test_same_counts_different_roles_edges_and_spoofed_origins_rejected"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "TR-02",
+      "title": "Distinct configurable fabric routing",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "TR-D01",
+        "TR-D02"
+      ],
+      "implementation": [
+        {
+          "symbol": "TorusRouting",
+          "location": "simulator_detailed/torus.py:254"
+        },
+        {
+          "symbol": "bind_torus_graph",
+          "location": "simulator_detailed/torus.py:145"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_torus.TorusBindingTests.test_all_pairs_match_independent_physical_coordinate_oracle",
+          "location": "simulator_detailed/tests/test_torus.py:111"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus.TorusBindingTests.test_transcribed_paths_and_physical_wraps",
+          "location": "simulator_detailed/tests/test_torus.py:161"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_two_fabric_profile_routes_drain_without_cross_fabric_sharing",
+          "location": "simulator_detailed/tests/test_torus_transport.py:108"
+        }
+      ],
+      "boundary": "Configurable dimensions and fabric transforms/order; the initial profile uses an explicit assumed enabled mask.",
+      "scenarios": [
+        {
+          "name": "Route crosses a wrap boundary",
+          "tests": [
+            "simulator_detailed.tests.test_torus.TorusBindingTests.test_all_pairs_match_independent_physical_coordinate_oracle",
+            "simulator_detailed.tests.test_torus.TorusBindingTests.test_transcribed_paths_and_physical_wraps",
+            "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_two_fabric_profile_routes_drain_without_cross_fabric_sharing"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "TR-03",
+      "title": "Bounded flow control and justified deadlock prevention",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "TR-G06",
+        "TR-G07",
+        "TR-D03",
+        "TR-D04",
+        "TR-D05"
+      ],
+      "implementation": [
+        {
+          "symbol": "ResourceDependencies",
+          "location": "simulator_detailed/torus_dependencies.py:52"
+        },
+        {
+          "symbol": "TorusTransport",
+          "location": "simulator_detailed/torus_transport.py:111"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_torus.DependencyTests.test_dependency_mutations_are_rejected_before_runtime",
+          "location": "simulator_detailed/tests/test_torus.py:194"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_cut_through_wrap_and_long_packet_with_small_buffers",
+          "location": "simulator_detailed/tests/test_torus_transport.py:72"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_request_response_drains_on_both_assumed_fabrics",
+          "location": "simulator_detailed/tests/test_torus_transport.py:230"
+        }
+      ],
+      "boundary": "Dateline/classes and finite draining endpoints justify the model; no literal silicon VC encoding or liveness under permanent failure is claimed.",
+      "scenarios": [
+        {
+          "name": "Admissible traffic drains through cyclic physical topology",
+          "tests": [
+            "simulator_detailed.tests.test_torus.DependencyTests.test_dependency_mutations_are_rejected_before_runtime",
+            "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_cut_through_wrap_and_long_packet_with_small_buffers",
+            "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_request_response_drains_on_both_assumed_fabrics"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "TR-04",
+      "title": "Trace and failure identity is preserved",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "TR-G08",
+        "TR-D06",
+        "TR-D07",
+        "TR-D08"
+      ],
+      "implementation": [
+        {
+          "symbol": "TorusTransport",
+          "location": "simulator_detailed/torus_transport.py:111"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_slowdown_half_open_snapshot_and_recovery",
+          "location": "simulator_detailed/tests/test_torus_transport.py:150"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_slowdown_target_must_be_enabled_directed_link",
+          "location": "simulator_detailed/tests/test_torus_transport.py:185"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_packet_runtime.SharedTransportCompatibilityTests.test_exact_v2_results_match_pre_extraction_fingerprints",
+          "location": "simulator_detailed/tests/test_packet_runtime.py:92"
+        }
+      ],
+      "boundary": "Faults select one enabled directed fabric edge; legacy paired-link behavior and versioned traces retain their separate contracts.",
+      "scenarios": [
+        {
+          "name": "One fabric link is slowed",
+          "tests": [
+            "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_slowdown_half_open_snapshot_and_recovery",
+            "simulator_detailed.tests.test_torus_transport.TorusTransportTests.test_slowdown_target_must_be_enabled_directed_link",
+            "simulator_detailed.tests.test_packet_runtime.SharedTransportCompatibilityTests.test_exact_v2_results_match_pre_extraction_fingerprints"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "TR-05",
+      "title": "Multicast uses shared network delivery",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "MS-01",
+        "MS-02",
+        "MS-03",
+        "MS-04",
+        "MS-05",
+        "MS-10",
+        "MS-11"
+      ],
+      "implementation": [
+        {
+          "symbol": "MulticastSyncPlan",
+          "location": "simulator_detailed/multicast_plan.py:82"
+        },
+        {
+          "symbol": "AtomicTreeReservations",
+          "location": "simulator_detailed/tree_runtime.py:102"
+        },
+        {
+          "symbol": "TreeTransport",
+          "location": "simulator_detailed/tree_runtime.py:171"
+        },
+        {
+          "symbol": "MulticastMemoryRuntime",
+          "location": "simulator_detailed/multicast_memory_runtime.py:188"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_capacity_one_exact_prefix_delivery_and_terminal_discard",
+          "location": "simulator_detailed/tests/test_tree_runtime.py:87"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_fifo_conflict_has_no_partial_grants_and_releases_after_credit_returns",
+          "location": "simulator_detailed/tests/test_tree_runtime.py:120"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_multicast_memory_runtime.MulticastMemoryRuntimeTests.test_segment_boundaries_charge_source_once_and_each_destination_service",
+          "location": "simulator_detailed/tests/test_multicast_memory_runtime.py:69"
+        }
+      ],
+      "boundary": "Real shared nonwrapping corner-rectangle trees; no arbitrary destination masks, multicast reads/atomics or literal hardware reservation encoding.",
+      "scenarios": [
+        {
+          "name": "Two destinations share a route prefix",
+          "tests": [
+            "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_capacity_one_exact_prefix_delivery_and_terminal_discard",
+            "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_fifo_conflict_has_no_partial_grants_and_releases_after_credit_returns",
+            "simulator_detailed.tests.test_multicast_memory_runtime.MulticastMemoryRuntimeTests.test_segment_boundaries_charge_source_once_and_each_destination_service"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-01",
+      "title": "Claims identify their evidence tier",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "VA-D02",
+        "VA-D07",
+        "VA-D08",
+        "VA-D09"
+      ],
+      "implementation": [
+        {
+          "symbol": "requirement_coverage",
+          "location": "simulator_detailed/validation/reporting.py:79"
+        },
+        {
+          "symbol": "import_reference",
+          "location": "simulator_detailed/validation/references.py:36"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_validation_references.ReferenceTests.test_ttsim_and_synthetic_origin_cannot_claim_hardware",
+          "location": "simulator_detailed/tests/test_validation_references.py:143"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_references.ReferenceTests.test_synthetic_cannot_authorize_external_tier",
+          "location": "simulator_detailed/tests/test_validation_references.py:76"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_synthetic_fitting_never_claims_measured_calibration",
+          "location": "simulator_detailed/tests/test_validation_calibration.py:78"
+        }
+      ],
+      "boundary": "Architecture/model checks are present; no compatible external functional capture or silicon measurement was supplied.",
+      "scenarios": [
+        {
+          "name": "Only public documents and functional results are available",
+          "tests": [
+            "simulator_detailed.tests.test_validation_references.ReferenceTests.test_ttsim_and_synthetic_origin_cannot_claim_hardware",
+            "simulator_detailed.tests.test_validation_references.ReferenceTests.test_synthetic_cannot_authorize_external_tier",
+            "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_synthetic_fitting_never_claims_measured_calibration"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-02",
+      "title": "References and run conditions are reproducible",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P05",
+        "HP-P06",
+        "VA-D03",
+        "VA-D07"
+      ],
+      "implementation": [
+        {
+          "symbol": "collect_source_identity",
+          "location": "simulator_detailed/validation/identity.py:94"
+        },
+        {
+          "symbol": "collect_run_identity",
+          "location": "simulator_detailed/validation/identity.py:159"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_validation_references.ReferenceTests.test_unknown_metadata_retained_but_blocks_comparison",
+          "location": "simulator_detailed/tests/test_validation_references.py:132"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_references.ReferenceTests.test_changed_layout_workload_and_mapping_block",
+          "location": "simulator_detailed/tests/test_validation_references.py:136"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_identity.ValidationIdentityTests.test_same_git_revision_with_dirty_source_bytes_is_distinct",
+          "location": "simulator_detailed/tests/test_validation_identity.py:66"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_identity.ValidationIdentityTests.test_raw_bytes_effective_plan_selections_and_seed_are_distinct_identities",
+          "location": "simulator_detailed/tests/test_validation_identity.py:123"
+        }
+      ],
+      "boundary": "Source/input bytes, units, layout, clocks, seed and conditions are explicit; unknown metadata blocks stronger comparisons.",
+      "scenarios": [
+        {
+          "name": "Published benchmark has incomplete metadata",
+          "tests": [
+            "simulator_detailed.tests.test_validation_references.ReferenceTests.test_unknown_metadata_retained_but_blocks_comparison",
+            "simulator_detailed.tests.test_validation_references.ReferenceTests.test_changed_layout_workload_and_mapping_block",
+            "simulator_detailed.tests.test_validation_identity.ValidationIdentityTests.test_same_git_revision_with_dirty_source_bytes_is_distinct",
+            "simulator_detailed.tests.test_validation_identity.ValidationIdentityTests.test_raw_bytes_effective_plan_selections_and_seed_are_distinct_identities"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-03",
+      "title": "Every child has an executable validation gate",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P10",
+        "TR-G10",
+        "TR-D10",
+        "MT-D10",
+        "CD-D10",
+        "VA-D06",
+        "MS-12"
+      ],
+      "implementation": [
+        {
+          "symbol": "run_gate",
+          "location": "simulator_detailed/validation/gates.py:59"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_validation_runner.RunnerTests.test_gate_missing_tool_is_blocked",
+          "location": "simulator_detailed/tests/test_validation_runner.py:78"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_runner.RunnerTests.test_gate_executed_nonzero_is_failure",
+          "location": "simulator_detailed/tests/test_validation_runner.py:84"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_runner.RunnerTests.test_real_wall_timeout_is_a_failure_not_unavailable_pass",
+          "location": "simulator_detailed/tests/test_validation_runner.py:50"
+        }
+      ],
+      "boundary": "Historical child gates are reviewed at delivery revisions; fresh checks are labeled separately. Pre-harness validation was not deferred.",
+      "scenarios": [
+        {
+          "name": "Topology child completes before the common harness exists",
+          "tests": [
+            "simulator_detailed.tests.test_validation_runner.RunnerTests.test_gate_missing_tool_is_blocked",
+            "simulator_detailed.tests.test_validation_runner.RunnerTests.test_gate_executed_nonzero_is_failure",
+            "simulator_detailed.tests.test_validation_runner.RunnerTests.test_real_wall_timeout_is_a_failure_not_unavailable_pass"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ],
+      "documents": [
+        "simulator_detailed/docs/hardware_profile.md",
+        "simulator_detailed/docs/topology.md",
+        "openspec/changes/wormhole-dual-noc-routing/delivery.md",
+        "openspec/changes/wormhole-memory-transactions/delivery.md",
+        "openspec/changes/wormhole-compute-dataflow/delivery.md",
+        "openspec/changes/wormhole-validation-harness/delivery.md",
+        "openspec/changes/wormhole-multicast-sync/delivery.md"
+      ]
+    },
+    {
+      "id": "VA-04",
+      "title": "Validation covers contention and liveness",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "VA-D05",
+        "VA-D06",
+        "MS-11"
+      ],
+      "implementation": [
+        {
+          "symbol": "MemoryService",
+          "location": "simulator_detailed/memory_service.py:132"
+        },
+        {
+          "symbol": "TreeTransport",
+          "location": "simulator_detailed/tree_runtime.py:171"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_memory_resources.MemoryServiceTests.test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap",
+          "location": "simulator_detailed/tests/test_memory_resources.py:310"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_dram_aliases_across_fabrics_share_service_until_explicitly_separated",
+          "location": "simulator_detailed/tests/test_compute_overlap.py:250"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_real_unicast_response_shares_links_and_router_stages",
+          "location": "simulator_detailed/tests/test_tree_runtime.py:143"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_transient_credit_overallocation_cannot_hide_in_drained_snapshot",
+          "location": "simulator_detailed/tests/test_mixed_validation.py:61"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_scalar_causality_generation_and_ownership_corruption",
+          "location": "simulator_detailed/tests/test_mixed_validation.py:159"
+        }
+      ],
+      "boundary": "Contention, credits, shared service, branches, scalar causality and finite drain have independent model oracles; these are not hardware measurements.",
+      "scenarios": [
+        {
+          "name": "Single-flow timing passes but shared bandwidth is wrong",
+          "tests": [
+            "simulator_detailed.tests.test_memory_resources.MemoryServiceTests.test_dual_fabric_alias_and_local_clients_share_service_independent_resources_overlap",
+            "simulator_detailed.tests.test_compute_overlap.ComputeOverlapTests.test_dram_aliases_across_fabrics_share_service_until_explicitly_separated",
+            "simulator_detailed.tests.test_tree_runtime.TreeRuntimeTests.test_real_unicast_response_shares_links_and_router_stages",
+            "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_transient_credit_overallocation_cannot_hide_in_drained_snapshot",
+            "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_scalar_causality_generation_and_ownership_corruption"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-05",
+      "title": "Calibration is separated from evaluation",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "VA-D08"
+      ],
+      "implementation": [
+        {
+          "symbol": "admit_calibration",
+          "location": "simulator_detailed/validation/calibration.py:80"
+        },
+        {
+          "symbol": "calibrate",
+          "location": "simulator_detailed/validation/calibration.py:248"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_perfect_fit_can_fail_heldout_without_refitting",
+          "location": "simulator_detailed/tests/test_validation_calibration.py:100"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_seal_exists_before_heldout_execution",
+          "location": "simulator_detailed/tests/test_validation_calibration.py:111"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_threshold_change_changes_identity_and_seal",
+          "location": "simulator_detailed/tests/test_validation_calibration.py:124"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_renamed_duplicate_workload_rejected_before_execution",
+          "location": "simulator_detailed/tests/test_validation_calibration.py:173"
+        }
+      ],
+      "boundary": "Predeclared metrics and sealed fit/held-out mechanics execute with synthetic fixtures; no measured parameter calibration is claimed.",
+      "scenarios": [
+        {
+          "name": "A parameter is fitted to a bandwidth microbenchmark",
+          "tests": [
+            "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_perfect_fit_can_fail_heldout_without_refitting",
+            "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_seal_exists_before_heldout_execution",
+            "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_threshold_change_changes_identity_and_seal",
+            "simulator_detailed.tests.test_validation_calibration.CalibrationTests.test_renamed_duplicate_workload_rejected_before_execution"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-06",
+      "title": "Fidelity and compatibility are visible outputs",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "reviewed_within_documented_scope",
+      "child_requirements": [
+        "HP-P07",
+        "HP-P08",
+        "VA-D09",
+        "VA-D10",
+        "VA-D11",
+        "MS-12"
+      ],
+      "implementation": [
+        {
+          "symbol": "case_capabilities",
+          "location": "simulator_detailed/validation/reporting.py:37"
+        },
+        {
+          "symbol": "has_faults",
+          "location": "simulator_detailed/validation/reporting.py:28"
+        }
+      ],
+      "tests": [
+        {
+          "unittest": "simulator_detailed.tests.test_validation_cli.ValidationCLITests.test_fault_labels_and_requirement_scope",
+          "location": "simulator_detailed/tests/test_validation_cli.py:161"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_validation_cli.ValidationConsumerGuardTests.test_actual_public_predictor_and_encoder_reject_before_ml_import",
+          "location": "simulator_detailed/tests/test_validation_cli.py:196"
+        },
+        {
+          "unittest": "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_published_analytical_pipeline_and_profile_suites",
+          "location": "simulator_detailed/tests/test_mixed_validation.py:291"
+        }
+      ],
+      "boundary": "Support and evidence are selected-adapter specific; legacy projection reports retain their narrower contract, and synthetic faults do not establish accuracy.",
+      "scenarios": [
+        {
+          "name": "A failure experiment uses an uncalibrated memory model",
+          "tests": [
+            "simulator_detailed.tests.test_validation_cli.ValidationCLITests.test_fault_labels_and_requirement_scope",
+            "simulator_detailed.tests.test_validation_cli.ValidationConsumerGuardTests.test_actual_public_predictor_and_encoder_reject_before_ml_import",
+            "simulator_detailed.tests.test_mixed_validation.MixedValidationTests.test_published_analytical_pipeline_and_profile_suites"
+          ],
+          "evidence_kind": "executable_regression"
+        }
+      ]
+    },
+    {
+      "id": "VA-07",
+      "title": "Umbrella completion requires delivered evidence",
+      "spec": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+      "status": "process_review_with_baseline_pending",
+      "child_requirements": [
+        "VA-D11",
+        "MS-12"
+      ],
+      "implementation": [],
+      "tests": [],
+      "boundary": "Process review maps evidence without promoting main specs; task 8.3 remains open for parent/child delta reconciliation, so archive is not ready.",
+      "scenarios": [
+        {
+          "name": "All planning documents exist but no child is applied",
+          "tests": [],
+          "evidence_kind": "process_review"
+        }
+      ],
+      "documents": [
+        "openspec/changes/wormhole-single-chip-simulation-plan/tasks.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/verification.md",
+        "openspec/changes/wormhole-single-chip-simulation-plan/reconciliation.md"
+      ]
+    }
+  ],
+  "prior_delivery_identity": {
+    "path": "openspec/changes/wormhole-multicast-sync/delivery-identities.json",
+    "sha256": "21580b20fa29a7310759d88514ea39231de39cbb5f4c06f5d6826ec25ca83b19",
+    "verified_file_counts": {
+      "detailed_source": 167,
+      "root_smoke_source": 18,
+      "assets": 14
+    },
+    "detailed_source_bundle_sha256": "708e23f3c23a251b7c6193723894faf4397b7efee7d7f17a3f0b7f5558a9f894",
+    "recorded_full_suite": {
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "simulator_detailed/tests",
+        "-q"
+      ],
+      "discovered": 557,
+      "passed": 556,
+      "skipped": 1,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 189.838,
+      "skip_reason": "optional Torch/PyG dependencies unavailable"
+    },
+    "reuse_note": "Source and asset hashes were rechecked during this documentation-only audit. The full-suite result is the prior multicast delivery run, not a newly executed run."
+  },
+  "fresh_checks": {
+    "strict_pyright": "0 errors, 0 warnings, 0 informations",
+    "scoped_ruff": "passed: exact scoped_ruff_command in the preceding delivery manifest",
+    "child_strict_openspec": "all seven children passed",
+    "selected_tests": {
+      "selected": 77,
+      "discovered": 77,
+      "passed": 77,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 43.002,
+      "batches": [
+        {
+          "selected": 75,
+          "discovered": 75,
+          "passed": 75,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds": 42.574
+        },
+        {
+          "selected": 2,
+          "discovered": 2,
+          "passed": 2,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds": 0.428
+        }
+      ]
+    },
+    "parent_strict_openspec": "passed",
+    "evidence_integrity": "passed: requirement/scenario inventory, exact source/test locations, child IDs, source/input hashes and local Markdown targets",
+    "whitespace": "passed",
+    "environment_retry": "The supplemental two-test invocation initially used system Python 3.13 without SimPy and failed to import. It was rerun successfully with the documented .venv Python 3.12.12. The initial import failures are environment errors, not behavioral results."
+  },
+  "specification_inventory": {
+    "wormhole-compute-dataflow": {
+      "requirements": [
+        "CD-01",
+        "CD-02",
+        "CD-03",
+        "CD-04",
+        "CD-05",
+        "CD-D01",
+        "CD-D02",
+        "CD-D03",
+        "CD-D04",
+        "CD-D05",
+        "CD-D06",
+        "CD-D07",
+        "CD-D08",
+        "CD-D09",
+        "CD-D10"
+      ],
+      "scenarios": 25,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-compute-dataflow/spec.md",
+          "sha256": "5a18f12df132f74a42c46a67a966c00c8c6786b9bb4a68b5d9cf799e65413429"
+        },
+        {
+          "path": "openspec/changes/wormhole-compute-dataflow/specs/wormhole-compute-dataflow/spec.md",
+          "sha256": "e3797a2c4ae33faf914f7af68b74e2ed55acabdb24c62168199b801be062974d"
+        }
+      ]
+    },
+    "wormhole-hardware-profile": {
+      "requirements": [
+        "HP-01",
+        "HP-02",
+        "HP-03",
+        "HP-04",
+        "HP-P01",
+        "HP-P02",
+        "HP-P03",
+        "HP-P04",
+        "HP-P05",
+        "HP-P06",
+        "HP-P07",
+        "HP-P08",
+        "HP-P09",
+        "HP-P10"
+      ],
+      "scenarios": 21,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-hardware-profile/spec.md",
+          "sha256": "699f2b57cface8d9e7c777f7728c3d1973ceea8c877a3ac76d5c91536f2cf1f8"
+        },
+        {
+          "path": "openspec/changes/wormhole-hardware-profile/specs/wormhole-hardware-profile/spec.md",
+          "sha256": "e3a2001fae0ff67f5d9a5cdbe99adc3559ff296bd05d4e4494ac5c643a4445f6"
+        }
+      ]
+    },
+    "wormhole-memory-transactions": {
+      "requirements": [
+        "MT-01",
+        "MT-02",
+        "MT-03",
+        "MT-04",
+        "MT-05",
+        "MT-06",
+        "MT-D01",
+        "MT-D02",
+        "MT-D03",
+        "MT-D04",
+        "MT-D05",
+        "MT-D06",
+        "MT-D07",
+        "MT-D08",
+        "MT-D09",
+        "MT-D10"
+      ],
+      "scenarios": 27,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-memory-transactions/spec.md",
+          "sha256": "bc0b802d38a859a33d578df024e299ab7dac5cfefa51a2999a8936e1a2479285"
+        },
+        {
+          "path": "openspec/changes/wormhole-memory-transactions/specs/wormhole-memory-transactions/spec.md",
+          "sha256": "6c160e3d26d84151042edc014285ecaa821b40d83f31fd42fe1bd3fc33369ea0"
+        }
+      ]
+    },
+    "wormhole-topology-routing": {
+      "requirements": [
+        "TR-01",
+        "TR-02",
+        "TR-03",
+        "TR-04",
+        "TR-05",
+        "TR-G01",
+        "TR-G02",
+        "TR-G03",
+        "TR-G04",
+        "TR-G05",
+        "TR-G06",
+        "TR-G07",
+        "TR-G08",
+        "TR-G09",
+        "TR-G10",
+        "TR-D01",
+        "TR-D02",
+        "TR-D03",
+        "TR-D04",
+        "TR-D05",
+        "TR-D06",
+        "TR-D07",
+        "TR-D08",
+        "TR-D09",
+        "TR-D10"
+      ],
+      "scenarios": 42,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-topology-routing/spec.md",
+          "sha256": "28695901cf1796aeb3e8bdf56ef96e47e69d778c9478df7ac18307a08cc4b919"
+        },
+        {
+          "path": "openspec/changes/generic-heterogeneous-topology/specs/wormhole-topology-routing/spec.md",
+          "sha256": "e226d8bfdbf0b012b1dbce71a3a5b9b1384d810f7675c329e79a2eac060b1f0f"
+        },
+        {
+          "path": "openspec/changes/wormhole-dual-noc-routing/specs/wormhole-topology-routing/spec.md",
+          "sha256": "fb4f0d140b07fe65717706e207e76c7b6e1fa79eedff307db7eee19e38f13269"
+        }
+      ]
+    },
+    "wormhole-validation": {
+      "requirements": [
+        "VA-01",
+        "VA-02",
+        "VA-03",
+        "VA-04",
+        "VA-05",
+        "VA-06",
+        "VA-07"
+      ],
+      "scenarios": 7,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-single-chip-simulation-plan/specs/wormhole-validation/spec.md",
+          "sha256": "7dd40e09319ce8c3c7cc95d32e9b497c7787876fe05c1cdd5fc7810ccc65c32e"
+        }
+      ]
+    },
+    "wormhole-validation-harness": {
+      "requirements": [
+        "VA-D01",
+        "VA-D02",
+        "VA-D03",
+        "VA-D04",
+        "VA-D05",
+        "VA-D06",
+        "VA-D07",
+        "VA-D08",
+        "VA-D09",
+        "VA-D10",
+        "VA-D11"
+      ],
+      "scenarios": 25,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-validation-harness/specs/wormhole-validation-harness/spec.md",
+          "sha256": "4f82a63d981f839932494f49f2da5aed736676570342b7c7fed442a9c5421e1e"
+        }
+      ]
+    },
+    "wormhole-multicast-sync": {
+      "requirements": [
+        "MS-01",
+        "MS-02",
+        "MS-03",
+        "MS-04",
+        "MS-05",
+        "MS-06",
+        "MS-07",
+        "MS-08",
+        "MS-09",
+        "MS-10",
+        "MS-11",
+        "MS-12"
+      ],
+      "scenarios": 31,
+      "inputs": [
+        {
+          "path": "openspec/changes/wormhole-multicast-sync/specs/wormhole-multicast-sync/spec.md",
+          "sha256": "998802bcef7858b265e9f3b50be5ca72c78743ef0fbd522cbcf7ff5a1081c337"
+        }
+      ]
+    }
+  }
+}
