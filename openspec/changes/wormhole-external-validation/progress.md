@@ -368,7 +368,9 @@ Blocked prerequisites observed on this host:
 ## Part 4 - Wormhole collection and profiler import
 
 Status: implementation checkpoint on 2026-09-20; tasks 4.1 and 4.2 are
-complete, while tasks 4.3, 4.4 and 4.5 remain open. No Wormhole device was
+complete. The task 4.3 converter implementation is source-compatible with the
+pinned profiler revision, but tasks 4.3, 4.4 and 4.5 remain open until it is
+checked against output from a named Wormhole worker. No Wormhole device was
 accessed and no silicon timing evidence is claimed.
 
 Delivered and verified:
@@ -403,16 +405,30 @@ Delivered and verified:
   retains the original integer begin/end counters instead of rewriting them as
   zero/duration. Tests cover counters above `2**53`, raw mutation and output
   preservation.
+- The importer now accepts the exact 15-column CSV and metadata header emitted
+  by `tt_metal/impl/profiler/profiler.cpp` at revision
+  `a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e`, while retaining the existing
+  strict 12-column fixture dialect. It maps ordered `ZONE_START`/`ZONE_END`
+  occurrences to declared repetition IDs, requires matching timer, host-run and
+  optional trace identities, and retains every selected integer field plus raw
+  row metadata on the normalized events. Header/phase drift, nested or orphaned
+  zones, counter-identity changes, wrong architecture/frequency and cross-core
+  or cross-device ends all fail conversion.
+- The pinned CSV's misleading `PCIe slot` column is treated according to the
+  producer source, which writes numeric `chip_id`; worker-result validation
+  binds it to the selected device index and continues to admit the prior BDF
+  representation for version-1 compatibility. The actual BDF remains separately
+  recorded in the explicit worker selection and device metadata.
 
 Implementation source SHA-256 identities before this progress/task update:
 
 | Source | SHA-256 |
 | --- | --- |
-| `configs/schemas/external_validation.py` | `893f5eb05cae3f0a2c19792a59b1fe178a11b9b9f55227e3208b4e9977a3e1fe` |
+| `configs/schemas/external_validation.py` | `7dd7d344890b0c18806ad75ee2b26503c48009437266c8672f4cb54a9b162804` |
 | `validation/external.py` | `af5b679027d9b7089fa81459ef0735fc8f8e67c5471243b3bcaa1a35f2ca42b4` |
 | `validation/external_collector.py` | `52f549ae47aa14f94a97659331bba4d69edc54a7592d2b71d6690149e9861485` |
-| `validation/references.py` | `8c320e583270c9d71c6141fcac16a993c4345b28199107771e8102b1fdb734a0` |
-| `tests/test_external_wormhole_collector.py` | `8d6318aedcd3523e5835ac42e5d4f3647d5a39f6987dc0d60d69a521483c2b40` |
+| `validation/references.py` | `78de05b37429dd966c6c19d0f29c7f433c10c559ebae506e5a287ff053b17a42` |
+| `tests/test_external_wormhole_collector.py` | `bd606944143b4de0e1a4d99ad31d73ecfa256c1cde8fdd5d411db7132f11d5d1` |
 | `capture_assets/ttsim_tt_metal_v1/kernels/noc_ack_roundtrip.cpp` | `fb1803dbb60f33d43c6e98af1c481feec95cf779f728c2921e06a9ec6ef6a77f` |
 | `capture_assets/ttsim_tt_metal_v1/kernels/dram_read_return.cpp` | `84809bb95c6c6b61fcb4fbbf258ca807ced5bb4386c1d53008862dde37863cd7` |
 | `capture_assets/ttsim_tt_metal_v1/kernels/compute_service.cpp` | `4fa6490d3df50d5d04b6536625a00790b3b7c1a9822285d72f8b41e78267f432` |
@@ -420,6 +436,10 @@ Implementation source SHA-256 identities before this progress/task update:
 Executed verification:
 
 ```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_wormhole_collector simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+160 tests passed in 116.873s; 0 failures; 0 errors; 0 skips after adding
+the exact pinned profiler dialect and corruption coverage.
+
 .venv/bin/python -m unittest simulator_detailed.tests.test_external_wormhole_collector simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
 153 tests passed in 115.747s; 0 failures; 0 errors; 0 skips.
 
@@ -442,8 +462,9 @@ Passed with no output.
 Blocked prerequisites observed on this host:
 
 - `/dev/tenstorrent` remains absent and `tt-smi` is not installed.
-- No pinned TT-Metal checkout, matching built host/device artifacts, named
-  Wormhole board, firmware inventory or device-profiler output was supplied.
+- Reconstructed pinned TT-Metal and ttsim checkouts and the functional build are
+  available only under `/tmp/wormhole-external-worker`; no named Wormhole board,
+  silicon worker build, firmware inventory or device-profiler output was supplied.
 - Task 4.3 remains open until the converter is checked against CSV from that
   pinned live environment. Tasks 4.4 and 4.5 require the three actual functional
   records, profiler CSVs and complete worker manifests; unit-test worker bytes

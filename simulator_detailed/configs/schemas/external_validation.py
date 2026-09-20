@@ -858,11 +858,15 @@ class WormholeWorkerResult(ValidationRecord):
             and self.conditions.architecture.value != self.selection.architecture
         ):
             raise ValueError("worker architecture disagrees with explicit device selection")
-        if any(
-            item.device != self.selection.pcie_slot
-            for item in self.profiler_selections
-        ):
-            raise ValueError("profiler device disagrees with explicit PCIe selection")
+        # The pinned TT-Metal CSV labels this field "PCIe slot" but emits the
+        # numeric chip_id. Accept the earlier BDF representation as a v1
+        # compatibility form while binding either value to the selected device.
+        profiler_devices = {
+            str(self.selection.device_index),
+            self.selection.pcie_slot,
+        }
+        if any(item.device not in profiler_devices for item in self.profiler_selections):
+            raise ValueError("profiler device disagrees with explicit device selection")
         return self
 
 

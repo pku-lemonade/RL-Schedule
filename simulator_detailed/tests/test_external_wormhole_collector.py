@@ -8,7 +8,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 
 from simulator_detailed.configs.schemas.external_validation import (
@@ -44,7 +46,10 @@ from simulator_detailed.validation.external_collector import (
     write_unavailable_wormhole_capture,
 )
 from simulator_detailed.validation.identity import bytes_digest, canonical_record
-from simulator_detailed.validation.references import CSV_HEADER, import_reference
+from simulator_detailed.validation.references import (
+    PINNED_CSV_HEADER,
+    import_reference,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 EXTERNAL = ROOT / "simulator_detailed/configs/validation/external"
@@ -65,10 +70,10 @@ def _zone_line(path: Path, zone: str) -> int:
 
 def _profiler_csv(selection: ProfilerSelection) -> bytes:
     rows = [
-        "ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000",
-        ",".join(CSV_HEADER),
+        "ARCH: wormhole_b0, CHIP_FREQ[MHz]: 1000, Max Compute Cores: 64",
+        ",".join(PINNED_CSV_HEADER),
     ]
-    for run, begin, end in (
+    for occurrence, begin, end in (
         (0, PROFILER_COUNTER_BASE, PROFILER_COUNTER_BASE + 19),
         (1, PROFILER_COUNTER_BASE + 100, PROFILER_COUNTER_BASE + 137),
     ):
@@ -80,17 +85,20 @@ def _profiler_csv(selection: ProfilerSelection) -> bytes:
             "7",
         ]
         suffix = [
-            "0",
-            str(run),
+            str(PROFILER_COUNTER_BASE + 1000 + occurrence),
+            str(700 + occurrence),
+            str(900 + occurrence),
+            str(1100 + occurrence),
             selection.zone,
             "",
             str(selection.source_line),
             selection.source_file,
+            "{runtime:pinned;sample:" + str(occurrence) + "}",
         ]
         begin_row = [*common, str(begin), *suffix]
-        begin_row[9] = "begin"
+        begin_row[11] = "ZONE_START"
         end_row = [*common, str(end), *suffix]
-        end_row[9] = "end"
+        end_row[11] = "ZONE_END"
         rows.extend((",".join(begin_row), ",".join(end_row)))
     return ("\n".join(rows) + "\n").encode()
 
@@ -98,7 +106,7 @@ def _profiler_csv(selection: ProfilerSelection) -> bytes:
 def _noc_selection(case: ExternalValidationCase) -> ProfilerSelection:
     boundary = case.boundary_maps[0]
     return ProfilerSelection(
-        device="0000:01:00.0",
+        device="0",
         core_x=0,
         core_y=0,
         risc="BRISC",
@@ -137,7 +145,7 @@ def _captured_conditions(
     )
     return case.conditions.model_copy(
         update={
-            "device": Metadata[str](state="known", value=selection.device),
+            "device": Metadata[str](state="known", value="0000:01:00.0"),
             "software": Metadata[str](state="known", value="pinned-test-build"),
             "firmware": Metadata[str](state="known", value="test-firmware"),
             "measurement": Metadata[MeasurementWindow](state="known", value=measurement),
@@ -145,7 +153,10 @@ def _captured_conditions(
     )
 
 
-def _hardware_capture(root: Path) -> tuple[AdmittedExternalCapture, Path]:
+def _hardware_capture(
+    root: Path,
+    profiler_transform: Callable[[bytes], bytes] = lambda value: value,
+) -> tuple[AdmittedExternalCapture, Path]:
     shutil.copytree(EXTERNAL, root, dirs_exist_ok=True)
     campaign_path = root / "campaign.valid.json"
     campaign = admit_external_campaign(campaign_path)
@@ -164,7 +175,7 @@ def _hardware_capture(root: Path) -> tuple[AdmittedExternalCapture, Path]:
     selection = _noc_selection(case)
     payloads = {
         "functional_record": b'{"test_only":"functional placeholder"}\n',
-        "profiler_csv": _profiler_csv(selection),
+        "profiler_csv": profiler_transform(_profiler_csv(selection)),
         "capture_manifest": b'{"test_only":"worker manifest placeholder"}\n',
     }
     artifacts: list[ExternalArtifactIdentity] = []
@@ -207,7 +218,7 @@ def _hardware_capture(root: Path) -> tuple[AdmittedExternalCapture, Path]:
             host=Metadata[CanonicalJSON](
                 state="known", value=canonical_record({"worker_id": "test-worker"})
             ),
-            device=Metadata[str](state="known", value=selection.device),
+            device=Metadata[str](state="known", value="0000:01:00.0"),
             software=Metadata[str](state="known", value="pinned-test-build"),
             firmware=Metadata[str](state="known", value="test-firmware"),
             clocks=Metadata[tuple[CanonicalJSON, ...]](
@@ -368,7 +379,7 @@ class WormholeCollectorTests(unittest.TestCase):
                 host=Metadata[CanonicalJSON](
                     state="known", value=canonical_record({"worker_id": "worker-1"})
                 ),
-                device=Metadata[str](state="known", value=profiler.device),
+                device=Metadata[str](state="known", value=device.pcie_slot),
                 software=Metadata[str](state="known", value="pinned-test-build"),
                 firmware=Metadata[str](state="known", value="test-firmware"),
                 clocks=Metadata[tuple[CanonicalJSON, ...]](
@@ -398,13 +409,13 @@ class WormholeCollectorTests(unittest.TestCase):
             )
             wrong_device = worker_result.model_dump(mode="json")
             wrong_device["profiler_selections"][0]["device"] = "0000:02:00.0"
-            with self.assertRaisesRegex(ValueError, "PCIe selection"):
+            with self.assertRaisesRegex(ValueError, "device selection"):
                 WormholeWorkerResult.model_validate_json(json.dumps(wrong_device))
 
             def run_worker(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
                 self.assertEqual(command[1:], list(plan.argv[1:]))
                 self.assertEqual(kwargs["cwd"], worker.resolve())
-                process_environment = kwargs["env"]
+                process_environment = cast(dict[str, str], kwargs["env"])
                 self.assertEqual(process_environment["TT_METAL_DEVICE_PROFILER"], "1")
                 payloads = {
                     "functional_record": b'{"test_only":"functional placeholder"}\n',
@@ -431,9 +442,12 @@ class WormholeCollectorTests(unittest.TestCase):
             self.assertEqual(capture.document.outcome.outcome, "pass")
             self.assertEqual(capture.document.profiler_selections, (profiler,))
             self.assertEqual(len(capture.document.raw_artifacts), 3)
+            converted = convert_profiler_capture(capture, root / "references")[0]
+            self.assertIsNotNone(converted.sample_statistics)
+            if converted.sample_statistics is None:
+                raise AssertionError("profiler conversion omitted sample statistics")
             self.assertEqual(
-                convert_profiler_capture(capture, root / "references")[0]
-                .sample_statistics.durations_cycles,
+                converted.sample_statistics.durations_cycles,
                 (37,),
             )
 
@@ -482,8 +496,38 @@ class WormholeCollectorTests(unittest.TestCase):
             self.assertEqual(len(references), 1)
             reference = references[0]
             self.assertEqual(reference.provenance.classification, "hardware_capture")
+            self.assertIsNotNone(reference.sample_statistics)
+            self.assertIsNotNone(reference.observations)
+            if reference.sample_statistics is None or reference.observations is None:
+                raise AssertionError("profiler conversion omitted normalized evidence")
             self.assertEqual(reference.sample_statistics.durations_cycles, (37,))
-            self.assertGreater(reference.observations.events[0].time.value, 2**53)
+            event = reference.observations.events[0]
+            self.assertIsNotNone(event.time)
+            self.assertIsNotNone(event.details)
+            if event.time is None or event.details is None:
+                raise AssertionError("pinned profiler event omitted raw timing details")
+            self.assertGreater(event.time.value, 2**53)
+            self.assertEqual(
+                {counter.name: counter.value for counter in event.counters},
+                {
+                    "core_x": 0,
+                    "core_y": 0,
+                    "timer_id": 7,
+                    "data": PROFILER_COUNTER_BASE + 1000,
+                    "run_host_id": 700,
+                    "source_line": _zone_line(
+                        ASSETS / "kernels/noc_ack_roundtrip.cpp",
+                        "NOC_ACK_ROUNDTRIP",
+                    ),
+                    "max_compute_cores": 64,
+                    "trace_id": 900,
+                    "trace_id_counter": 1100,
+                },
+            )
+            self.assertEqual(
+                json.loads(event.details.text)["meta_data"],
+                "{runtime:pinned;sample:0}",
+            )
             self.assertEqual(
                 import_reference(output / "reference-0/reference.json"), reference
             )
@@ -498,6 +542,70 @@ class WormholeCollectorTests(unittest.TestCase):
             profiler.write_bytes(profiler.read_bytes() + b"changed\n")
             with self.assertRaisesRegex(ValueError, "changed after capture admission"):
                 convert_profiler_capture(admitted, Path(directory) / "references")
+
+    def test_pinned_profiler_dialect_rejects_unsafe_pairing_and_format_drift(self):
+        def replace(old: bytes, new: bytes) -> Callable[[bytes], bytes]:
+            return lambda raw: raw.replace(old, new, 1)
+
+        def reorder_nested(raw: bytes) -> bytes:
+            lines = raw.splitlines()
+            return b"\n".join((lines[0], lines[1], lines[2], lines[4], lines[3], lines[5])) + b"\n"
+
+        def move_last_marker(raw: bytes, field: int, value: bytes) -> bytes:
+            lines = raw.splitlines()
+            row = lines[-1].split(b",")
+            row[field] = value
+            lines[-1] = b",".join(row)
+            return b"\n".join(lines) + b"\n"
+
+        corruptions = (
+            (
+                "header",
+                replace(b"run host ID", b"runtime ID"),
+                "columns/order",
+            ),
+            (
+                "phase",
+                replace(b"ZONE_START", b"TS_DATA"),
+                "phase",
+            ),
+            ("nested", reorder_nested, "nested/ambiguous"),
+            (
+                "architecture",
+                replace(b"ARCH: wormhole_b0", b"ARCH: grayskull"),
+                "architecture contradicts",
+            ),
+            (
+                "frequency",
+                replace(b"CHIP_FREQ[MHz]: 1000", b"CHIP_FREQ[MHz]: 999"),
+                "frequency contradicts",
+            ),
+            (
+                "other-core-end",
+                lambda raw: move_last_marker(raw, 1, b"1"),
+                "missing selected profiler zone end",
+            ),
+            (
+                "other-device-end",
+                lambda raw: move_last_marker(raw, 0, b"0000:02:00.0"),
+                "missing selected profiler zone end",
+            ),
+            (
+                "different-timer-end",
+                lambda raw: move_last_marker(raw, 4, b"8"),
+                "counter identities disagree",
+            ),
+        )
+        for name, transform, message in corruptions:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / "capture"
+                root.mkdir()
+                admitted, _ = _hardware_capture(root, transform)
+                with self.assertRaisesRegex(ValueError, message):
+                    convert_profiler_capture(
+                        admitted,
+                        Path(directory) / "references",
+                    )
 
     def test_capture_admission_rejects_wrong_zone_and_missing_output(self):
         with tempfile.TemporaryDirectory() as directory:
