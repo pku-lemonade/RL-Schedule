@@ -7,7 +7,10 @@ endif()
 
 add_executable(wormhole_external_validation host/wormhole_external_validation.cpp)
 target_compile_features(wormhole_external_validation PRIVATE cxx_std_20)
-target_link_libraries(wormhole_external_validation PRIVATE TT::Metalium)
+target_link_libraries(
+    wormhole_external_validation
+    PRIVATE TT::Metalium nlohmann_json::nlohmann_json
+)
 
 # Device sources are passed to Metalium's runtime compiler by the host program.
 target_compile_definitions(

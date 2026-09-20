@@ -1,8 +1,108 @@
 # Wormhole external validation progress
 
-## Part 7 - Consolidated external evidence and delivery checkpoint
+## Part 3 - Portable capture kit and ttsim functional evidence completion
 
-Status: offline implementation checkpoint on 2026-09-20; tasks 7.2, 7.3 and
+Status: complete on 2026-09-20. Tasks 3.1-3.5 are complete and the change is
+25/35. The generated producer was built and all three finite recipes were run
+on the reconstructed pinned ttsim/TT-Metal worker. The committed evidence is
+functional evidence only; no ttsim counter or duration is classified as
+silicon timing.
+
+Delivered and verified:
+
+- The host dispatches bounded TT-Metal programs for NoC acknowledgement, DRAM
+  read/return and one 32x32x32 BF16 HiFi2 compute tile. It derives L1 and DRAM
+  addresses from the allocator, uses the declared logical cores and bank, runs
+  the declared repetitions, checks completion/status sentinels and validates
+  the full compute output before atomically emitting a functional record and
+  capture manifest.
+- The kit includes the host, data-movement and compute kernels, a portable
+  Wormhole ttsim SoC descriptor, build instructions and the exact single-rank
+  TT-Metal worker patch. The patch implements the identity result for a
+  one-rank control-plane `all_reduce`; its SHA-256 participates in the
+  effective TT-Metal source snapshot.
+- The binary manifest seals the host executable, patched Metalium runtime,
+  ttsim runtime and producer source bundle. Collection rechecks those bytes,
+  fixed arguments, four allowed environment variables, budgets and all raw
+  output identities before admitting evidence.
+- Each raw bundle was independently admitted and converted. Conversion
+  rechecked effective operation/mapping/layout/fidelity, every repetition,
+  event order, addresses, byte/work counts, completion markers and independently
+  derived sentinel payloads. All three references are `functional_capture`
+  with complete execution and two verified effects, and reproduce byte for
+  byte from the committed raw bundles.
+- The worker patch is limited to ttsim. Hardware collection continues to use
+  the pinned upstream silicon path. Compute v1 deliberately supports exactly
+  one 32x32x32 tile; other shapes fail admission rather than being defaulted or
+  silently reinterpreted. Cores, banks, addresses, counts and patterns remain
+  explicit campaign parameters.
+
+Pinned worker and build identities:
+
+| Identity | Value |
+| --- | --- |
+| ttsim revision | `40bb1a2ad6a755279c4628ddc65e30b10721fdef` |
+| ttsim source snapshot SHA-256 | `92d33ef15728f17ed5488d28d24dac13550ef58d3b2da16c9fa8a63bd6bb69d0` |
+| ttsim runtime SHA-256 | `cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50` |
+| TT-Metal revision | `a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e` |
+| TT-Metal base tree SHA-256 | `b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71` |
+| worker patch SHA-256 | `7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0` |
+| effective TT-Metal snapshot SHA-256 | `b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169` |
+| host executable SHA-256 | `12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923` |
+| Metalium runtime SHA-256 | `ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4` |
+| producer source bundle SHA-256 | `b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488` |
+| campaign SHA-256 | `5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3` |
+| kit identity | `ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f` |
+
+Committed functional evidence:
+
+| Case | Capture bundle | Raw functional SHA-256 | Reference identity |
+| --- | --- | --- | --- |
+| `noc-64b` | `ttsim-capture:5c3b1204a710bfb5bc6191e3a65a762d179f4986345dd30b1c8e005161617eba` | `26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436` | `external:noc-64b:26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436` |
+| `dram-read-256b` | `ttsim-capture:f10933130a84396ee1ffca314557d6d1039c5b07dabe267e10a287cc783a94fd` | `2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c` | `external:dram-read-256b:2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c` |
+| `compute-bf16-32` | `ttsim-capture:b017041654cfdd43f5d4f49056df7cfa1b54eaba9bb2a52b773cdc8598c1d2f9` | `67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48` | `external:compute-bf16-32:67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48` |
+
+Executed verification:
+
+```text
+TT-Metal CMake configure and wormhole_external_validation target build
+passed against revision a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e with the
+recorded single-rank worker patch.
+
+pinned ttsim collection and functional conversion
+noc-64b: pass, functional_capture, complete;
+dram-read-256b: pass, functional_capture, complete;
+compute-bf16-32: pass, functional_capture, complete.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_capture_kit
+12 tests passed; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+151 tests passed; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check <Part 3 implementation and regression scope>
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --type change --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Remaining external prerequisite: Parts 4-7 still require a named Wormhole
+silicon worker with device inventory, firmware, clocks and profiler CSV. This
+host has no `/dev/tenstorrent` device and no `tt-smi`; ttsim functional evidence
+does not satisfy any silicon timing, paired comparison, measured fitting or
+held-out evaluation task.
+
+## Part 7 - Consolidated external evidence and delivery checkpoint (historical)
+
+Historical status at commit `f43b774`: offline implementation checkpoint on
+2026-09-20; tasks 7.2, 7.3 and
 7.4 are complete. The change is 22/35. Tasks 7.1 and 7.5 remain open because
 the final clean external matrix and the actual-evidence delivery links cannot
 be produced on this host. This checkpoint is not final delivery and is not an
@@ -427,9 +527,10 @@ git diff --check
 Passed with no output.
 ```
 
-## Part 3 - Portable capture kit and functional conversion
+## Part 3 - Portable capture kit initial checkpoint (superseded)
 
-Status: implementation checkpoint on 2026-09-20; tasks 3.1 and 3.3 are
+Historical status at commit `cecaa96`: implementation checkpoint on
+2026-09-20; tasks 3.1 and 3.3 are
 complete, while tasks 3.2, 3.4 and 3.5 remain open. No ttsim execution or
 external functional evidence is claimed, and Part 3 has not been committed as
 complete.

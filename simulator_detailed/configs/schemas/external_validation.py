@@ -65,7 +65,12 @@ TTSimRecipe = Literal[
     "compute_service_v1",
 ]
 CaptureKitFileRole = Literal[
-    "campaign", "case_input", "host_source", "device_source", "build_file"
+    "campaign",
+    "case_input",
+    "host_source",
+    "device_source",
+    "build_file",
+    "runtime_config",
 ]
 FunctionalEntityRole = Literal["endpoint", "resource", "worker", "job", "transfer"]
 HexPayload = Annotated[str, Field(pattern=r"^(?:[0-9a-f]{2})+$")]

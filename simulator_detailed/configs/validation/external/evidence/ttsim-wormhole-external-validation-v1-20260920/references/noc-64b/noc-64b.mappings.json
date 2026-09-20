@@ -1,0 +1,60 @@
+{
+  "kind": "functional_identifier_mappings",
+  "schema_version": 1,
+  "reference_id": "external:noc-64b:26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436",
+  "source_artifact_sha256": "26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436",
+  "entity_mappings": [
+    {
+      "reference": "operation",
+      "simulator": "transfer:\"noc-64b\""
+    },
+    {
+      "reference": "source",
+      "simulator": "worker-0"
+    },
+    {
+      "reference": "destination",
+      "simulator": "worker-1"
+    },
+    {
+      "reference": "destination-l1",
+      "simulator": "resource:worker-1:l1"
+    }
+  ],
+  "event_mappings": [
+    {
+      "reference": "repetition:0:submission",
+      "simulator": "repetition:0:noc-64b:submission"
+    },
+    {
+      "reference": "repetition:0:remote_write_visible",
+      "simulator": "repetition:0:external:noc-64b:remote_write_visible"
+    },
+    {
+      "reference": "repetition:0:acknowledged_completion",
+      "simulator": "repetition:0:noc-64b:acknowledged_completion"
+    },
+    {
+      "reference": "repetition:1:submission",
+      "simulator": "repetition:1:noc-64b:submission"
+    },
+    {
+      "reference": "repetition:1:remote_write_visible",
+      "simulator": "repetition:1:external:noc-64b:remote_write_visible"
+    },
+    {
+      "reference": "repetition:1:acknowledged_completion",
+      "simulator": "repetition:1:noc-64b:acknowledged_completion"
+    }
+  ],
+  "effect_mappings": [
+    {
+      "reference": "repetition:0:effect",
+      "simulator": "repetition:0:effect:noc-64b"
+    },
+    {
+      "reference": "repetition:1:effect",
+      "simulator": "repetition:1:effect:noc-64b"
+    }
+  ]
+}

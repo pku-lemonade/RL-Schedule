@@ -1,0 +1,14 @@
+{
+  "case_id": "noc-64b",
+  "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+  "functional_sha256": "26a04c62fc67f635e7008ca99df90e9e69a8f4f8dba4bff2646c62bebd70f436",
+  "input_sha256": "f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88",
+  "kind": "tt_metal_capture_manifest",
+  "max_output_bytes": 131072,
+  "recipe": "noc_ack_roundtrip_v1",
+  "repetitions": 2,
+  "schema_version": 1,
+  "status": "pass",
+  "timeout_seconds": 60,
+  "warmup_repetitions": 1
+}

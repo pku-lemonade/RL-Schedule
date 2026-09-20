@@ -2,6 +2,7 @@
 #include "api/compute/compute_kernel_hw_startup.h"
 #include "api/compute/matmul.h"
 #include "api/compute/tile_move_copy.h"
+#include "tools/profiler/kernel_profiler.hpp"
 
 #include <cstdint>
 

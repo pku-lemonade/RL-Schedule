@@ -1,0 +1,129 @@
+{
+  "kind": "validation_reference",
+  "schema_version": 1,
+  "reference_id": "external:dram-read-256b:2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c",
+  "format": "normalized_functional_v1",
+  "provenance": {
+    "classification": "functional_capture",
+    "producer": "ttsim_tt_metal_v1:ttsim-functional",
+    "source_url": {
+      "state": "known",
+      "value": "https://github.com/tenstorrent/tt-metal",
+      "reason": null
+    },
+    "revision": {
+      "state": "known",
+      "value": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
+      "reason": null
+    },
+    "snapshot_sha256": {
+      "state": "known",
+      "value": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
+      "reason": null
+    },
+    "raw_artifact": {
+      "path": "dram-read-256b.normalized.json",
+      "sha256": "00883361d077881a6b822608de9cde7e268372dc9f09b658396abbe474f0a73b"
+    },
+    "extractor": "wormhole_reference_import",
+    "extractor_version": "1",
+    "original_units": [
+      "bytes",
+      "count",
+      "work"
+    ],
+    "normalized_units": [
+      "bytes",
+      "count",
+      "work"
+    ],
+    "origin_authentication": "not_authenticated"
+  },
+  "conditions": {
+    "architecture": {
+      "state": "known",
+      "value": "wormhole_b0",
+      "reason": null
+    },
+    "device": {
+      "state": "known",
+      "value": "ttsim:wormhole_b0",
+      "reason": null
+    },
+    "device_scope": {
+      "state": "known",
+      "value": "single_asic",
+      "reason": null
+    },
+    "profile_version": {
+      "state": "known",
+      "value": "wormhole_b0_n150_assumed",
+      "reason": null
+    },
+    "enabled_layout": {
+      "state": "known",
+      "value": {
+        "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+      },
+      "reason": null
+    },
+    "clocks": {
+      "state": "known",
+      "value": [
+        {
+          "domain_id": "tensix",
+          "hz": {
+            "state": "known",
+            "value": 1000000000.0,
+            "reason": null
+          }
+        }
+      ],
+      "reason": null
+    },
+    "workload": {
+      "state": "known",
+      "value": {
+        "text": "{\"address\":4096,\"bytes\":256,\"completion\":\"worker_visible\",\"count\":1,\"operation\":\"dram_read\",\"pattern_seed\":7,\"pattern_stride\":29}"
+      },
+      "reason": null
+    },
+    "mapping": {
+      "state": "known",
+      "value": {
+        "text": "{\"destination\":\"worker-0\",\"destination_core\":[0,0],\"dram_bank\":0,\"resource_id\":\"dram-0\"}"
+      },
+      "reason": null
+    },
+    "software": {
+      "state": "known",
+      "value": "tt-metal:a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e;ttsim:40bb1a2ad6a755279c4628ddc65e30b10721fdef",
+      "reason": null
+    },
+    "firmware": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim has no device firmware identity"
+    },
+    "instrumentation": {
+      "state": "known",
+      "value": {
+        "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+      },
+      "reason": null
+    },
+    "measurement": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim timing is excluded from silicon evidence"
+    },
+    "capture_group": {
+      "state": "known",
+      "value": "dram-read-256b-group",
+      "reason": null
+    }
+  },
+  "observations": null,
+  "profiler": null,
+  "sample_statistics": null
+}

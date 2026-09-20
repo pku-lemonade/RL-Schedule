@@ -1,0 +1,219 @@
+{
+  "adapter": "ttsim_tt_metal_v1",
+  "binary_artifacts": [
+    {
+      "artifact_id": "host-program",
+      "logical_path": "bin/wormhole_external_validation",
+      "role": "host_binary",
+      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+      "size_bytes": 617464
+    },
+    {
+      "artifact_id": "metalium-runtime",
+      "logical_path": "bin/runtime/libtt_metal.so",
+      "role": "device_binary",
+      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+      "size_bytes": 29128744
+    },
+    {
+      "artifact_id": "ttsim-runtime",
+      "logical_path": "runtime/ttsim/libttsim_wh.so",
+      "role": "device_binary",
+      "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+      "size_bytes": 223264
+    },
+    {
+      "artifact_id": "producer-sources",
+      "logical_path": "bin/wormhole_external_sources.json",
+      "role": "source_bundle",
+      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+      "size_bytes": 2280
+    }
+  ],
+  "build_id": "tt-metal-wormhole-pinned",
+  "case_family": "noc_ack_roundtrip",
+  "case_id": "noc-64b",
+  "enabled_layout": {
+    "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+  },
+  "entities": [
+    {
+      "entity_id": "operation",
+      "role": "transfer",
+      "simulator_id": "transfer:\"noc-64b\""
+    },
+    {
+      "entity_id": "source",
+      "fabric_id": 0,
+      "role": "endpoint",
+      "simulator_id": "worker-0"
+    },
+    {
+      "entity_id": "destination",
+      "fabric_id": 0,
+      "role": "endpoint",
+      "simulator_id": "worker-1"
+    },
+    {
+      "entity_id": "destination-l1",
+      "fabric_id": 0,
+      "physical_owner": "destination",
+      "role": "resource",
+      "simulator_id": "resource:worker-1:l1"
+    }
+  ],
+  "input_artifact": {
+    "artifact_id": "sim-noc-64b",
+    "logical_path": "inputs/noc_ack_roundtrip.json",
+    "sha256": "f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88",
+    "size_bytes": 265
+  },
+  "instrumentation": {
+    "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+  },
+  "kind": "tt_metal_functional_record",
+  "mapping": {
+    "text": "{\"destination\":\"worker-1\",\"destination_core\":[1,0],\"fabric_id\":0,\"source\":\"worker-0\",\"source_core\":[0,0]}"
+  },
+  "producer_id": "ttsim-functional",
+  "repetitions": [
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "destination",
+          "effect_id": "repetition:0:effect",
+          "offset_bytes": 8192,
+          "resource_id": "destination-l1",
+          "simulator_effect_id": "repetition:0:effect:noc-64b",
+          "size_bytes": 64,
+          "visibility_event": "repetition:0:remote_write_visible"
+        }
+      ],
+      "events": [
+        {
+          "action": "submission",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "planned",
+              "unit": "bytes",
+              "value": 64
+            }
+          ],
+          "event_id": "repetition:0:submission",
+          "sequence": 0,
+          "simulator_event_id": "repetition:0:noc-64b:submission",
+          "subject_id": "operation"
+        },
+        {
+          "action": "remote_write_visible",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 64
+            }
+          ],
+          "event_id": "repetition:0:remote_write_visible",
+          "sequence": 1,
+          "simulator_event_id": "repetition:0:external:noc-64b:remote_write_visible",
+          "subject_id": "operation"
+        },
+        {
+          "action": "acknowledged_completion",
+          "counters": [
+            {
+              "name": "acknowledgements",
+              "scope": "observed",
+              "unit": "count",
+              "value": 1
+            }
+          ],
+          "event_id": "repetition:0:acknowledged_completion",
+          "sequence": 2,
+          "simulator_event_id": "repetition:0:noc-64b:acknowledged_completion",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "0",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdcedff00112233445566778899aabbccddeef00112233445566778899aabbccddeeff102132",
+      "sentinel_sha256": "30a1b375b49e0f1d5e00b6868bbfd471cbe5387806456cc11fd153c689bfe747",
+      "status": "pass"
+    },
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "destination",
+          "effect_id": "repetition:1:effect",
+          "offset_bytes": 8192,
+          "resource_id": "destination-l1",
+          "simulator_effect_id": "repetition:1:effect:noc-64b",
+          "size_bytes": 64,
+          "visibility_event": "repetition:1:remote_write_visible"
+        }
+      ],
+      "events": [
+        {
+          "action": "submission",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "planned",
+              "unit": "bytes",
+              "value": 64
+            }
+          ],
+          "event_id": "repetition:1:submission",
+          "sequence": 0,
+          "simulator_event_id": "repetition:1:noc-64b:submission",
+          "subject_id": "operation"
+        },
+        {
+          "action": "remote_write_visible",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 64
+            }
+          ],
+          "event_id": "repetition:1:remote_write_visible",
+          "sequence": 1,
+          "simulator_event_id": "repetition:1:external:noc-64b:remote_write_visible",
+          "subject_id": "operation"
+        },
+        {
+          "action": "acknowledged_completion",
+          "counters": [
+            {
+              "name": "acknowledgements",
+              "scope": "observed",
+              "unit": "count",
+              "value": 1
+            }
+          ],
+          "event_id": "repetition:1:acknowledged_completion",
+          "sequence": 2,
+          "simulator_event_id": "repetition:1:noc-64b:acknowledged_completion",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "1",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdcedff00112233445566778899aabbccddeef00112233445566778899aabbccddeeff102132",
+      "sentinel_sha256": "30a1b375b49e0f1d5e00b6868bbfd471cbe5387806456cc11fd153c689bfe747",
+      "status": "pass"
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "text": "{\"bytes\":64,\"completion\":\"returned_acknowledgement\",\"count\":1,\"destination_address\":8192,\"operation\":\"remote_l1_write\",\"pattern_seed\":3,\"pattern_stride\":17}"
+  }
+}

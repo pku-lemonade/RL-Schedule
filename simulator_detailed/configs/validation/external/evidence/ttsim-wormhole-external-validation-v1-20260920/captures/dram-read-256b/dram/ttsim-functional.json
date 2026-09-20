@@ -1,0 +1,212 @@
+{
+  "adapter": "ttsim_tt_metal_v1",
+  "binary_artifacts": [
+    {
+      "artifact_id": "host-program",
+      "logical_path": "bin/wormhole_external_validation",
+      "role": "host_binary",
+      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+      "size_bytes": 617464
+    },
+    {
+      "artifact_id": "metalium-runtime",
+      "logical_path": "bin/runtime/libtt_metal.so",
+      "role": "device_binary",
+      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+      "size_bytes": 29128744
+    },
+    {
+      "artifact_id": "ttsim-runtime",
+      "logical_path": "runtime/ttsim/libttsim_wh.so",
+      "role": "device_binary",
+      "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+      "size_bytes": 223264
+    },
+    {
+      "artifact_id": "producer-sources",
+      "logical_path": "bin/wormhole_external_sources.json",
+      "role": "source_bundle",
+      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+      "size_bytes": 2280
+    }
+  ],
+  "build_id": "tt-metal-wormhole-pinned",
+  "case_family": "dram_read_return",
+  "case_id": "dram-read-256b",
+  "enabled_layout": {
+    "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+  },
+  "entities": [
+    {
+      "entity_id": "operation",
+      "role": "transfer",
+      "simulator_id": "transfer:\"dram-read-256b\""
+    },
+    {
+      "entity_id": "destination",
+      "role": "worker",
+      "simulator_id": "worker-0"
+    },
+    {
+      "entity_id": "dram",
+      "role": "resource",
+      "simulator_id": "resource:\"dram-0\""
+    }
+  ],
+  "input_artifact": {
+    "artifact_id": "sim-dram-read-256b",
+    "logical_path": "inputs/dram_read_return.json",
+    "sha256": "6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df",
+    "size_bytes": 226
+  },
+  "instrumentation": {
+    "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+  },
+  "kind": "tt_metal_functional_record",
+  "mapping": {
+    "text": "{\"destination\":\"worker-0\",\"destination_core\":[0,0],\"dram_bank\":0,\"resource_id\":\"dram-0\"}"
+  },
+  "producer_id": "ttsim-functional",
+  "repetitions": [
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "destination",
+          "effect_id": "repetition:0:effect",
+          "offset_bytes": 4096,
+          "resource_id": "dram",
+          "simulator_effect_id": "repetition:0:effect:dram-read-256b",
+          "size_bytes": 256,
+          "visibility_event": "repetition:0:worker_visible_completion"
+        }
+      ],
+      "events": [
+        {
+          "action": "submission",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "planned",
+              "unit": "bytes",
+              "value": 256
+            }
+          ],
+          "event_id": "repetition:0:submission",
+          "sequence": 0,
+          "simulator_event_id": "repetition:0:external:dram-read-256b:submission",
+          "subject_id": "operation"
+        },
+        {
+          "action": "memory_service_begin",
+          "counters": [],
+          "event_id": "repetition:0:memory_service_begin",
+          "sequence": 1,
+          "simulator_event_id": "repetition:0:service:dram-read-256b:begin",
+          "subject_id": "operation"
+        },
+        {
+          "action": "memory_service_end",
+          "counters": [],
+          "event_id": "repetition:0:memory_service_end",
+          "sequence": 2,
+          "simulator_event_id": "repetition:0:service:dram-read-256b:end",
+          "subject_id": "operation"
+        },
+        {
+          "action": "worker_visible_completion",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 256
+            }
+          ],
+          "event_id": "repetition:0:worker_visible_completion",
+          "sequence": 3,
+          "simulator_event_id": "repetition:0:external:dram-read-256b:worker_visible_completion",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "0",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "0724415e7b98b5d2ef0c294663809dbad7f4112e4b6885a2bfdcf91633506d8aa7c4e1fe1b3855728facc9e603203d5a7794b1ceeb0825425f7c99b6d3f00d2a4764819ebbd8f5122f4c6986a3c0ddfa1734516e8ba8c5e2ff1c39567390adcae704213e5b7895b2cfec092643607d9ab7d4f10e2b4865829fbcd9f613304d6a87a4c1defb1835526f8ca9c6e3001d3a577491aecbe805223f5c7996b3d0ed0a2744617e9bb8d5f20f2c496683a0bddaf714314e6b88a5c2dffc193653708daac7e4011e3b587592afcce90623405d7a97b4d1ee0b2845627f9cb9d6f3102d4a6784a1bedbf815324f6c89a6c3e0fd1a3754718eabc8e5021f3c597693b0cdea",
+      "sentinel_sha256": "2aeb6c09d761cd5251a33d9bd5c645a0661713b9aef2bce404549aeca1b978c6",
+      "status": "pass"
+    },
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "destination",
+          "effect_id": "repetition:1:effect",
+          "offset_bytes": 4096,
+          "resource_id": "dram",
+          "simulator_effect_id": "repetition:1:effect:dram-read-256b",
+          "size_bytes": 256,
+          "visibility_event": "repetition:1:worker_visible_completion"
+        }
+      ],
+      "events": [
+        {
+          "action": "submission",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "planned",
+              "unit": "bytes",
+              "value": 256
+            }
+          ],
+          "event_id": "repetition:1:submission",
+          "sequence": 0,
+          "simulator_event_id": "repetition:1:external:dram-read-256b:submission",
+          "subject_id": "operation"
+        },
+        {
+          "action": "memory_service_begin",
+          "counters": [],
+          "event_id": "repetition:1:memory_service_begin",
+          "sequence": 1,
+          "simulator_event_id": "repetition:1:service:dram-read-256b:begin",
+          "subject_id": "operation"
+        },
+        {
+          "action": "memory_service_end",
+          "counters": [],
+          "event_id": "repetition:1:memory_service_end",
+          "sequence": 2,
+          "simulator_event_id": "repetition:1:service:dram-read-256b:end",
+          "subject_id": "operation"
+        },
+        {
+          "action": "worker_visible_completion",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 256
+            }
+          ],
+          "event_id": "repetition:1:worker_visible_completion",
+          "sequence": 3,
+          "simulator_event_id": "repetition:1:external:dram-read-256b:worker_visible_completion",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "1",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "0724415e7b98b5d2ef0c294663809dbad7f4112e4b6885a2bfdcf91633506d8aa7c4e1fe1b3855728facc9e603203d5a7794b1ceeb0825425f7c99b6d3f00d2a4764819ebbd8f5122f4c6986a3c0ddfa1734516e8ba8c5e2ff1c39567390adcae704213e5b7895b2cfec092643607d9ab7d4f10e2b4865829fbcd9f613304d6a87a4c1defb1835526f8ca9c6e3001d3a577491aecbe805223f5c7996b3d0ed0a2744617e9bb8d5f20f2c496683a0bddaf714314e6b88a5c2dffc193653708daac7e4011e3b587592afcce90623405d7a97b4d1ee0b2845627f9cb9d6f3102d4a6784a1bedbf815324f6c89a6c3e0fd1a3754718eabc8e5021f3c597693b0cdea",
+      "sentinel_sha256": "2aeb6c09d761cd5251a33d9bd5c645a0661713b9aef2bce404549aeca1b978c6",
+      "status": "pass"
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "text": "{\"address\":4096,\"bytes\":256,\"completion\":\"worker_visible\",\"count\":1,\"operation\":\"dram_read\",\"pattern_seed\":7,\"pattern_stride\":29}"
+  }
+}

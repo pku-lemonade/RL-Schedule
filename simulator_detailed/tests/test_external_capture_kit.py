@@ -6,10 +6,12 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import patch
 
 from simulator_detailed.configs.schemas.external_validation import (
     ArtifactLineage,
@@ -19,25 +21,32 @@ from simulator_detailed.configs.schemas.external_validation import (
     ExternalCaptureBundle,
     ExternalOutcome,
     ProducerFunctionalRecord,
+    TTSimCaptureKitManifest,
 )
 from simulator_detailed.configs.schemas.validation import CanonicalJSON, Metadata
 from simulator_detailed.validation.external import (
+    AdmittedExternalCampaign,
     admit_external_campaign,
     admit_external_capture,
 )
 from simulator_detailed.validation.external_capture import (
     ASSET_ROOT,
+    _effective_conditions,
     _expected_actions,
     _expected_entities,
     _expected_sentinel,
+    collect_ttsim_capture,
     convert_functional_capture,
     generate_ttsim_capture_kit,
 )
-from simulator_detailed.validation.identity import bytes_digest
+from simulator_detailed.validation.identity import bytes_digest, content_digest
 from simulator_detailed.validation.references import import_reference
 
 ROOT = Path(__file__).resolve().parents[2]
 EXTERNAL = ROOT / "simulator_detailed/configs/validation/external"
+TTSIM_EVIDENCE = (
+    EXTERNAL / "evidence/ttsim-wormhole-external-validation-v1-20260920"
+)
 
 
 def _tree_bytes(root: Path) -> dict[str, bytes]:
@@ -291,6 +300,49 @@ def _capture(root: Path, case_id: str, raw_document: dict[str, object]) -> Path:
 
 
 class TTSimCaptureKitTests(unittest.TestCase):
+    def test_committed_kit_seals_worker_patch_and_runtime_binaries(self):
+        manifest = TTSimCaptureKitManifest.model_validate_json(
+            (TTSIM_EVIDENCE / "kit/capture-kit.json").read_bytes()
+        )
+        source_data = (
+            TTSIM_EVIDENCE / "kit/wormhole_external_sources.json"
+        ).read_bytes()
+        source_manifest = json.loads(source_data)
+        source_identity = next(
+            item
+            for item in manifest.binary_manifest
+            if item.artifact_id == "producer-sources"
+        )
+        self.assertEqual(
+            (bytes_digest(source_data), len(source_data)),
+            (source_identity.sha256, source_identity.size_bytes),
+        )
+        patch = ASSET_ROOT / "patches/tt-metal-ttsim-single-rank.patch"
+        patch_sha256 = bytes_digest(patch.read_bytes())
+        self.assertEqual(
+            source_manifest["tt_metal_worker_patch_sha256"], patch_sha256
+        )
+        self.assertEqual(
+            manifest.build.source_snapshot_sha256,
+            content_digest(
+                {
+                    "tt_metal_base_tree_sha256": source_manifest[
+                        "tt_metal_base_tree_sha256"
+                    ],
+                    "worker_patch_sha256": patch_sha256,
+                }
+            ),
+        )
+        self.assertEqual(
+            {item.artifact_id for item in manifest.binary_manifest},
+            {
+                "host-program",
+                "metalium-runtime",
+                "producer-sources",
+                "ttsim-runtime",
+            },
+        )
+
     def test_kit_is_deterministic_portable_bounded_and_fixed(self):
         campaign = admit_external_campaign(EXTERNAL / "campaign.valid.json")
         with (
@@ -362,8 +414,152 @@ class TTSimCaptureKitTests(unittest.TestCase):
             ("tile", "tile", "hifi2"),
         )
 
+    def test_compute_recipe_rejects_shapes_outside_the_implemented_tile(self):
+        compute = json.loads((EXTERNAL / "inputs/compute_service.json").read_text())
+        compute["shape"] = [64, 32, 32]
+        compute["work"] = 131072
+        compute["output_bytes"] = 4096
+        with self.assertRaisesRegex(ValueError, "one 32x32x32 tile"):
+            _effective_conditions("compute_service", compute)
+
+
+class TTSimCollectorTests(unittest.TestCase):
+    def _prepared_worker(
+        self, root: Path, case_id: str
+    ) -> tuple[Path, Path, AdmittedExternalCampaign]:
+        campaign_root = root / "campaign"
+        shutil.copytree(EXTERNAL, campaign_root)
+        document = json.loads((campaign_root / "campaign.valid.json").read_text())
+        binaries = {
+            "host_binary": b"bounded ttsim test host",
+            "device_binary": b"bounded ttsim test kernels",
+        }
+        for artifact in document["builds"][0]["artifacts"]:
+            data = binaries[artifact["role"]]
+            artifact["sha256"] = bytes_digest(data)
+            artifact["size_bytes"] = len(data)
+        campaign_path = campaign_root / "campaign.valid.json"
+        campaign_path.write_text(json.dumps(document, indent=2) + "\n")
+        admitted = admit_external_campaign(campaign_path)
+        kit = root / "kit"
+        manifest = generate_ttsim_capture_kit(admitted, kit)
+        for artifact in manifest.binary_manifest:
+            path = kit / artifact.logical_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(binaries[artifact.role])
+        return campaign_path, kit, admitted
+
+    def test_missing_binary_blocks_before_process_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, kit, admitted = self._prepared_worker(root, "noc-64b")
+            (kit / "bin/wormhole_external_validation").unlink()
+            with patch(
+                "simulator_detailed.validation.external_capture.subprocess.run",
+                side_effect=AssertionError("producer must not launch"),
+            ):
+                capture = collect_ttsim_capture(
+                    admitted, "noc-64b", kit, root / "blocked"
+                )
+            self.assertEqual(capture.document.outcome.outcome, "blocked")
+            self.assertEqual(capture.document.raw_artifacts, ())
+
+    def test_fixed_worker_outputs_are_captured_and_convert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            campaign_path, kit, admitted = self._prepared_worker(root, "noc-64b")
+            invocation = next(
+                item
+                for item in json.loads((kit / "capture-kit.json").read_text())["invocations"]
+                if item["case_id"] == "noc-64b"
+            )
+
+            def run_worker(
+                command: list[str], **kwargs: object
+            ) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(command[1:], invocation["argv"][1:])
+                self.assertEqual(kwargs["cwd"], kit.resolve())
+                environment = kwargs["env"]
+                self.assertEqual(environment["TT_METAL_SIMULATOR"], "runtime/ttsim/libttsim_wh.so")
+                record = _functional_record(campaign_path, "noc-64b")
+                functional_data = (record.model_dump_json(indent=2) + "\n").encode()
+                outputs = {item["role"]: item for item in invocation["outputs"]}
+                functional_path = kit / outputs["functional_record"]["logical_path"]
+                functional_path.parent.mkdir(parents=True, exist_ok=True)
+                functional_path.write_bytes(functional_data)
+                manifest_data = {
+                    "case_id": "noc-64b",
+                    "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+                    "functional_sha256": bytes_digest(functional_data),
+                    "input_sha256": record.input_artifact.sha256,
+                    "kind": "tt_metal_capture_manifest",
+                    "max_output_bytes": invocation["max_output_bytes"],
+                    "recipe": invocation["recipe"],
+                    "repetitions": len(invocation["repetition_ids"]),
+                    "schema_version": 1,
+                    "status": "pass",
+                    "timeout_seconds": int(invocation["timeout_seconds"]),
+                    "warmup_repetitions": len(invocation["warmup_repetition_ids"]),
+                }
+                capture_manifest_path = (
+                    kit / outputs["capture_manifest"]["logical_path"]
+                )
+                capture_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+                capture_manifest_path.write_text(
+                    json.dumps(manifest_data, indent=2) + "\n"
+                )
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch(
+                "simulator_detailed.validation.external_capture.subprocess.run",
+                side_effect=run_worker,
+            ) as launched:
+                capture = collect_ttsim_capture(
+                    admitted, "noc-64b", kit, root / "capture"
+                )
+            launched.assert_called_once()
+            self.assertEqual(capture.document.outcome.outcome, "pass")
+            self.assertEqual(capture.document.intended_classification, "functional_capture")
+            self.assertEqual(len(capture.document.raw_artifacts), 2)
+            conversion = convert_functional_capture(capture, root / "reference")
+            self.assertEqual(
+                import_reference(conversion.reference_path).provenance.classification,
+                "functional_capture",
+            )
+
 
 class FunctionalCaptureConversionTests(unittest.TestCase):
+    def test_committed_ttsim_evidence_readmits_and_reproduces_references(self):
+        for case_id in ("noc-64b", "dram-read-256b", "compute-bf16-32"):
+            with (
+                self.subTest(case_id=case_id),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                capture = admit_external_capture(
+                    TTSIM_EVIDENCE / f"captures/{case_id}/bundle.json"
+                )
+                self.assertEqual(capture.document.outcome.outcome, "pass")
+                self.assertEqual(
+                    capture.document.intended_classification, "functional_capture"
+                )
+                self.assertEqual(capture.document.conditions.measurement.state, "unknown")
+                reason = capture.document.conditions.measurement.reason
+                self.assertIsNotNone(reason)
+                assert reason is not None
+                self.assertIn(
+                    "excluded from silicon evidence",
+                    reason,
+                )
+
+                regenerated = Path(directory) / case_id
+                conversion = convert_functional_capture(capture, regenerated)
+                expected = TTSIM_EVIDENCE / f"references/{case_id}"
+                self.assertEqual(_tree_bytes(regenerated), _tree_bytes(expected))
+                imported = import_reference(conversion.reference_path)
+                self.assertEqual(imported.provenance.classification, "functional_capture")
+                self.assertEqual(imported.observations.execution, "complete")  # type: ignore[union-attr]
+                self.assertEqual(len(imported.observations.effects), 2)  # type: ignore[union-attr]
+
     def _root(self, directory: str) -> Path:
         root = Path(directory) / "external"
         shutil.copytree(EXTERNAL, root)

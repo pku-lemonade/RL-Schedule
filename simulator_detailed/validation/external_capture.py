@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import struct
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,10 +18,15 @@ from ..configs.schemas.external_validation import (
     TTSIM_PINNED_REVISION,
     TTSIM_SOURCE_SNAPSHOT_SHA256,
     TTSIM_SOURCE_URL,
+    ArtifactLineage,
+    CaptureCounter,
+    CaptureEnvironment,
     CaptureEnvironmentVariable,
     CaptureKitFile,
     CaptureKitFileRole,
     ExternalArtifactIdentity,
+    ExternalCaptureBundle,
+    ExternalOutcome,
     ExternalValidationCase,
     FunctionalMappingManifest,
     PinnedSourceIdentity,
@@ -31,6 +39,7 @@ from ..configs.schemas.external_validation import (
 from ..configs.schemas.validation import (
     AddressedEffect,
     ArtifactReference,
+    CanonicalJSON,
     CausalEdge,
     IdentifierMapping,
     Metadata,
@@ -46,16 +55,23 @@ from .external import (
     AdmittedExternalCampaign,
     AdmittedExternalCapture,
     admit_external_campaign,
+    admit_external_capture,
 )
 from .identity import bytes_digest, canonical_record, content_digest
 
 ASSET_ROOT = Path(__file__).resolve().parent / "capture_assets/ttsim_tt_metal_v1"
 ASSET_ROLES = {
+    "BUILD.md": "build_file",
     "CMakeLists.txt": "build_file",
     "host/wormhole_external_validation.cpp": "host_source",
+    "host/sha256.hpp": "host_source",
     "kernels/noc_ack_roundtrip.cpp": "device_source",
     "kernels/dram_read_return.cpp": "device_source",
     "kernels/compute_service.cpp": "device_source",
+    "kernels/compute_reader.cpp": "device_source",
+    "kernels/compute_writer.cpp": "device_source",
+    "patches/tt-metal-ttsim-single-rank.patch": "build_file",
+    "runtime/ttsim/soc_descriptor.yaml": "runtime_config",
 }
 RECIPE_BY_FAMILY: dict[str, TTSimRecipe] = {
     "noc_ack_roundtrip": "noc_ack_roundtrip_v1",
@@ -267,6 +283,10 @@ def _effective_conditions(family: str, value: Data) -> tuple[Data, Data]:
             len(shape) == 3 and all(item > 0 for item in shape),
             "compute shape must contain three positive axes",
         )
+        require(
+            shape == [32, 32, 32],
+            "initial compute recipe requires one 32x32x32 tile",
+        )
         work = _positive(value["work"], "compute work")
         require(
             work == 2 * shape[0] * shape[1] * shape[2],
@@ -416,7 +436,8 @@ def generate_ttsim_capture_kit(
         )
     for logical_path, role in ASSET_ROLES.items():
         data = (ASSET_ROOT / logical_path).read_bytes()
-        files[f"producer/{logical_path}"] = (
+        kit_path = logical_path if role == "runtime_config" else f"producer/{logical_path}"
+        files[kit_path] = (
             data,
             role,
             "producer:" + logical_path.replace("/", ":"),
@@ -480,6 +501,496 @@ def generate_ttsim_capture_kit(
         output_directory.parent.mkdir(parents=True, exist_ok=True)
         staged.rename(output_directory)
     return manifest
+
+
+def _kit_path(kit_root: Path, logical_path: str) -> Path:
+    root = kit_root.resolve()
+    path = (root / logical_path).resolve()
+    require(path.is_relative_to(root), "capture-kit path escapes its root")
+    return path
+
+
+def _verified_kit_bytes(
+    kit_root: Path,
+    identity: CaptureKitFile | ExternalArtifactIdentity,
+) -> bytes:
+    path = _kit_path(kit_root, identity.logical_path)
+    data = path.read_bytes()
+    require(
+        len(data) == identity.size_bytes and bytes_digest(data) == identity.sha256,
+        f"capture-kit artifact identity mismatch: {identity.logical_path}",
+    )
+    return data
+
+
+def _write_ttsim_bundle(
+    admitted: AdmittedExternalCampaign,
+    case_id: str,
+    output_directory: Path,
+    bundle: ExternalCaptureBundle,
+    raw_data: dict[str, bytes],
+) -> AdmittedExternalCapture:
+    if output_directory.exists():
+        raise ValueError("ttsim capture output directory already exists")
+    output_directory.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix=".ttsim-capture-", dir=output_directory.parent
+    ) as temporary:
+        staged = Path(temporary) / "capture"
+        staged.mkdir()
+        (staged / "campaign.json").write_bytes(admitted.document_path.read_bytes())
+        for case, source in zip(
+            admitted.document.cases, admitted.input_paths, strict=True
+        ):
+            destination = staged / case.simulator_input.logical_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(source.read_bytes())
+        for artifact in bundle.raw_artifacts:
+            destination = staged / artifact.logical_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw_data[artifact.artifact_id])
+        (staged / "bundle.json").write_bytes(
+            (bundle.model_dump_json(indent=2) + "\n").encode()
+        )
+        staged.rename(output_directory)
+    return admit_external_capture(output_directory / "bundle.json")
+
+
+def _unavailable_ttsim_capture(
+    admitted: AdmittedExternalCampaign,
+    case_id: str,
+    output_directory: Path,
+    reason: str,
+) -> AdmittedExternalCapture:
+    case = next(
+        (item for item in admitted.document.cases if item.case_id == case_id), None
+    )
+    if case is None:
+        raise ValueError(f"unknown ttsim collection case: {case_id}")
+    producer = next(
+        item
+        for item in admitted.document.producers
+        if item.adapter == "ttsim_tt_metal_v1"
+    )
+    build = next(
+        item for item in admitted.document.builds if item.build_id == producer.build_id
+    )
+    campaign_data = admitted.document_path.read_bytes()
+    conditions = case.conditions.model_copy(
+        update={
+            "device": Metadata[str](state="unknown", reason=reason),
+            "software": Metadata[str](state="unknown", reason=reason),
+            "firmware": Metadata[str](
+                state="unknown", reason="ttsim has no device firmware identity"
+            ),
+            "measurement": case.conditions.measurement.model_copy(
+                update={
+                    "state": "unknown",
+                    "value": None,
+                    "reason": "ttsim timing is excluded from silicon evidence",
+                }
+            ),
+        }
+    )
+    bundle = ExternalCaptureBundle(
+        kind="external_capture_bundle",
+        schema_version=1,
+        bundle_id="ttsim-unavailable:"
+        + content_digest(
+            {
+                "campaign": admitted.document_sha256,
+                "case_id": case_id,
+                "reason": reason,
+            }
+        ),
+        campaign=ExternalArtifactIdentity(
+            artifact_id="campaign",
+            logical_path="campaign.json",
+            sha256=bytes_digest(campaign_data),
+            size_bytes=len(campaign_data),
+        ),
+        case_id=case_id,
+        producer_id=producer.producer_id,
+        adapter=producer.adapter,
+        build=build,
+        intended_classification="functional_capture",
+        environment=CaptureEnvironment(
+            host=Metadata[CanonicalJSON](
+                state="known",
+                value=canonical_record(
+                    {"machine": platform.machine(), "system": platform.system()}
+                ),
+            ),
+            device=Metadata[str](state="unknown", reason=reason),
+            software=Metadata[str](state="unknown", reason=reason),
+            firmware=Metadata[str](
+                state="unknown", reason="ttsim has no device firmware identity"
+            ),
+            clocks=Metadata[tuple[CanonicalJSON, ...]](
+                state="unknown", reason="ttsim timing is not admitted"
+            ),
+            enabled_layout=case.conditions.enabled_layout,
+        ),
+        conditions=conditions,
+        outcome=ExternalOutcome(
+            stage="collection",
+            required=True,
+            outcome="blocked",
+            reason=reason,
+            executed=True,
+            case_id=case_id,
+            producer_id=producer.producer_id,
+            artifact_ids=(),
+        ),
+        raw_artifacts=(),
+        counters=(),
+        lineage=(),
+        diagnostics=(reason, "no producer evidence was admitted"),
+    )
+    return _write_ttsim_bundle(admitted, case_id, output_directory, bundle, {})
+
+
+def _validate_ttsim_outputs(
+    record_data: bytes,
+    manifest_data: bytes,
+    invocation: TTSimCaptureInvocation,
+    case: ExternalValidationCase,
+    producer_id: str,
+    build_id: str,
+) -> None:
+    record = ProducerFunctionalRecord.model_validate_json(record_data)
+    require(
+        (
+            record.case_id,
+            record.case_family,
+            record.producer_id,
+            record.adapter,
+            record.build_id,
+        )
+        == (
+            case.case_id,
+            case.family,
+            producer_id,
+            "ttsim_tt_metal_v1",
+            build_id,
+        ),
+        "ttsim functional output identity disagrees with its invocation",
+    )
+    require(
+        tuple(item.repetition_id for item in record.repetitions)
+        == invocation.repetition_ids,
+        "ttsim functional output repetition identities disagree with the campaign",
+    )
+    manifest = obj(json.loads(manifest_data))
+    _required(
+        manifest,
+        (
+            "case_id",
+            "completion_marker",
+            "functional_sha256",
+            "input_sha256",
+            "kind",
+            "max_output_bytes",
+            "recipe",
+            "repetitions",
+            "schema_version",
+            "status",
+            "timeout_seconds",
+            "warmup_repetitions",
+        ),
+    )
+    require(
+        (
+            manifest["kind"],
+            manifest["schema_version"],
+            manifest["status"],
+            manifest["completion_marker"],
+            manifest["case_id"],
+            manifest["recipe"],
+            manifest["functional_sha256"],
+            manifest["input_sha256"],
+            manifest["repetitions"],
+            manifest["warmup_repetitions"],
+            manifest["timeout_seconds"],
+            manifest["max_output_bytes"],
+        )
+        == (
+            "tt_metal_capture_manifest",
+            1,
+            "pass",
+            "WORMHOLE_EXTERNAL_COMPLETE_V1",
+            case.case_id,
+            invocation.recipe,
+            bytes_digest(record_data),
+            case.simulator_input.sha256,
+            len(invocation.repetition_ids),
+            len(invocation.warmup_repetition_ids),
+            int(invocation.timeout_seconds),
+            invocation.max_output_bytes,
+        ),
+        "ttsim capture manifest disagrees with the admitted invocation",
+    )
+
+
+def collect_ttsim_capture(
+    admitted: AdmittedExternalCampaign,
+    case_id: str,
+    kit_root: Path,
+    output_directory: Path,
+) -> AdmittedExternalCapture:
+    """Execute one verified fixed ttsim invocation and package its raw outputs."""
+    if output_directory.exists():
+        raise ValueError("ttsim capture output directory already exists")
+    case = next(
+        (item for item in admitted.document.cases if item.case_id == case_id), None
+    )
+    if case is None:
+        raise ValueError(f"unknown ttsim collection case: {case_id}")
+    root = kit_root.resolve()
+    try:
+        manifest_path = _kit_path(root, "capture-kit.json")
+        manifest = TTSimCaptureKitManifest.model_validate_json(
+            manifest_path.read_bytes()
+        )
+        campaign_data = _verified_kit_bytes(root, manifest.campaign)
+        require(
+            bytes_digest(campaign_data) == admitted.document_sha256,
+            "capture-kit campaign disagrees with the admitted campaign",
+        )
+        expected_kit_id = "ttsim-kit:" + content_digest(
+            {
+                "campaign_sha256": manifest.campaign.sha256,
+                "files": [item.model_dump(mode="json") for item in manifest.files],
+                "invocations": [
+                    item.model_dump(mode="json") for item in manifest.invocations
+                ],
+                "ttsim_revision": TTSIM_PINNED_REVISION,
+            }
+        )
+        require(manifest.kit_id == expected_kit_id, "capture-kit identity is invalid")
+        require(
+            manifest.campaign_id == admitted.document.campaign_id,
+            "capture-kit campaign identity is invalid",
+        )
+        for item in manifest.files:
+            _verified_kit_bytes(root, item)
+        producer = next(
+            item
+            for item in admitted.document.producers
+            if item.adapter == "ttsim_tt_metal_v1"
+        )
+        build = next(
+            item
+            for item in admitted.document.builds
+            if item.build_id == producer.build_id
+        )
+        require(
+            manifest.producer == producer and manifest.build == build,
+            "capture-kit producer/build identity disagrees with the campaign",
+        )
+        invocation = next(
+            (item for item in manifest.invocations if item.case_id == case_id), None
+        )
+        require(invocation is not None, "capture kit omits the requested case")
+        assert invocation is not None
+        for artifact in manifest.binary_manifest:
+            path = _kit_path(root, artifact.logical_path)
+            data = path.read_bytes()
+            require(
+                len(data) == artifact.size_bytes
+                and bytes_digest(data) == artifact.sha256,
+                f"capture-kit binary identity mismatch: {artifact.logical_path}",
+            )
+        output_paths = {
+            item.artifact_id: _kit_path(root, item.logical_path)
+            for item in invocation.outputs
+        }
+        require(
+            not any(path.exists() for path in output_paths.values()),
+            "capture-kit output already exists; refusing to replace evidence",
+        )
+        executable = _kit_path(root, invocation.argv[0])
+        require(executable.is_file(), "capture-kit host executable is unavailable")
+    except (OSError, ValueError) as exc:
+        return _unavailable_ttsim_capture(
+            admitted,
+            case_id,
+            output_directory,
+            f"ttsim worker prerequisites unavailable ({type(exc).__name__}: {exc})",
+        )
+
+    environment = os.environ.copy()
+    environment.update({item.name: item.value for item in invocation.environment})
+    command = [str(executable), *invocation.argv[1:]]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=invocation.timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return _unavailable_ttsim_capture(
+            admitted,
+            case_id,
+            output_directory,
+            f"ttsim producer did not complete ({type(exc).__name__})",
+        )
+    if result.returncode != 0:
+        return _unavailable_ttsim_capture(
+            admitted,
+            case_id,
+            output_directory,
+            f"ttsim producer exited with status {result.returncode}",
+        )
+
+    try:
+        output_data = {
+            artifact_id: path.read_bytes()
+            for artifact_id, path in output_paths.items()
+        }
+        require(
+            sum(len(data) for data in output_data.values())
+            <= invocation.max_output_bytes * len(invocation.repetition_ids),
+            "ttsim producer exceeded its output-byte budget",
+        )
+        declaration_by_role = {item.role: item for item in invocation.outputs}
+        functional = declaration_by_role["functional_record"]
+        capture_manifest = declaration_by_role["capture_manifest"]
+        _validate_ttsim_outputs(
+            output_data[functional.artifact_id],
+            output_data[capture_manifest.artifact_id],
+            invocation,
+            case,
+            producer.producer_id,
+            build.build_id,
+        )
+    except (OSError, ValueError) as exc:
+        return _unavailable_ttsim_capture(
+            admitted,
+            case_id,
+            output_directory,
+            f"ttsim producer outputs are inadmissible ({type(exc).__name__}: {exc})",
+        )
+
+    declaration_by_id = {item.artifact_id: item for item in invocation.outputs}
+    artifacts = tuple(
+        ExternalArtifactIdentity(
+            artifact_id=artifact_id,
+            logical_path=declaration_by_id[artifact_id].logical_path.removeprefix(
+                "outputs/"
+            ),
+            sha256=bytes_digest(data),
+            size_bytes=len(data),
+        )
+        for artifact_id, data in output_data.items()
+    )
+    campaign_bytes = admitted.document_path.read_bytes()
+    conditions = case.conditions.model_copy(
+        update={
+            "device": Metadata[str](state="known", value="ttsim:wormhole_b0"),
+            "software": Metadata[str](
+                state="known",
+                value=f"tt-metal:{build.revision};ttsim:{TTSIM_PINNED_REVISION}",
+            ),
+            "firmware": Metadata[str](
+                state="unknown", reason="ttsim has no device firmware identity"
+            ),
+            "measurement": case.conditions.measurement.model_copy(
+                update={
+                    "state": "unknown",
+                    "value": None,
+                    "reason": "ttsim timing is excluded from silicon evidence",
+                }
+            ),
+        }
+    )
+    bundle = ExternalCaptureBundle(
+        kind="external_capture_bundle",
+        schema_version=1,
+        bundle_id="ttsim-capture:"
+        + content_digest(
+            {
+                "kit_id": manifest.kit_id,
+                "case_id": case_id,
+                "artifacts": [item.model_dump(mode="json") for item in artifacts],
+            }
+        ),
+        campaign=ExternalArtifactIdentity(
+            artifact_id="campaign",
+            logical_path="campaign.json",
+            sha256=bytes_digest(campaign_bytes),
+            size_bytes=len(campaign_bytes),
+        ),
+        case_id=case_id,
+        producer_id=producer.producer_id,
+        adapter=producer.adapter,
+        build=build,
+        intended_classification="functional_capture",
+        environment=CaptureEnvironment(
+            host=Metadata[CanonicalJSON](
+                state="known",
+                value=canonical_record(
+                    {"machine": platform.machine(), "system": platform.system()}
+                ),
+            ),
+            device=Metadata[str](state="known", value="ttsim:wormhole_b0"),
+            software=Metadata[str](
+                state="known",
+                value=f"tt-metal:{build.revision};ttsim:{TTSIM_PINNED_REVISION}",
+            ),
+            firmware=Metadata[str](
+                state="unknown", reason="ttsim has no device firmware identity"
+            ),
+            clocks=Metadata[tuple[CanonicalJSON, ...]](
+                state="unknown", reason="ttsim timing is not admitted"
+            ),
+            enabled_layout=case.conditions.enabled_layout,
+        ),
+        conditions=conditions,
+        outcome=ExternalOutcome(
+            stage="collection",
+            required=True,
+            outcome="pass",
+            reason="fixed pinned ttsim producer completed and outputs were admitted",
+            executed=True,
+            case_id=case_id,
+            producer_id=producer.producer_id,
+            artifact_ids=tuple(item.artifact_id for item in artifacts),
+        ),
+        raw_artifacts=artifacts,
+        counters=(
+            CaptureCounter(
+                name="repetitions",
+                value=len(invocation.repetition_ids),
+                unit="count",
+            ),
+            CaptureCounter(
+                name="warmup_repetitions",
+                value=len(invocation.warmup_repetition_ids),
+                unit="count",
+            ),
+        ),
+        lineage=tuple(
+            ArtifactLineage(
+                artifact_id=item.artifact_id,
+                derived_from=("campaign",),
+                transform="ttsim_tt_metal_v1",
+            )
+            for item in artifacts
+        ),
+        diagnostics=(
+            f"ttsim revision {TTSIM_PINNED_REVISION}",
+            "functional evidence only; simulator timing is not silicon evidence",
+        ),
+    )
+    return _write_ttsim_bundle(
+        admitted, case_id, output_directory, bundle, output_data
+    )
 
 
 def _expected_sentinel(family: str, workload: Data) -> bytes:

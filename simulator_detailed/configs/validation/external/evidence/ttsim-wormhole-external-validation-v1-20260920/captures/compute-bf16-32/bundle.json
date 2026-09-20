@@ -1,0 +1,236 @@
+{
+  "kind": "external_capture_bundle",
+  "schema_version": 1,
+  "bundle_id": "ttsim-capture:b017041654cfdd43f5d4f49056df7cfa1b54eaba9bb2a52b773cdc8598c1d2f9",
+  "campaign": {
+    "artifact_id": "campaign",
+    "logical_path": "campaign.json",
+    "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
+    "size_bytes": 19200
+  },
+  "case_id": "compute-bf16-32",
+  "producer_id": "ttsim-functional",
+  "adapter": "ttsim_tt_metal_v1",
+  "build": {
+    "build_id": "tt-metal-wormhole-pinned",
+    "source_url": "https://github.com/tenstorrent/tt-metal",
+    "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
+    "source_snapshot_sha256": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
+    "configuration": {
+      "text": "{\"build_type\":\"release\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
+    },
+    "artifacts": [
+      {
+        "artifact_id": "host-program",
+        "logical_path": "bin/wormhole_external_validation",
+        "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+        "size_bytes": 617464,
+        "role": "host_binary"
+      },
+      {
+        "artifact_id": "metalium-runtime",
+        "logical_path": "bin/runtime/libtt_metal.so",
+        "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+        "size_bytes": 29128744,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "ttsim-runtime",
+        "logical_path": "runtime/ttsim/libttsim_wh.so",
+        "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+        "size_bytes": 223264,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "producer-sources",
+        "logical_path": "bin/wormhole_external_sources.json",
+        "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+        "size_bytes": 2280,
+        "role": "source_bundle"
+      }
+    ]
+  },
+  "intended_classification": "functional_capture",
+  "environment": {
+    "host": {
+      "state": "known",
+      "value": {
+        "text": "{\"machine\":\"x86_64\",\"system\":\"Linux\"}"
+      },
+      "reason": null
+    },
+    "device": {
+      "state": "known",
+      "value": "ttsim:wormhole_b0",
+      "reason": null
+    },
+    "software": {
+      "state": "known",
+      "value": "tt-metal:a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e;ttsim:40bb1a2ad6a755279c4628ddc65e30b10721fdef",
+      "reason": null
+    },
+    "firmware": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim has no device firmware identity"
+    },
+    "clocks": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim timing is not admitted"
+    },
+    "enabled_layout": {
+      "state": "known",
+      "value": {
+        "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+      },
+      "reason": null
+    }
+  },
+  "conditions": {
+    "architecture": {
+      "state": "known",
+      "value": "wormhole_b0",
+      "reason": null
+    },
+    "device": {
+      "state": "known",
+      "value": "ttsim:wormhole_b0",
+      "reason": null
+    },
+    "device_scope": {
+      "state": "known",
+      "value": "single_asic",
+      "reason": null
+    },
+    "profile_version": {
+      "state": "known",
+      "value": "wormhole_b0_n150_assumed",
+      "reason": null
+    },
+    "enabled_layout": {
+      "state": "known",
+      "value": {
+        "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+      },
+      "reason": null
+    },
+    "clocks": {
+      "state": "known",
+      "value": [
+        {
+          "domain_id": "tensix",
+          "hz": {
+            "state": "known",
+            "value": 1000000000.0,
+            "reason": null
+          }
+        }
+      ],
+      "reason": null
+    },
+    "workload": {
+      "state": "known",
+      "value": {
+        "text": "{\"data_type\":\"bf16\",\"fidelity\":\"hifi2\",\"input_layout\":\"tile\",\"operation\":\"matmul\",\"output_address\":16384,\"output_bytes\":2048,\"output_layout\":\"tile\",\"sentinel_elements\":16,\"sentinel_seed\":1,\"shape\":[32,32,32],\"work\":65536}"
+      },
+      "reason": null
+    },
+    "mapping": {
+      "state": "known",
+      "value": {
+        "text": "{\"output_resource\":\"worker-0-l1\",\"resource\":\"worker-0-tensix\",\"worker\":\"worker-0\",\"worker_core\":[0,0]}"
+      },
+      "reason": null
+    },
+    "software": {
+      "state": "known",
+      "value": "tt-metal:a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e;ttsim:40bb1a2ad6a755279c4628ddc65e30b10721fdef",
+      "reason": null
+    },
+    "firmware": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim has no device firmware identity"
+    },
+    "instrumentation": {
+      "state": "known",
+      "value": {
+        "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+      },
+      "reason": null
+    },
+    "measurement": {
+      "state": "unknown",
+      "value": null,
+      "reason": "ttsim timing is excluded from silicon evidence"
+    },
+    "capture_group": {
+      "state": "known",
+      "value": "compute-bf16-32-group",
+      "reason": null
+    }
+  },
+  "outcome": {
+    "stage": "collection",
+    "required": true,
+    "outcome": "pass",
+    "reason": "fixed pinned ttsim producer completed and outputs were admitted",
+    "executed": true,
+    "case_id": "compute-bf16-32",
+    "producer_id": "ttsim-functional",
+    "boundary_id": null,
+    "artifact_ids": [
+      "compute-ttsim-functional",
+      "compute-ttsim-manifest"
+    ]
+  },
+  "raw_artifacts": [
+    {
+      "artifact_id": "compute-ttsim-functional",
+      "logical_path": "compute/ttsim-functional.json",
+      "sha256": "67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
+      "size_bytes": 6929
+    },
+    {
+      "artifact_id": "compute-ttsim-manifest",
+      "logical_path": "compute/ttsim-manifest.json",
+      "sha256": "4cb970799c039144cc1858505d6e71ef5f0ca38fc63931b8c2e5b53af64b4b0a",
+      "size_bytes": 486
+    }
+  ],
+  "profiler_selections": [],
+  "counters": [
+    {
+      "name": "repetitions",
+      "value": 2,
+      "unit": "count"
+    },
+    {
+      "name": "warmup_repetitions",
+      "value": 1,
+      "unit": "count"
+    }
+  ],
+  "lineage": [
+    {
+      "artifact_id": "compute-ttsim-functional",
+      "derived_from": [
+        "campaign"
+      ],
+      "transform": "ttsim_tt_metal_v1"
+    },
+    {
+      "artifact_id": "compute-ttsim-manifest",
+      "derived_from": [
+        "campaign"
+      ],
+      "transform": "ttsim_tt_metal_v1"
+    }
+  ],
+  "diagnostics": [
+    "ttsim revision 40bb1a2ad6a755279c4628ddc65e30b10721fdef",
+    "functional evidence only; simulator timing is not silicon evidence"
+  ],
+  "origin_authentication": "not_authenticated"
+}

@@ -1,0 +1,600 @@
+{
+  "kind": "external_validation_campaign",
+  "schema_version": 1,
+  "campaign_id": "wormhole-external-validation-v1-20260920",
+  "output_directory": "generated",
+  "max_cases": 3,
+  "max_invocations": 12,
+  "max_total_output_bytes": 1600000,
+  "builds": [
+    {
+      "build_id": "tt-metal-wormhole-pinned",
+      "source_url": "https://github.com/tenstorrent/tt-metal",
+      "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
+      "source_snapshot_sha256": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
+      "configuration": {
+        "text": "{\"build_type\":\"release\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
+      },
+      "artifacts": [
+        {
+          "artifact_id": "host-program",
+          "logical_path": "bin/wormhole_external_validation",
+          "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+          "size_bytes": 617464,
+          "role": "host_binary"
+        },
+        {
+          "artifact_id": "metalium-runtime",
+          "logical_path": "bin/runtime/libtt_metal.so",
+          "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+          "size_bytes": 29128744,
+          "role": "device_binary"
+        },
+        {
+          "artifact_id": "ttsim-runtime",
+          "logical_path": "runtime/ttsim/libttsim_wh.so",
+          "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+          "size_bytes": 223264,
+          "role": "device_binary"
+        },
+        {
+          "artifact_id": "producer-sources",
+          "logical_path": "bin/wormhole_external_sources.json",
+          "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+          "size_bytes": 2280,
+          "role": "source_bundle"
+        }
+      ]
+    }
+  ],
+  "producers": [
+    {
+      "producer_id": "ttsim-functional",
+      "adapter": "ttsim_tt_metal_v1",
+      "build_id": "tt-metal-wormhole-pinned"
+    },
+    {
+      "producer_id": "wormhole-profiler",
+      "adapter": "wormhole_tt_metal_profiler_v1",
+      "build_id": "tt-metal-wormhole-pinned"
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "noc-64b",
+      "family": "noc_ack_roundtrip",
+      "simulator_input": {
+        "artifact_id": "sim-noc-64b",
+        "logical_path": "inputs/noc_ack_roundtrip.json",
+        "sha256": "f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88",
+        "size_bytes": 265
+      },
+      "conditions": {
+        "architecture": {
+          "state": "known",
+          "value": "wormhole_b0"
+        },
+        "device": {
+          "state": "unknown",
+          "reason": "selected by the external worker"
+        },
+        "device_scope": {
+          "state": "known",
+          "value": "single_asic"
+        },
+        "profile_version": {
+          "state": "known",
+          "value": "wormhole_b0_n150_assumed"
+        },
+        "enabled_layout": {
+          "state": "known",
+          "value": {
+            "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+          }
+        },
+        "clocks": {
+          "state": "known",
+          "value": [
+            {
+              "domain_id": "tensix",
+              "hz": {
+                "state": "known",
+                "value": 1000000000
+              }
+            }
+          ]
+        },
+        "workload": {
+          "state": "known",
+          "value": {
+            "text": "{\"bytes\":64,\"completion\":\"returned_acknowledgement\",\"count\":1,\"destination_address\":8192,\"operation\":\"remote_l1_write\",\"pattern_seed\":3,\"pattern_stride\":17}"
+          }
+        },
+        "mapping": {
+          "state": "known",
+          "value": {
+            "text": "{\"destination\":\"worker-1\",\"destination_core\":[1,0],\"fabric_id\":0,\"source\":\"worker-0\",\"source_core\":[0,0]}"
+          }
+        },
+        "software": {
+          "state": "known",
+          "value": "pinned-tt-metal-build"
+        },
+        "firmware": {
+          "state": "unknown",
+          "reason": "collected on the Wormhole worker"
+        },
+        "instrumentation": {
+          "state": "known",
+          "value": {
+            "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+          }
+        },
+        "measurement": {
+          "state": "unknown",
+          "reason": "selected by the interval registry in Part 2"
+        },
+        "capture_group": {
+          "state": "known",
+          "value": "noc-64b-group"
+        }
+      },
+      "boundary_maps": [
+        {
+          "boundary_id": "noc-ack-window",
+          "case_family": "noc_ack_roundtrip",
+          "producer_zone": "NOC_ACK_ROUNDTRIP",
+          "simulator_boundary": "operation_submission_to_acknowledged_completion",
+          "clock_domain": "tensix",
+          "completion_scope": "acknowledged_operation",
+          "simulator_interval": {
+            "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+            "boundary": "operation_submission_to_acknowledged_completion",
+            "subject_id": "transfer:\"noc-64b\"",
+            "resource_id": null,
+            "start_event_id": "noc-64b:submission",
+            "end_event_id": "noc-64b:acknowledged_completion",
+            "semantic_scope": "acknowledged_operation"
+          },
+          "samples": {
+            "repetition_ids": [
+              "0",
+              "1"
+            ],
+            "warmup_repetition_ids": [
+              "0"
+            ],
+            "aggregation": "none"
+          },
+          "comparison": {
+            "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+            "unit": "cycles",
+            "boundary": "operation_submission_to_acknowledged_completion",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "predeclared comparison policy for the pinned external validation campaign"
+          },
+          "clock_mappings": [
+            {
+              "reference": "tensix",
+              "simulator": "aci"
+            }
+          ],
+          "entity_mappings": [
+            {
+              "reference": "profiler_zone",
+              "simulator": "transfer:\"noc-64b\""
+            }
+          ]
+        }
+      ],
+      "producers": [
+        {
+          "producer_id": "ttsim-functional",
+          "outputs": [
+            {
+              "artifact_id": "noc-ttsim-functional",
+              "logical_path": "noc/ttsim-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "noc-ttsim-manifest",
+              "logical_path": "noc/ttsim-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        },
+        {
+          "producer_id": "wormhole-profiler",
+          "outputs": [
+            {
+              "artifact_id": "noc-wh-functional",
+              "logical_path": "noc/wormhole-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "noc-wh-profiler",
+              "logical_path": "noc/profile_log_device.csv",
+              "role": "profiler_csv"
+            },
+            {
+              "artifact_id": "noc-wh-manifest",
+              "logical_path": "noc/wormhole-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        }
+      ],
+      "budget": {
+        "repetitions": 2,
+        "warmup_repetitions": 1,
+        "timeout_seconds": 60,
+        "max_output_bytes": 131072
+      },
+      "required_evidence": [
+        "functional_reference",
+        "silicon_timing"
+      ]
+    },
+    {
+      "case_id": "dram-read-256b",
+      "family": "dram_read_return",
+      "simulator_input": {
+        "artifact_id": "sim-dram-read-256b",
+        "logical_path": "inputs/dram_read_return.json",
+        "sha256": "6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df",
+        "size_bytes": 226
+      },
+      "conditions": {
+        "architecture": {
+          "state": "known",
+          "value": "wormhole_b0"
+        },
+        "device": {
+          "state": "unknown",
+          "reason": "selected by the external worker"
+        },
+        "device_scope": {
+          "state": "known",
+          "value": "single_asic"
+        },
+        "profile_version": {
+          "state": "known",
+          "value": "wormhole_b0_n150_assumed"
+        },
+        "enabled_layout": {
+          "state": "known",
+          "value": {
+            "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+          }
+        },
+        "clocks": {
+          "state": "known",
+          "value": [
+            {
+              "domain_id": "tensix",
+              "hz": {
+                "state": "known",
+                "value": 1000000000
+              }
+            }
+          ]
+        },
+        "workload": {
+          "state": "known",
+          "value": {
+            "text": "{\"address\":4096,\"bytes\":256,\"completion\":\"worker_visible\",\"count\":1,\"operation\":\"dram_read\",\"pattern_seed\":7,\"pattern_stride\":29}"
+          }
+        },
+        "mapping": {
+          "state": "known",
+          "value": {
+            "text": "{\"destination\":\"worker-0\",\"destination_core\":[0,0],\"dram_bank\":0,\"resource_id\":\"dram-0\"}"
+          }
+        },
+        "software": {
+          "state": "known",
+          "value": "pinned-tt-metal-build"
+        },
+        "firmware": {
+          "state": "unknown",
+          "reason": "collected on the Wormhole worker"
+        },
+        "instrumentation": {
+          "state": "known",
+          "value": {
+            "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+          }
+        },
+        "measurement": {
+          "state": "unknown",
+          "reason": "selected by the interval registry in Part 2"
+        },
+        "capture_group": {
+          "state": "known",
+          "value": "dram-read-256b-group"
+        }
+      },
+      "boundary_maps": [
+        {
+          "boundary_id": "dram-service-window",
+          "case_family": "dram_read_return",
+          "producer_zone": "DRAM_READ_RETURN",
+          "simulator_boundary": "memory_service_begin_to_end",
+          "clock_domain": "tensix",
+          "completion_scope": "memory_service",
+          "simulator_interval": {
+            "metric_id": "memory_service_begin_to_end:dram-read-256b",
+            "boundary": "memory_service_begin_to_end",
+            "subject_id": "transfer:\"dram-read-256b\"",
+            "resource_id": "resource:\"dram-0\"",
+            "start_event_id": "service:dram-read-256b:begin",
+            "end_event_id": "service:dram-read-256b:end",
+            "semantic_scope": "memory_service"
+          },
+          "samples": {
+            "repetition_ids": [
+              "0",
+              "1"
+            ],
+            "warmup_repetition_ids": [
+              "0"
+            ],
+            "aggregation": "none"
+          },
+          "comparison": {
+            "metric_id": "memory_service_begin_to_end:dram-read-256b",
+            "unit": "cycles",
+            "boundary": "memory_service_begin_to_end",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "predeclared comparison policy for the pinned external validation campaign"
+          },
+          "clock_mappings": [
+            {
+              "reference": "tensix",
+              "simulator": "aci"
+            }
+          ],
+          "entity_mappings": [
+            {
+              "reference": "profiler_zone",
+              "simulator": "transfer:\"dram-read-256b\""
+            },
+            {
+              "reference": "profiler_resource",
+              "simulator": "resource:\"dram-0\""
+            }
+          ]
+        }
+      ],
+      "producers": [
+        {
+          "producer_id": "ttsim-functional",
+          "outputs": [
+            {
+              "artifact_id": "dram-ttsim-functional",
+              "logical_path": "dram/ttsim-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "dram-ttsim-manifest",
+              "logical_path": "dram/ttsim-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        },
+        {
+          "producer_id": "wormhole-profiler",
+          "outputs": [
+            {
+              "artifact_id": "dram-wh-functional",
+              "logical_path": "dram/wormhole-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "dram-wh-profiler",
+              "logical_path": "dram/profile_log_device.csv",
+              "role": "profiler_csv"
+            },
+            {
+              "artifact_id": "dram-wh-manifest",
+              "logical_path": "dram/wormhole-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        }
+      ],
+      "budget": {
+        "repetitions": 2,
+        "warmup_repetitions": 1,
+        "timeout_seconds": 60,
+        "max_output_bytes": 131072
+      },
+      "required_evidence": [
+        "functional_reference",
+        "silicon_timing"
+      ]
+    },
+    {
+      "case_id": "compute-bf16-32",
+      "family": "compute_service",
+      "simulator_input": {
+        "artifact_id": "sim-compute-bf16-32",
+        "logical_path": "inputs/compute_service.json",
+        "sha256": "41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c",
+        "size_bytes": 285
+      },
+      "conditions": {
+        "architecture": {
+          "state": "known",
+          "value": "wormhole_b0"
+        },
+        "device": {
+          "state": "unknown",
+          "reason": "selected by the external worker"
+        },
+        "device_scope": {
+          "state": "known",
+          "value": "single_asic"
+        },
+        "profile_version": {
+          "state": "known",
+          "value": "wormhole_b0_n150_assumed"
+        },
+        "enabled_layout": {
+          "state": "known",
+          "value": {
+            "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+          }
+        },
+        "clocks": {
+          "state": "known",
+          "value": [
+            {
+              "domain_id": "tensix",
+              "hz": {
+                "state": "known",
+                "value": 1000000000
+              }
+            }
+          ]
+        },
+        "workload": {
+          "state": "known",
+          "value": {
+            "text": "{\"data_type\":\"bf16\",\"fidelity\":\"hifi2\",\"input_layout\":\"tile\",\"operation\":\"matmul\",\"output_address\":16384,\"output_bytes\":2048,\"output_layout\":\"tile\",\"sentinel_elements\":16,\"sentinel_seed\":1,\"shape\":[32,32,32],\"work\":65536}"
+          }
+        },
+        "mapping": {
+          "state": "known",
+          "value": {
+            "text": "{\"output_resource\":\"worker-0-l1\",\"resource\":\"worker-0-tensix\",\"worker\":\"worker-0\",\"worker_core\":[0,0]}"
+          }
+        },
+        "software": {
+          "state": "known",
+          "value": "pinned-tt-metal-build"
+        },
+        "firmware": {
+          "state": "unknown",
+          "reason": "collected on the Wormhole worker"
+        },
+        "instrumentation": {
+          "state": "known",
+          "value": {
+            "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+          }
+        },
+        "measurement": {
+          "state": "unknown",
+          "reason": "selected by the interval registry in Part 2"
+        },
+        "capture_group": {
+          "state": "known",
+          "value": "compute-bf16-32-group"
+        }
+      },
+      "boundary_maps": [
+        {
+          "boundary_id": "compute-service-window",
+          "case_family": "compute_service",
+          "producer_zone": "COMPUTE_SERVICE",
+          "simulator_boundary": "compute_resource_acquire_to_release",
+          "clock_domain": "tensix",
+          "completion_scope": "compute_service",
+          "simulator_interval": {
+            "metric_id": "compute_resource_acquire_to_release:compute-bf16-32",
+            "boundary": "compute_resource_acquire_to_release",
+            "subject_id": "job:\"compute-bf16-32\"",
+            "resource_id": "resource:[\"worker-0\",\"compute\",0]",
+            "start_event_id": "compute-bf16-32:acquire",
+            "end_event_id": "compute-bf16-32:release",
+            "semantic_scope": "compute_service"
+          },
+          "samples": {
+            "repetition_ids": [
+              "0",
+              "1"
+            ],
+            "warmup_repetition_ids": [
+              "0"
+            ],
+            "aggregation": "none"
+          },
+          "comparison": {
+            "metric_id": "compute_resource_acquire_to_release:compute-bf16-32",
+            "unit": "cycles",
+            "boundary": "compute_resource_acquire_to_release",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "predeclared comparison policy for the pinned external validation campaign"
+          },
+          "clock_mappings": [
+            {
+              "reference": "tensix",
+              "simulator": "aci"
+            }
+          ],
+          "entity_mappings": [
+            {
+              "reference": "profiler_zone",
+              "simulator": "job:\"compute-bf16-32\""
+            },
+            {
+              "reference": "profiler_resource",
+              "simulator": "resource:[\"worker-0\",\"compute\",0]"
+            }
+          ]
+        }
+      ],
+      "producers": [
+        {
+          "producer_id": "ttsim-functional",
+          "outputs": [
+            {
+              "artifact_id": "compute-ttsim-functional",
+              "logical_path": "compute/ttsim-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "compute-ttsim-manifest",
+              "logical_path": "compute/ttsim-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        },
+        {
+          "producer_id": "wormhole-profiler",
+          "outputs": [
+            {
+              "artifact_id": "compute-wh-functional",
+              "logical_path": "compute/wormhole-functional.json",
+              "role": "functional_record"
+            },
+            {
+              "artifact_id": "compute-wh-profiler",
+              "logical_path": "compute/profile_log_device.csv",
+              "role": "profiler_csv"
+            },
+            {
+              "artifact_id": "compute-wh-manifest",
+              "logical_path": "compute/wormhole-manifest.json",
+              "role": "capture_manifest"
+            }
+          ]
+        }
+      ],
+      "budget": {
+        "repetitions": 2,
+        "warmup_repetitions": 1,
+        "timeout_seconds": 60,
+        "max_output_bytes": 131072
+      },
+      "required_evidence": [
+        "functional_reference",
+        "silicon_timing"
+      ]
+    }
+  ]
+}

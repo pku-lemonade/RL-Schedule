@@ -1,0 +1,33 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3968995618..cfb8b1e8a9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -370,3 +370,8 @@
+ if(TT_INSTALL)
+     include(packaging)
+ endif()
++
++add_subdirectory(
++    validation-producer
++    wormhole_external_validation
++)
+diff --git a/tt_metal/distributed/multihost/single_host_context.cpp b/tt_metal/distributed/multihost/single_host_context.cpp
+index 05d9a46218..851e7e19c8 100644
+--- a/tt_metal/distributed/multihost/single_host_context.cpp
++++ b/tt_metal/distributed/multihost/single_host_context.cpp
+@@ -76,7 +76,12 @@
+ void SingleHostContext::all_reduce(
+-    ttsl::Span<std::byte> send_buf [[maybe_unused]],
+-    ttsl::Span<std::byte> recv_buf [[maybe_unused]],
++    ttsl::Span<std::byte> send_buf,
++    ttsl::Span<std::byte> recv_buf,
+     ReduceOp op [[maybe_unused]],
+     DType dtype [[maybe_unused]]) const {
+-    TT_THROW("method all_reduce is unsupported for single-host distributed contexts.");
++    TT_FATAL(
++        recv_buf.size() == send_buf.size(),
++        "all_reduce: recv buffer {} bytes, expected {}",
++        recv_buf.size(),
++        send_buf.size());
++    std::memcpy(recv_buf.data(), send_buf.data(), send_buf.size());
+ }

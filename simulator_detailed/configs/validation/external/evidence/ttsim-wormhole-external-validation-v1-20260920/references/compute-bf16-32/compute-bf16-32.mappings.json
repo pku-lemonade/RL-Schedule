@@ -1,0 +1,60 @@
+{
+  "kind": "functional_identifier_mappings",
+  "schema_version": 1,
+  "reference_id": "external:compute-bf16-32:67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
+  "source_artifact_sha256": "67c4a3152132a10fc71de27ea2bb4da54e5b30d585364dae264f70a2c388fa48",
+  "entity_mappings": [
+    {
+      "reference": "operation",
+      "simulator": "job:\"compute-bf16-32\""
+    },
+    {
+      "reference": "worker",
+      "simulator": "worker-0"
+    },
+    {
+      "reference": "compute-resource",
+      "simulator": "resource:[\"worker-0\",\"compute\",0]"
+    },
+    {
+      "reference": "output-l1",
+      "simulator": "worker-0-l1"
+    }
+  ],
+  "event_mappings": [
+    {
+      "reference": "repetition:0:compute_resource_acquire",
+      "simulator": "repetition:0:compute-bf16-32:acquire"
+    },
+    {
+      "reference": "repetition:0:result_visible",
+      "simulator": "repetition:0:external:compute-bf16-32:result_visible"
+    },
+    {
+      "reference": "repetition:0:compute_resource_release",
+      "simulator": "repetition:0:compute-bf16-32:release"
+    },
+    {
+      "reference": "repetition:1:compute_resource_acquire",
+      "simulator": "repetition:1:compute-bf16-32:acquire"
+    },
+    {
+      "reference": "repetition:1:result_visible",
+      "simulator": "repetition:1:external:compute-bf16-32:result_visible"
+    },
+    {
+      "reference": "repetition:1:compute_resource_release",
+      "simulator": "repetition:1:compute-bf16-32:release"
+    }
+  ],
+  "effect_mappings": [
+    {
+      "reference": "repetition:0:effect",
+      "simulator": "repetition:0:effect:compute-bf16-32"
+    },
+    {
+      "reference": "repetition:1:effect",
+      "simulator": "repetition:1:effect:compute-bf16-32"
+    }
+  ]
+}

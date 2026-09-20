@@ -1,0 +1,14 @@
+{
+  "case_id": "dram-read-256b",
+  "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+  "functional_sha256": "2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c",
+  "input_sha256": "6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df",
+  "kind": "tt_metal_capture_manifest",
+  "max_output_bytes": 131072,
+  "recipe": "dram_read_return_v1",
+  "repetitions": 2,
+  "schema_version": 1,
+  "status": "pass",
+  "timeout_seconds": 60,
+  "warmup_repetitions": 1
+}

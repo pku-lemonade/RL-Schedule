@@ -1,0 +1,391 @@
+{
+  "kind": "ttsim_capture_kit",
+  "schema_version": 1,
+  "kit_id": "ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f",
+  "campaign": {
+    "artifact_id": "campaign",
+    "logical_path": "campaign.json",
+    "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
+    "size_bytes": 19200
+  },
+  "campaign_id": "wormhole-external-validation-v1-20260920",
+  "producer": {
+    "producer_id": "ttsim-functional",
+    "adapter": "ttsim_tt_metal_v1",
+    "build_id": "tt-metal-wormhole-pinned"
+  },
+  "build": {
+    "build_id": "tt-metal-wormhole-pinned",
+    "source_url": "https://github.com/tenstorrent/tt-metal",
+    "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
+    "source_snapshot_sha256": "b21803746332ef792157ddc26e33a1baba0664669fe331419899ed0d7450a169",
+    "configuration": {
+      "text": "{\"build_type\":\"release\",\"source_snapshot_method\":\"sha256(canonical_json({tt_metal_base_tree_sha256,worker_patch_sha256}))\",\"target_arch\":\"wormhole_b0\",\"tt_metal_base_tree_sha256\":\"b678cb541691a4ae1d5a388bac9c0518ab62b48a1f427383ff35b3eee9a7cc71\",\"worker_patch_sha256\":\"7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0\"}"
+    },
+    "artifacts": [
+      {
+        "artifact_id": "host-program",
+        "logical_path": "bin/wormhole_external_validation",
+        "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+        "size_bytes": 617464,
+        "role": "host_binary"
+      },
+      {
+        "artifact_id": "metalium-runtime",
+        "logical_path": "bin/runtime/libtt_metal.so",
+        "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+        "size_bytes": 29128744,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "ttsim-runtime",
+        "logical_path": "runtime/ttsim/libttsim_wh.so",
+        "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+        "size_bytes": 223264,
+        "role": "device_binary"
+      },
+      {
+        "artifact_id": "producer-sources",
+        "logical_path": "bin/wormhole_external_sources.json",
+        "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+        "size_bytes": 2280,
+        "role": "source_bundle"
+      }
+    ]
+  },
+  "binary_manifest": [
+    {
+      "artifact_id": "host-program",
+      "logical_path": "bin/wormhole_external_validation",
+      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+      "size_bytes": 617464,
+      "role": "host_binary"
+    },
+    {
+      "artifact_id": "metalium-runtime",
+      "logical_path": "bin/runtime/libtt_metal.so",
+      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+      "size_bytes": 29128744,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "ttsim-runtime",
+      "logical_path": "runtime/ttsim/libttsim_wh.so",
+      "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+      "size_bytes": 223264,
+      "role": "device_binary"
+    },
+    {
+      "artifact_id": "producer-sources",
+      "logical_path": "bin/wormhole_external_sources.json",
+      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+      "size_bytes": 2280,
+      "role": "source_bundle"
+    }
+  ],
+  "ttsim_source": {
+    "source_url": "https://github.com/tenstorrent/ttsim",
+    "revision": "40bb1a2ad6a755279c4628ddc65e30b10721fdef",
+    "source_snapshot_sha256": "92d33ef15728f17ed5488d28d24dac13550ef58d3b2da16c9fa8a63bd6bb69d0"
+  },
+  "files": [
+    {
+      "artifact_id": "campaign",
+      "logical_path": "campaign.json",
+      "sha256": "5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3",
+      "size_bytes": 19200,
+      "role": "campaign"
+    },
+    {
+      "artifact_id": "input:compute-bf16-32",
+      "logical_path": "inputs/compute-bf16-32.json",
+      "sha256": "41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c",
+      "size_bytes": 285,
+      "role": "case_input"
+    },
+    {
+      "artifact_id": "input:dram-read-256b",
+      "logical_path": "inputs/dram-read-256b.json",
+      "sha256": "6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df",
+      "size_bytes": 226,
+      "role": "case_input"
+    },
+    {
+      "artifact_id": "input:noc-64b",
+      "logical_path": "inputs/noc-64b.json",
+      "sha256": "f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88",
+      "size_bytes": 265,
+      "role": "case_input"
+    },
+    {
+      "artifact_id": "producer:BUILD.md",
+      "logical_path": "producer/BUILD.md",
+      "sha256": "025870a1e407e61ff054fc24fc157d4d58e19e93fdc8d633894d34fe3c1ef8b3",
+      "size_bytes": 929,
+      "role": "build_file"
+    },
+    {
+      "artifact_id": "producer:CMakeLists.txt",
+      "logical_path": "producer/CMakeLists.txt",
+      "sha256": "32e8f1607413d4e35aed687827b9ea6484352a2fec06599a6a0d7a95c1c2fb87",
+      "size_bytes": 638,
+      "role": "build_file"
+    },
+    {
+      "artifact_id": "producer:host:sha256.hpp",
+      "logical_path": "producer/host/sha256.hpp",
+      "sha256": "91332cb056cce9dbd01be5d57ba33f893929b485663613d85d37b40a1cb5b430",
+      "size_bytes": 4026,
+      "role": "host_source"
+    },
+    {
+      "artifact_id": "producer:host:wormhole_external_validation.cpp",
+      "logical_path": "producer/host/wormhole_external_validation.cpp",
+      "sha256": "a7f531dfab7a839094da374e0fe0ac66f8b70dc1efce49d6a7c45b4101e49963",
+      "size_bytes": 38042,
+      "role": "host_source"
+    },
+    {
+      "artifact_id": "producer:kernels:compute_reader.cpp",
+      "logical_path": "producer/kernels/compute_reader.cpp",
+      "sha256": "173b9c077670db208a31bb66f1cf0cc05e0945f152a85622102d72ebdb8dfaff",
+      "size_bytes": 934,
+      "role": "device_source"
+    },
+    {
+      "artifact_id": "producer:kernels:compute_service.cpp",
+      "logical_path": "producer/kernels/compute_service.cpp",
+      "sha256": "ac3ae8ffeb69d5fa243dc6c580b574461ebb6cddfdaa3bdd5ee1994e86fdf655",
+      "size_bytes": 1684,
+      "role": "device_source"
+    },
+    {
+      "artifact_id": "producer:kernels:compute_writer.cpp",
+      "logical_path": "producer/kernels/compute_writer.cpp",
+      "sha256": "be660123871a27139d188df7c6304d99e32ea9e5fc271987b577f7d7341c7b86",
+      "size_bytes": 463,
+      "role": "device_source"
+    },
+    {
+      "artifact_id": "producer:kernels:dram_read_return.cpp",
+      "logical_path": "producer/kernels/dram_read_return.cpp",
+      "sha256": "61d5bacf80ebc763e052c0174c16d8fe1e7cb8dccfd41a92e4d0cb9b89da24ea",
+      "size_bytes": 1346,
+      "role": "device_source"
+    },
+    {
+      "artifact_id": "producer:kernels:noc_ack_roundtrip.cpp",
+      "logical_path": "producer/kernels/noc_ack_roundtrip.cpp",
+      "sha256": "1f75d6393533a5d25a21aa5145a63c12c17a108ba8a9dc31e2905faef7b118e4",
+      "size_bytes": 1448,
+      "role": "device_source"
+    },
+    {
+      "artifact_id": "producer:patches:tt-metal-ttsim-single-rank.patch",
+      "logical_path": "producer/patches/tt-metal-ttsim-single-rank.patch",
+      "sha256": "7f8e51483c46d92f0cf272ae3901cf67add10c10d9d479adf4b3a26282e9bae0",
+      "size_bytes": 1206,
+      "role": "build_file"
+    },
+    {
+      "artifact_id": "producer:runtime:ttsim:soc_descriptor.yaml",
+      "logical_path": "runtime/ttsim/soc_descriptor.yaml",
+      "sha256": "9b40ef09a8e8b6e6187411e55e56ffea7ce28b87ead3b183642d50979ecd03c3",
+      "size_bytes": 2352,
+      "role": "runtime_config"
+    }
+  ],
+  "invocations": [
+    {
+      "invocation_id": "ttsim:noc-64b",
+      "recipe": "noc_ack_roundtrip_v1",
+      "case_id": "noc-64b",
+      "argv": [
+        "bin/wormhole_external_validation",
+        "--recipe",
+        "noc_ack_roundtrip_v1",
+        "--input",
+        "inputs/noc-64b.json",
+        "--functional-output",
+        "outputs/noc/ttsim-functional.json",
+        "--manifest-output",
+        "outputs/noc/ttsim-manifest.json",
+        "--repetitions",
+        "2",
+        "--warmup-repetitions",
+        "1",
+        "--timeout-seconds",
+        "60",
+        "--max-output-bytes",
+        "131072"
+      ],
+      "environment": [
+        {
+          "name": "TT_METAL_HOME",
+          "value": "vendor/tt-metal"
+        },
+        {
+          "name": "TT_METAL_SIMULATOR",
+          "value": "runtime/ttsim/libttsim_wh.so"
+        },
+        {
+          "name": "TT_METAL_SLOW_DISPATCH_MODE",
+          "value": "1"
+        },
+        {
+          "name": "TT_METAL_DISABLE_SFPLOADMACRO",
+          "value": "1"
+        }
+      ],
+      "repetition_ids": [
+        "0",
+        "1"
+      ],
+      "warmup_repetition_ids": [
+        "0"
+      ],
+      "timeout_seconds": 60.0,
+      "max_output_bytes": 131072,
+      "outputs": [
+        {
+          "artifact_id": "noc-ttsim-functional",
+          "logical_path": "outputs/noc/ttsim-functional.json",
+          "role": "functional_record"
+        },
+        {
+          "artifact_id": "noc-ttsim-manifest",
+          "logical_path": "outputs/noc/ttsim-manifest.json",
+          "role": "capture_manifest"
+        }
+      ]
+    },
+    {
+      "invocation_id": "ttsim:dram-read-256b",
+      "recipe": "dram_read_return_v1",
+      "case_id": "dram-read-256b",
+      "argv": [
+        "bin/wormhole_external_validation",
+        "--recipe",
+        "dram_read_return_v1",
+        "--input",
+        "inputs/dram-read-256b.json",
+        "--functional-output",
+        "outputs/dram/ttsim-functional.json",
+        "--manifest-output",
+        "outputs/dram/ttsim-manifest.json",
+        "--repetitions",
+        "2",
+        "--warmup-repetitions",
+        "1",
+        "--timeout-seconds",
+        "60",
+        "--max-output-bytes",
+        "131072"
+      ],
+      "environment": [
+        {
+          "name": "TT_METAL_HOME",
+          "value": "vendor/tt-metal"
+        },
+        {
+          "name": "TT_METAL_SIMULATOR",
+          "value": "runtime/ttsim/libttsim_wh.so"
+        },
+        {
+          "name": "TT_METAL_SLOW_DISPATCH_MODE",
+          "value": "1"
+        },
+        {
+          "name": "TT_METAL_DISABLE_SFPLOADMACRO",
+          "value": "1"
+        }
+      ],
+      "repetition_ids": [
+        "0",
+        "1"
+      ],
+      "warmup_repetition_ids": [
+        "0"
+      ],
+      "timeout_seconds": 60.0,
+      "max_output_bytes": 131072,
+      "outputs": [
+        {
+          "artifact_id": "dram-ttsim-functional",
+          "logical_path": "outputs/dram/ttsim-functional.json",
+          "role": "functional_record"
+        },
+        {
+          "artifact_id": "dram-ttsim-manifest",
+          "logical_path": "outputs/dram/ttsim-manifest.json",
+          "role": "capture_manifest"
+        }
+      ]
+    },
+    {
+      "invocation_id": "ttsim:compute-bf16-32",
+      "recipe": "compute_service_v1",
+      "case_id": "compute-bf16-32",
+      "argv": [
+        "bin/wormhole_external_validation",
+        "--recipe",
+        "compute_service_v1",
+        "--input",
+        "inputs/compute-bf16-32.json",
+        "--functional-output",
+        "outputs/compute/ttsim-functional.json",
+        "--manifest-output",
+        "outputs/compute/ttsim-manifest.json",
+        "--repetitions",
+        "2",
+        "--warmup-repetitions",
+        "1",
+        "--timeout-seconds",
+        "60",
+        "--max-output-bytes",
+        "131072"
+      ],
+      "environment": [
+        {
+          "name": "TT_METAL_HOME",
+          "value": "vendor/tt-metal"
+        },
+        {
+          "name": "TT_METAL_SIMULATOR",
+          "value": "runtime/ttsim/libttsim_wh.so"
+        },
+        {
+          "name": "TT_METAL_SLOW_DISPATCH_MODE",
+          "value": "1"
+        },
+        {
+          "name": "TT_METAL_DISABLE_SFPLOADMACRO",
+          "value": "1"
+        }
+      ],
+      "repetition_ids": [
+        "0",
+        "1"
+      ],
+      "warmup_repetition_ids": [
+        "0"
+      ],
+      "timeout_seconds": 60.0,
+      "max_output_bytes": 131072,
+      "outputs": [
+        {
+          "artifact_id": "compute-ttsim-functional",
+          "logical_path": "outputs/compute/ttsim-functional.json",
+          "role": "functional_record"
+        },
+        {
+          "artifact_id": "compute-ttsim-manifest",
+          "logical_path": "outputs/compute/ttsim-manifest.json",
+          "role": "capture_manifest"
+        }
+      ]
+    }
+  ],
+  "max_invocations": 12,
+  "max_total_output_bytes": 1600000
+}

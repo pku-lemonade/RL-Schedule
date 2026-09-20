@@ -1,0 +1,1 @@
+{"address":4096,"bytes":256,"case_family":"dram_read_return","completion":"worker_visible","count":1,"destination":"worker-0","destination_core":[0,0],"dram_bank":0,"pattern_seed":7,"pattern_stride":29,"resource_id":"dram-0"}

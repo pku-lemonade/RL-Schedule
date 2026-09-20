@@ -1,0 +1,217 @@
+{
+  "adapter": "ttsim_tt_metal_v1",
+  "binary_artifacts": [
+    {
+      "artifact_id": "host-program",
+      "logical_path": "bin/wormhole_external_validation",
+      "role": "host_binary",
+      "sha256": "12904c6aaf4099d2d1be9f2b2dcc420352c1fd878aed9cf05af1a013805bb923",
+      "size_bytes": 617464
+    },
+    {
+      "artifact_id": "metalium-runtime",
+      "logical_path": "bin/runtime/libtt_metal.so",
+      "role": "device_binary",
+      "sha256": "ea82789f3cb0573516edcac93c9841bb2c0915a91bb8feb14e35d800b8b836b4",
+      "size_bytes": 29128744
+    },
+    {
+      "artifact_id": "ttsim-runtime",
+      "logical_path": "runtime/ttsim/libttsim_wh.so",
+      "role": "device_binary",
+      "sha256": "cc5ccdbde14e92226a014e47167aaf02b5d8b7b3ad50f074eb9bb0bc7d084b50",
+      "size_bytes": 223264
+    },
+    {
+      "artifact_id": "producer-sources",
+      "logical_path": "bin/wormhole_external_sources.json",
+      "role": "source_bundle",
+      "sha256": "b915ee91b7250911408427fb5a00bd17ce835c77deb633df46858e21ea120488",
+      "size_bytes": 2280
+    }
+  ],
+  "build_id": "tt-metal-wormhole-pinned",
+  "case_family": "compute_service",
+  "case_id": "compute-bf16-32",
+  "enabled_layout": {
+    "text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"
+  },
+  "entities": [
+    {
+      "entity_id": "operation",
+      "role": "job",
+      "simulator_id": "job:\"compute-bf16-32\""
+    },
+    {
+      "entity_id": "worker",
+      "role": "worker",
+      "simulator_id": "worker-0"
+    },
+    {
+      "entity_id": "compute-resource",
+      "physical_owner": "worker",
+      "role": "resource",
+      "simulator_id": "resource:[\"worker-0\",\"compute\",0]"
+    },
+    {
+      "entity_id": "output-l1",
+      "physical_owner": "worker",
+      "role": "resource",
+      "simulator_id": "worker-0-l1"
+    }
+  ],
+  "input_artifact": {
+    "artifact_id": "sim-compute-bf16-32",
+    "logical_path": "inputs/compute_service.json",
+    "sha256": "41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c",
+    "size_bytes": 285
+  },
+  "instrumentation": {
+    "text": "{\"profiler\":\"sparse_same_risc_zone\"}"
+  },
+  "kind": "tt_metal_functional_record",
+  "mapping": {
+    "text": "{\"output_resource\":\"worker-0-l1\",\"resource\":\"worker-0-tensix\",\"worker\":\"worker-0\",\"worker_core\":[0,0]}"
+  },
+  "producer_id": "ttsim-functional",
+  "repetitions": [
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "worker",
+          "effect_id": "repetition:0:effect",
+          "offset_bytes": 16384,
+          "resource_id": "output-l1",
+          "simulator_effect_id": "repetition:0:effect:compute-bf16-32",
+          "size_bytes": 2048,
+          "visibility_event": "repetition:0:result_visible"
+        }
+      ],
+      "events": [
+        {
+          "action": "compute_resource_acquire",
+          "counters": [
+            {
+              "name": "work",
+              "scope": "planned",
+              "unit": "work",
+              "value": 65536
+            }
+          ],
+          "event_id": "repetition:0:compute_resource_acquire",
+          "sequence": 0,
+          "simulator_event_id": "repetition:0:compute-bf16-32:acquire",
+          "subject_id": "operation"
+        },
+        {
+          "action": "result_visible",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 2048
+            }
+          ],
+          "event_id": "repetition:0:result_visible",
+          "sequence": 1,
+          "simulator_event_id": "repetition:0:external:compute-bf16-32:result_visible",
+          "subject_id": "operation"
+        },
+        {
+          "action": "compute_resource_release",
+          "counters": [
+            {
+              "name": "work",
+              "scope": "observed",
+              "unit": "work",
+              "value": 65536
+            }
+          ],
+          "event_id": "repetition:0:compute_resource_release",
+          "sequence": 2,
+          "simulator_event_id": "repetition:0:compute-bf16-32:release",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "0",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "803f004040408040a040c040e040004110412041304140415041604170418041",
+      "sentinel_sha256": "ce5da8c6917072b81c626a4354209c1b1425ab7da7aaa488cdbfc2f1a96f9d9f",
+      "status": "pass"
+    },
+    {
+      "completion_marker": "WORMHOLE_EXTERNAL_COMPLETE_V1",
+      "effects": [
+        {
+          "count": 1,
+          "destination_id": "worker",
+          "effect_id": "repetition:1:effect",
+          "offset_bytes": 16384,
+          "resource_id": "output-l1",
+          "simulator_effect_id": "repetition:1:effect:compute-bf16-32",
+          "size_bytes": 2048,
+          "visibility_event": "repetition:1:result_visible"
+        }
+      ],
+      "events": [
+        {
+          "action": "compute_resource_acquire",
+          "counters": [
+            {
+              "name": "work",
+              "scope": "planned",
+              "unit": "work",
+              "value": 65536
+            }
+          ],
+          "event_id": "repetition:1:compute_resource_acquire",
+          "sequence": 0,
+          "simulator_event_id": "repetition:1:compute-bf16-32:acquire",
+          "subject_id": "operation"
+        },
+        {
+          "action": "result_visible",
+          "counters": [
+            {
+              "name": "bytes",
+              "scope": "observed",
+              "unit": "bytes",
+              "value": 2048
+            }
+          ],
+          "event_id": "repetition:1:result_visible",
+          "sequence": 1,
+          "simulator_event_id": "repetition:1:external:compute-bf16-32:result_visible",
+          "subject_id": "operation"
+        },
+        {
+          "action": "compute_resource_release",
+          "counters": [
+            {
+              "name": "work",
+              "scope": "observed",
+              "unit": "work",
+              "value": 65536
+            }
+          ],
+          "event_id": "repetition:1:compute_resource_release",
+          "sequence": 2,
+          "simulator_event_id": "repetition:1:compute-bf16-32:release",
+          "subject_id": "operation"
+        }
+      ],
+      "repetition_id": "1",
+      "sentinel_algorithm": "sha256",
+      "sentinel_payload_hex": "803f004040408040a040c040e040004110412041304140415041604170418041",
+      "sentinel_sha256": "ce5da8c6917072b81c626a4354209c1b1425ab7da7aaa488cdbfc2f1a96f9d9f",
+      "status": "pass"
+    }
+  ],
+  "schema_version": 1,
+  "workload": {
+    "text": "{\"data_type\":\"bf16\",\"fidelity\":\"hifi2\",\"input_layout\":\"tile\",\"operation\":\"matmul\",\"output_address\":16384,\"output_bytes\":2048,\"output_layout\":\"tile\",\"sentinel_elements\":16,\"sentinel_seed\":1,\"shape\":[32,32,32],\"work\":65536}"
+  }
+}

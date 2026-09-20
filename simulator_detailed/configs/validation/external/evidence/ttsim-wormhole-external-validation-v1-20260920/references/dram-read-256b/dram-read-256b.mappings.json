@@ -1,0 +1,64 @@
+{
+  "kind": "functional_identifier_mappings",
+  "schema_version": 1,
+  "reference_id": "external:dram-read-256b:2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c",
+  "source_artifact_sha256": "2ebf5cfaa6a1eb1c248ea42115b2c5738ff3a54df6b0dbf9440585d73aa40f1c",
+  "entity_mappings": [
+    {
+      "reference": "operation",
+      "simulator": "transfer:\"dram-read-256b\""
+    },
+    {
+      "reference": "destination",
+      "simulator": "worker-0"
+    },
+    {
+      "reference": "dram",
+      "simulator": "resource:\"dram-0\""
+    }
+  ],
+  "event_mappings": [
+    {
+      "reference": "repetition:0:submission",
+      "simulator": "repetition:0:external:dram-read-256b:submission"
+    },
+    {
+      "reference": "repetition:0:memory_service_begin",
+      "simulator": "repetition:0:service:dram-read-256b:begin"
+    },
+    {
+      "reference": "repetition:0:memory_service_end",
+      "simulator": "repetition:0:service:dram-read-256b:end"
+    },
+    {
+      "reference": "repetition:0:worker_visible_completion",
+      "simulator": "repetition:0:external:dram-read-256b:worker_visible_completion"
+    },
+    {
+      "reference": "repetition:1:submission",
+      "simulator": "repetition:1:external:dram-read-256b:submission"
+    },
+    {
+      "reference": "repetition:1:memory_service_begin",
+      "simulator": "repetition:1:service:dram-read-256b:begin"
+    },
+    {
+      "reference": "repetition:1:memory_service_end",
+      "simulator": "repetition:1:service:dram-read-256b:end"
+    },
+    {
+      "reference": "repetition:1:worker_visible_completion",
+      "simulator": "repetition:1:external:dram-read-256b:worker_visible_completion"
+    }
+  ],
+  "effect_mappings": [
+    {
+      "reference": "repetition:0:effect",
+      "simulator": "repetition:0:effect:dram-read-256b"
+    },
+    {
+      "reference": "repetition:1:effect",
+      "simulator": "repetition:1:effect:dram-read-256b"
+    }
+  ]
+}
