@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Self
 
 import simpy
-from pydantic import Field, model_validator
+from pydantic import Field, StrictBool, field_validator, model_validator
 from simpy.events import Event, ProcessGenerator
 
 from .configs.schemas.memory_replay import MemoryOperation, MemoryRange, MemoryVersion
@@ -89,6 +89,9 @@ class MulticastExecutionResult(GraphRecord):
     kind: Literal["multicast_sync_result"] = "multicast_sync_result"
     schema_version: int = Field(strict=True, ge=1, le=1, default=1)
     execution_supported: Literal[True] = True
+    execution_policy: Literal["shared_finite_multicast_v1"] = "shared_finite_multicast_v1"
+    numerical_execution: Literal["unsupported"] = "unsupported"
+    silicon_timing: Literal["unvalidated"] = "unvalidated"
     plan: MulticastSyncPlanRecord
     configuration: MulticastSyncWorkload
     status: Literal["complete", "incomplete"]
@@ -105,7 +108,7 @@ class MulticastExecutionResult(GraphRecord):
     chunks: tuple[MemoryChunkRecord, ...]
     descriptors: tuple[MixedDescriptorState, ...]
     descriptor_trace: tuple[MixedDescriptorEvent, ...]
-    teardown_complete: bool
+    teardown_complete: StrictBool
     source_useful_bytes: Index
     destination_useful_bytes: Index
     physical_channel_bytes: Index
@@ -113,6 +116,13 @@ class MulticastExecutionResult(GraphRecord):
     scalar_service: tuple[ScalarServiceRecord, ...] = ()
     inbox_values: tuple[tuple[Identifier, int], ...] = ()
     compute: MixedComputeSnapshot | None = None
+
+    @field_validator("execution_supported", mode="before")
+    @classmethod
+    def strict_execution(cls, value: object) -> object:
+        if type(value) is not bool:
+            raise ValueError("execution_supported requires a boolean")
+        return value
 
     @model_validator(mode="after")
     def conserved(self) -> Self:
@@ -636,7 +646,7 @@ class MulticastMemoryRuntime:
         if self._final is not None:
             return self._final
         horizon = self.config.memory.max_aci_cycles if max_aci_cycles is None else max_aci_cycles
-        if not math.isfinite(horizon) or horizon <= self.env.now:
+        if isinstance(horizon, bool) or not math.isfinite(horizon) or horizon <= self.env.now:
             raise ValueError("mixed horizon must be finite and later than current time")
         while self.env.peek() != float("inf") and self.env.peek() <= horizon:
             self.env.step()

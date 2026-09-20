@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from simulator_detailed.configs.schemas.memory_replay import MemoryVersion
+from simulator_detailed.memory_resources import MemoryAccess
 from simulator_detailed.mixed_compute_runtime import (
     LocalOperationCapability,
     MixedComputeComponent,
@@ -72,6 +74,29 @@ def pipeline_document():
 
 
 class MixedComputeTests(unittest.TestCase):
+    def test_idle_wait_retains_state_and_resumes_after_external_lease_release(self):
+        doc, graph = pipeline_document()
+        runtime = MulticastMemoryRuntime(compile_document(doc, graph))
+        handle = runtime.memory.handles['b-ep-t0_1']
+        owner = runtime.memory.resources[handle.buffer.resource_id]
+        lease = owner.try_acquire(handle, MemoryAccess(client_id='external-reader', direction='read',
+            offset_bytes=128, size_bytes=32, version=MemoryVersion(kind='initial')))
+        self.assertIsNotNone(lease)
+        partial = runtime.run()
+        self.assertEqual((partial.status, partial.reason), ('incomplete', 'idle_with_pending'))
+        self.assertFalse(partial.teardown_complete)
+        self.assertEqual(partial.counters[0].value, 0)
+        self.assertTrue(any(r.reserved_bytes for r in partial.memory_resources))
+        self.assertTrue(all(not r.occupied for r in partial.compute.resources))
+        self.assertTrue(all(not s.occupied for s in partial.compute.slots))
+        self.assertFalse(any(e.action == 'wait_release' for e in partial.lifecycle))
+        self.assertTrue(all(not d.occupied for d in partial.descriptors))
+        owner.release_access(lease)
+        result = runtime.run()
+        self.assertEqual((result.status, result.counters[0].value), ('complete', 4))
+        self.assertIs(runtime.run(), result)
+        self.assertTrue(all(not r.reserved_bytes for r in result.released_resources))
+
     def test_two_rounds_slot_reuse_shared_service_and_causal_collection(self):
         doc, graph = pipeline_document()
         plan = compile_document(doc, graph)

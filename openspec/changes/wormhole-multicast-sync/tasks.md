@@ -7,6 +7,7 @@
 > Canonical memory integration completes Part 3 (15/35).
 > Shared scalar service and local waits complete Part 4 (20/35).
 > Attached finite compute and representative fixtures complete Part 5 (25/35).
+> Independent shared-runtime audits and public CLI complete Part 6 (30/35).
 > Reopened scalar/compute items retain their implementation for repair;
 > their specified scope has not been reduced. See [implementation-audit.md](implementation-audit.md).
 
@@ -52,11 +53,11 @@
 
 ## 6. Independent audits, CLI and compatibility gates (MS-11..12)
 
-- [ ] 6.1 Add harness adapter `multicast_sync_v1`, bounded case admission/runner support and lossless tree/destination/scalar normalization. Preserve old validation documents and legacy result/digest serialization by omitting unused optional extensions; verify plan/source/input identities include the new mechanisms while calibration target allowlists remain unchanged.
-- [ ] 6.2 Implement independent input/event oracles for recipient resolution, approach/spine/branch edges, segment/control/shared-channel bytes, canonical memory service, scalar transitions, local observations, causal release and full ownership/drain. Add corruption tests for missing/duplicate recipients, uncharged prefix/control traffic, false source inclusion, duplicate updates, early returns/releases, stale generations and leaked reservations despite plausible summary totals.
-- [ ] 6.3 Add `replay_multicast_sync.py` with `--workload`/optional `--output`, atomic publication, JSON stdout, diagnostic stderr, protected input assets and exits 0 complete / 1 incomplete / 2 invalid/error. Exercise the real CLI for generic/Wormhole/partial/invalid fixtures and make the new finite harness suite runnable through `validate_wormhole` with enforced budgets.
-- [ ] 6.4 Update detailed docs/index, scoped hardware capability reporting and detailed predictor/encoder guards for the new kinds. Explain supported rectangles/counters, assumptions, completion and reservation limits; test rejection before optional ML work and unchanged 7-D/4-D features, root four-coordinate RL actions and checkpoints. Keep legacy cases scoped and functional/silicon evidence unvalidated without actual captures.
-- [ ] 6.5 Run adapter/oracle/CLI/consumer tests, old validation suites and published CLI examples, strict Pyright and scoped Ruff. Review report identity, actual supported subset and corruption-test independence; record outcomes and commit Part 6 before Part 7.
+- [x] 6.1 Add harness adapter `multicast_sync_v1`, bounded case admission/runner support and lossless tree/destination/scalar normalization. Preserve old validation documents and legacy result/digest serialization by omitting unused optional extensions; verify plan/source/input identities include the new mechanisms while calibration target allowlists remain unchanged.
+- [x] 6.2 Implement independent input/event oracles for recipient resolution, approach/spine/branch edges, segment/control/shared-channel bytes, canonical memory service, scalar transitions, local observations, causal release and full ownership/drain. Add corruption tests for missing/duplicate recipients, uncharged prefix/control traffic, false source inclusion, duplicate updates, early returns/releases, stale generations and leaked reservations despite plausible summary totals.
+- [x] 6.3 Add `replay_multicast_sync.py` with `--workload`/optional `--output`, atomic publication, JSON stdout, diagnostic stderr, protected input assets and exits 0 complete / 1 incomplete / 2 invalid/error. Exercise the real CLI for generic/Wormhole/partial/invalid fixtures and make the new finite harness suite runnable through `validate_wormhole` with enforced budgets.
+- [x] 6.4 Update detailed docs/index, scoped hardware capability reporting and detailed predictor/encoder guards for the new kinds. Explain supported rectangles/counters, assumptions, completion and reservation limits; test rejection before optional ML work and unchanged 7-D/4-D features, root four-coordinate RL actions and checkpoints. Keep legacy cases scoped and functional/silicon evidence unvalidated without actual captures.
+- [x] 6.5 Run adapter/oracle/CLI/consumer tests, old validation suites and published CLI examples, strict Pyright and scoped Ruff. Review report identity, actual supported subset and corruption-test independence; record outcomes and commit Part 6 before Part 7.
 
 ## 7. Consolidated evidence and umbrella-audit handoff (MS-01..12)
 

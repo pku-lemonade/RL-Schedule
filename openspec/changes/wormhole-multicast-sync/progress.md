@@ -3,12 +3,55 @@
 > Correction on 2026-09-18: the Part 1–5 entries below are historical records
 > of committed prototype work, not proof that their full task scope was met.
 > The [implementation audit](implementation-audit.md) supersedes those completion
-> claims. Shared transport/memory/compute execution and retained resume remain
-> incomplete. The initial correction retained 2/35 tasks; the subsequent tree
+> claims. Those gaps have now been repaired through Parts 1–6; final consolidated
+> acceptance evidence remains for Part 7. The checkpoints below are historical. The initial correction retained 2/35 tasks; the subsequent tree
 > repair brought the checklist to 3/35. The mixed-admission repair below
 > completes Part 1. Shared tree transport now completes Part 2: 10/35
 > verified at that checkpoint. Canonical memory now completes Part 3:
 > 15/35 verified; scalar/compute integration remains open.
+
+## Independent audits and public mixed replay — 2026-09-20
+
+Tasks 6.1–6.5 are complete (30/35). Runtime-configured multicast inputs now
+execute the shared retained session through the replay CLI and harness adapter.
+Admission-only and legacy serial inputs retain their explicitly scoped behavior.
+The CLI binds real profiles, protects input/output aliases, publishes atomically
+and returns 0/1/2 for complete/incomplete/invalid. Case budgets and interruption
+points are enforced before execution. Result plans must equal admitted identities.
+
+Independent oracles derive trees, packet/control hops, bytes, service granules,
+clock costs, scalar FIFO transitions, return values, local full-range readiness,
+compute costs/generations and ownership lifetimes from declared input and events.
+They import no production routing/cost/runtime helper. Normalization retains
+original event details, exact integers, service intervals and live snapshots.
+Corruption tests cover plausible byte totals with missing/duplicated physical
+traffic, wrong recipients, early publication/return/barriers, stale generations,
+duplicate atomic effects and ownership leaks hidden by clean summaries.
+
+Three bounded suites cover analytical traffic, two-round pipelines, opposite
+fabric coordinates, slowed mixed clocks and actual assumed Wormhole profile
+binding. Reports expose only the observed runtime capabilities; old report
+contracts/calibration allowlists are unchanged. Numerical execution, vendor
+functional reference and silicon timing remain unsupported or unvalidated as
+appropriate. Documentation describes configured policy assumptions and the
+continued explicit scope of legacy serial projections.
+
+Checks:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_multicast_validation simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_calibration -q` — 111 passed in 113.004 s.
+* After adding identity/strict-result and idle-wait resume checks,
+  `.venv/bin/python -m unittest simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_mixed_compute_runtime simulator_detailed.tests.test_topology_consumers simulator_detailed.tests.test_memory_adapters simulator_detailed.tests.test_compute_adapters -q` — 40 tests in 18.799 s: 39 passed, one optional ML dependency skip.
+* Strict Pyright — 0 errors/warnings/informations. Scoped Ruff over validation,
+  changed replay/plan/runtime/schema modules, consumer guard and validation/mixed
+  tests — passed after sorting one added test import. Strict OpenSpec and
+  `git diff --check` passed.
+
+An initial consumer command named nonexistent `test_compute_consumers`; the
+corrected passing command uses `test_compute_adapters`. An earlier oracle command
+also named nonexistent `test_validation_oracles`; the recorded commands above
+cover the actual independent audit tests. A report test initially expected
+`complete` instead of the documented aggregate `pass` and was corrected. No
+production failure was hidden by those command/test corrections. No push.
 
 ## Attached mixed compute and representative fixtures — 2026-09-20
 

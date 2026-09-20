@@ -1,34 +1,15 @@
 # Implementation audit — 2026-09-18
 
-The multicast child is **not delivered**. The earlier 25 checked tasks were
-not supported by their specified runtime behavior. Parts 1–5 contain useful
-schema, tree and analytical prototypes, but these do not implement the approved
-shared transport/memory/compute design. This correction preserves that design
-and reopens the incomplete tasks instead of reducing their acceptance criteria.
-The correction initially retained the reproduced baseline (1.1) and Part 1
-check/commit boundary (1.5). The subsequent tree-admission repair verifies 1.3:
-**25/35 fully verified tasks** after the 2026-09-20 admission and shared-transport repairs. The validation predecessor remains delivered.
+The historical prototype audit below reopened overstated checkmarks. Its runtime
+gaps have since been repaired and verified in Parts 1–6: **30/35 tasks**. The
+shared runtime, scalar/memory/compute integration, retained resume, real profile
+fixtures, CLI and independent audits now exist. Part 7 will replace the historical
+scenario table with consolidated current evidence. The child is not yet claimed
+delivered; the validation predecessor remains delivered.
 
-The tree compiler now uses selected-fabric coordinates, validates the common
-physical target address, rejects unavailable workers and duplicate aliases,
-and inventories parent/child/ejection/terminal stages. Admission also reuses
-canonical memory binding and reservation/service checks, normalizes source
-identity without locator paths, rejects forged plan inventories and validates
-profile scalar/packet contracts. These are pure admission improvements, not
-evidence of shared execution. Tasks 1.2 and 1.4 now include explicit mixed hardware/control settings,
-return-path/responder inventory and initial access/version/phase dependency
-admission. Runtime integration and the acceptance evidence below remain open.
-
-The new `multicast_network.py` / `tree_runtime.py` path now executes real shared
-links/router stages, finite credits/replication/reservations, both fabrics,
-ordinary request/response contention and retained resume. The old serial
-prototype modules described below still back the old CLI until Part 6 and must
-not be confused with this new path. Part 3 now attaches canonical memory hooks, addressed ordinary clients, real
-acknowledgements, retained service/lease state and exactly-once finalization
-through `MulticastMemoryRuntime`. Part 4 now adds shared addressed atomic service, actual control transport and
-charged race-safe local waits. Part 5 now attaches real finite compute, generation lifetimes and representative
-profile/generic fixtures. CLI/adapter integration and final acceptance review
-remain open.
+The findings and scenario table below describe the pre-repair serial prototypes,
+which remain explicitly scoped for old inputs. They are not the current shared
+runtime behavior. See the dated repair/check records in [progress.md](progress.md).
 
 ## Concrete findings
 

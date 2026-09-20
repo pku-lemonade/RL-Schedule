@@ -11,8 +11,8 @@ Wormhole transport binding. [Addressed memory replay](memory_transactions.md) ad
 explicit reads/writes, shared memory service, local clients and ordering.
 [Finite compute workloads](compute_dataflow.md) execute configured FC/matmul
 costs with transaction-backed readers/writers and bounded overlapping streams.
-[Multicast and synchronization](multicast_sync.md) are under development;
-the current serial prototypes do not yet implement shared runtime resources.
+[Finite multicast and local synchronization](multicast_sync.md) compose bounded
+rectangle trees, scalar counters, local waits and compute on shared resources.
 Numerical/kernel execution, general Wormhole workloads and silicon timing
 calibration remain unvalidated. The [validation harness](validation.md) adds
 independent offline audits, explicit reference import and synthetic bounded
@@ -24,7 +24,7 @@ calibration demonstrations.
 - [Version-2 torus transport, examples and limitations](torus_transport.md)
 - [Addressed memory replay, accounting and limits](memory_transactions.md)
 - [Finite compute workloads, examples and compatibility](compute_dataflow.md)
-- [Multicast development status, limits and prototype CLI](multicast_sync.md)
+- [Finite multicast, synchronization, shared runtime and validation](multicast_sync.md)
 - [Validation, evidence tiers, reference import and calibration](validation.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)

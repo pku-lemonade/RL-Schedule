@@ -24,7 +24,7 @@ def _configuration(configuration: Data) -> tuple[Data, Data]:
     return workload, obj(workload["memory"])
 
 
-def _tree(write: Data, graph: Data) -> tuple[set[str], set[str]]:
+def expected_tree(write: Data, graph: Data) -> tuple[set[str], set[str]]:
     """Reconstruct a corner rectangle directly from coordinates and endpoints."""
     fabric = integer(write["fabric_id"])
     routers = {text(router["router_id"]): router for router in rows(graph["routers"])
@@ -74,7 +74,7 @@ def _tree(write: Data, graph: Data) -> tuple[set[str], set[str]]:
                 or not y0 <= integer(coord["y"]) <= y1):
             continue
         endpoints = [endpoint for endpoint in attachments
-                     if endpoint["router_id"] == router["router_id"] and endpoint["role"] == "compute"]
+                     if endpoint["router_id"] == router["router_id"] and (endpoint["role"] == "compute" or (endpoint["role"] == "network" and obj(graph["origin"])["kind"] == "hardware_profile"))]
         require(len(endpoints) == 1, "missing or aliased worker recipient")
         endpoint = endpoints[0]
         require(endpoint["enabled"] is True and endpoint["replay_enabled"] is True,
@@ -101,7 +101,7 @@ def _audit_trees(raw: Data, workload: Data, memory: Data, graph: Data) -> None:
         for operation_id in selected:
             require(operation_id in writes, "undeclared multicast operation")
             write = writes[operation_id]
-            links, recipients = _tree(write, graph)
+            links, recipients = expected_tree(write, graph)
             require(recipients == {text(destination["endpoint_id"]) for destination in rows(write["destinations"])},
                     "input destinations differ from rectangle workers")
             for segment, offset in enumerate(range(0, integer(write["size_bytes"]), segment_size)):
@@ -196,6 +196,10 @@ def _audit_scalar(raw: Data, workload: Data, memory: Data) -> None:
 
 
 def audit_multicast(check: str, raw: Data, configuration: Data, graph: Data) -> None:
+    if raw.get("kind") == "multicast_sync_result":
+        from .mixed import audit_mixed
+        audit_mixed(check, raw, configuration, graph)
+        return
     workload, memory = _configuration(configuration)
     if check in {"multicast", "routing", "packet_accounting"}:
         _audit_trees(raw, workload, memory, graph)

@@ -155,6 +155,9 @@ def _normalize_multicast(admission: Admission, raw: Data) -> NormalizedObservati
 
 
 def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
+    if admission.adapter == "multicast_sync_v1" and raw.get("kind") == "multicast_sync_result":
+        from .mixed_normalize import normalize_mixed
+        return normalize_mixed(raw, admission.configuration)
     if admission.adapter == "multicast_sync_v1":
         return _normalize_multicast(admission, raw)
     state = execution(raw)

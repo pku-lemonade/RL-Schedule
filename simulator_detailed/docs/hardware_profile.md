@@ -277,3 +277,8 @@ HP-03 scheduling and compute/validation-harness requirements remain pending;
 transport and memory delivery are documented in their separately scoped children.
 VA evidence begins here, but measured accuracy remains unavailable. Each completed, validated part is committed before continuing to the next part.
 Spec synchronization, archival and push are separate requested actions.
+
+The opt-in [finite multicast runtime](multicast_sync.md) has a separate scoped
+Wormhole B0 example and harness capability report. Profile inventory inspection
+does not itself enable multicast, scalar execution or calibrated timing. Its
+existing serialized capability contract is unchanged.

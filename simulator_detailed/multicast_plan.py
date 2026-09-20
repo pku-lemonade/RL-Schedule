@@ -184,8 +184,11 @@ class MulticastSyncPlan:
         )
 
     def require_executable(self) -> None:
+        self.revalidate()
+        if self.workload.runtime is not None and self.record.inventory is not None:
+            return
         raise RuntimeError(
-            "multicast/synchronization planning is admission-only in this child; "
+            "multicast/synchronization planning is admission-only without runtime settings; "
             "runtime execution is intentionally not enabled"
         )
 

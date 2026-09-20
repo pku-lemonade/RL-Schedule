@@ -38,6 +38,7 @@ def case_capabilities(admitted: Admission, case: CaseResult) -> CaseCapabilities
     if case.identity is None:
         raise ValueError("capability report requires admitted identity")
     metadata = model_metadata(admitted)
+    mixed = admitted.adapter == "multicast_sync_v1" and admitted.configuration.get("runtime") is not None
     mechanisms = [admitted.adapter]
     if admitted.adapter in {"torus_replay_v2", "memory_replay_v1", "compute_workload_v1"}:
         mechanisms += ["bounded_unicast", "credit_flow"]
@@ -46,11 +47,17 @@ def case_capabilities(admitted: Admission, case: CaseResult) -> CaseCapabilities
     if admitted.adapter == "compute_workload_v1":
         mechanisms += ["abstract_compute_cost", "bounded_stream_overlap"]
     if admitted.adapter == "multicast_sync_v1":
-        mechanisms += ["rectangle_tree_planning", "serial_multicast_projection"]
+        mechanisms += (["rectangle_multicast", "shared_physical_transport", "addressed_memory", "shared_l1_atomics",
+                        "local_threshold_waits", "retained_resume"] if mixed else
+                       ["rectangle_tree_planning", "serial_multicast_projection"])
+        if mixed and admitted.configuration.get("compute") is not None:
+            mechanisms += ["abstract_compute_cost", "bounded_stream_overlap", "slot_generations"]
     faults = has_faults(admitted.configuration)
     assumptions = ["Rates, capacities, layout and clock domains are taken from the admitted effective plan.",
                    "Finite scheduling/traffic observations do not execute tensor values or device kernels."]
-    if admitted.adapter == "multicast_sync_v1":
+    if mixed:
+        assumptions.append("Atomic tree reservation and per-class endpoint storage are configured finite model policies; silicon timing is unvalidated.")
+    elif admitted.adapter == "multicast_sync_v1":
         assumptions.append("The child is a prototype: shared transport/memory/compute service and retained runtime resume are not implemented.")
     if faults:
         assumptions.append("Configured faults are simulation experiments; a passing model audit does not establish measured fault behavior.")
@@ -62,7 +69,8 @@ def case_capabilities(admitted: Admission, case: CaseResult) -> CaseCapabilities
         clocks=case.observations[-1].clocks if case.observations else (),
         effective_plan_sha256=case.identity.effective_plan_sha256,
         simulation_fault_experiment=faults, assumptions=tuple(assumptions),
-        unsupported=("tensor_values", "kernel_execution", "multi_asic", "shared_multicast_runtime", "scalar_network",
+        unsupported=("tensor_values", "kernel_execution", "multi_asic", "arbitrary_multicast", "general_atomics") if mixed else
+                    ("tensor_values", "kernel_execution", "multi_asic", "shared_multicast_runtime", "scalar_network",
                      "shared_l1_atomics", "pipeline_generations", "retained_resume") if admitted.adapter == "multicast_sync_v1" else
                     ("tensor_values", "kernel_execution", "multicast", "synchronization", "multi_asic"),
     )
@@ -94,7 +102,8 @@ def requirement_coverage(suite: ValidationSuite, cases: tuple[CaseResult, ...],
             "Coverage is limited to these executed outcomes; complete acceptance and predecessor evidence are mapped in the child delivery document."
             + (" Source has local or unknown changes; no committed implementation is asserted." if not commits else ""),
         ))
-    for mechanism in ("multicast", "synchronization"):
+    mixed_observed = any(case.adapter == "multicast_sync_v1" and any(e.event_id == "snapshot" for o in case.observations for e in o.events) for case in cases)
+    for mechanism in (() if mixed_observed else ("multicast", "synchronization")):
         coverage.append(RequirementCoverage(requirement_id=f"pending_{mechanism}", status="pending", checks=(), child_commits=(),
                                             reason="The complete shared runtime remains pending in wormhole-multicast-sync; prototype checks do not establish delivery."))
     return tuple(coverage)

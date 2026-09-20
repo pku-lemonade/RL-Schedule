@@ -1,0 +1,170 @@
+{
+  "kind": "validation_suite",
+  "schema_version": 1,
+  "suite_id": "multicast_wormhole",
+  "max_cases": 1,
+  "cases": [
+    {
+      "case_id": "wormhole_b0_mixed_assumed",
+      "adapter": "multicast_sync_v1",
+      "input_path": "../multicast_workloads/wormhole_b0_mixed_assumed.json",
+      "budget": {
+        "wall_time_seconds": 30,
+        "max_aci_cycles": 10000
+      },
+      "expected_execution": "complete",
+      "resume_at_aci_cycles": [
+        15,
+        35,
+        60
+      ],
+      "checks": [
+        {
+          "check_id": "expected_execution",
+          "check": "expected_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "bounded_execution",
+          "check": "bounded_execution",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "routing",
+          "check": "routing",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "multicast",
+          "check": "multicast",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "packet_accounting",
+          "check": "packet_accounting",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "memory_service",
+          "check": "memory_service",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "ownership",
+          "check": "ownership",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "synchronization",
+          "check": "synchronization",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "causality",
+          "check": "causality",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "compute_work",
+          "check": "compute_work",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        },
+        {
+          "check_id": "drain",
+          "check": "drain",
+          "required": true,
+          "tier": "model_invariant",
+          "requirements": [
+            "MS-11",
+            "MS-12",
+            "TR-05",
+            "MT-06",
+            "VA-04"
+          ]
+        }
+      ]
+    }
+  ],
+  "gates": [],
+  "references": []
+}

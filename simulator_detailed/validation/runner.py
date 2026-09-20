@@ -169,6 +169,8 @@ def run_suite(path: Path) -> ValidationReport:
                             reference_documents=tuple(r[0] for r in admitted.references.values() if not isinstance(r, str)),
                             capabilities=("finite_offline_validation_v1",),
                             assumptions=("Configured rates, clocks and capacities are explicit model inputs.",),
-                            limitations=("No tensor values, multicast or synchronization validation.", "No authenticated device origin or measured timing without compatible supplied captures.",
+                            limitations=(("No tensor values or device kernel execution; multicast/scalar checks apply only to the admitted mixed runtime."
+                                          if any(a.adapter == "multicast_sync_v1" and a.configuration.get("runtime") is not None for a in admitted.cases)
+                                          else "No tensor values, multicast or synchronization validation."), "No authenticated device origin or measured timing without compatible supplied captures.",
                                          "Historical root remap tests retain stale LayerView.active_cores and layer/core assumptions."),
                             functional_reference=tier_status(checks, "functional_reference"), silicon_timing=tier_status(checks, "silicon_timing"))

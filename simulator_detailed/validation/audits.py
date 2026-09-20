@@ -550,6 +550,9 @@ def drain_audit(admitted: Admission, raw: Data) -> None:
 
 def audit(check: CheckName, admitted: Admission, raw: Data) -> str:
     if admitted.adapter == "multicast_sync_v1":
+        if raw.get("kind") == "multicast_sync_result":
+            require(raw.get("plan") == parse(admitted.effective.text),
+                    "mixed result plan differs from admitted input identity")
         try:
             audit_multicast(check, raw, admitted.configuration, admitted.graph)
         except MulticastAuditUnavailable as exc:

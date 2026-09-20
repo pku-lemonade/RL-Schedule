@@ -11,7 +11,9 @@ from pathlib import Path
 
 from .configs.schemas.multicast_sync import MulticastSyncWorkload
 from .configs.schemas.topology import CanonicalTopology
+from .memory_plan import bind_memory_system
 from .multicast_memory import MulticastMemoryExecutor
+from .multicast_memory_runtime import MulticastMemoryRuntime
 from .multicast_pipeline import (
     FinitePipelineExecutor,
     FinitePipelinePlan,
@@ -43,10 +45,10 @@ def load_workload(path: Path):
     else:
         workload = MulticastSyncWorkload.model_validate(document)
         source = workload.memory.source
-    if source.kind != "canonical_graph":
-        raise ValueError("multicast replay requires a complete canonical graph source")
-    graph_path = (path.parent / source.graph_path).resolve()
-    graph = CanonicalTopology.model_validate_json(graph_path.read_text())
+    graph_path = (path.parent / (source.graph_path if source.kind == "canonical_graph" else source.profile_path)).resolve()
+    document = json.loads(graph_path.read_text())
+    graph = (CanonicalTopology.model_validate(document) if isinstance(workload, FinitePipelineWorkload)
+             else bind_memory_system(workload.memory, document))
     return workload, graph, graph_path
 
 
@@ -58,6 +60,8 @@ def run_workload(path: Path) -> tuple[dict[str, object], Path]:
             raise ValueError("pipeline projection exceeded its configured horizon; bounded snapshot unavailable")
         return {**result.model_dump(mode="json"), "execution_policy": "serial_multicast_projection_v1"}, graph_path
     plan = MulticastSyncPlan.compile(workload, graph)
+    if workload.runtime is not None:
+        return MulticastMemoryRuntime(plan).run().model_dump(mode="json"), graph_path
     memory = MulticastMemoryExecutor.compile(plan).run()
     completed = tuple(operation.operation_id for operation in memory.operations if operation.status == "complete")
     scalar = ScalarExecutor.compile(plan).run(external_completed=completed)
@@ -98,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("output must not replace a declared input asset")
             _atomic_output(output, payload)
         sys.stdout.write(payload)
-        print(f"multicast replay {result['status']}; serial projection; shared runtime unavailable; source={workload_path.name}", file=sys.stderr)
+        policy = "shared finite runtime" if result.get("kind") == "multicast_sync_result" else "serial projection; shared runtime unavailable"
+        print(f"multicast replay {result['status']}; {policy}; source={workload_path.name}", file=sys.stderr)
         return 0 if result["status"] == "complete" else 1
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)

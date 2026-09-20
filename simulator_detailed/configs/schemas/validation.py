@@ -480,8 +480,8 @@ class ValidationCase(ValidationRecord):
     def finite_execution(self) -> Self:
         unique(tuple(c.check_id for c in self.checks), "case check")
         if self.resume_at_aci_cycles:
-            if self.adapter not in ("memory_replay_v1", "compute_workload_v1"):
-                raise ValueError("only memory/compute adapters support interruption/resume")
+            if self.adapter not in ("memory_replay_v1", "compute_workload_v1", "multicast_sync_v1"):
+                raise ValueError("only memory/compute/multicast adapters support interruption/resume")
             if tuple(sorted(set(self.resume_at_aci_cycles))) != self.resume_at_aci_cycles:
                 raise ValueError("resume horizons must be unique and increasing")
             if self.budget.max_aci_cycles is None or self.resume_at_aci_cycles[-1] >= self.budget.max_aci_cycles:

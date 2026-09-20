@@ -10,6 +10,7 @@ from ..configs.schemas.torus_replay import ProfileSource, TorusReplay
 from ..configs.schemas.validation import AdapterName, CanonicalJSON
 from ..hardware_profile import inspect_profile
 from ..memory_runtime import MemoryRuntime
+from ..multicast_memory_runtime import MulticastMemoryRuntime
 from ..multicast_pipeline import (
     FinitePipelinePlan,
     FinitePipelineWorkload,
@@ -90,14 +91,20 @@ def admit(adapter: AdapterName, path: Path, *, horizon: float | None = None) -> 
         inputs["source.json"] = source_path
         config = obj(workload.model_dump(mode="json"))
         graph = obj(graph_model.model_dump(mode="json"))
+        mixed_plan: MulticastSyncPlan | None = None
         if isinstance(workload, FinitePipelineWorkload):
             pipeline_plan = FinitePipelinePlan.compile(workload, graph_model)
             effective = {"kind": "multicast_pipeline_plan", "plan_sha256": pipeline_plan.plan_sha256,
                          "multicast": pipeline_plan.multicast.record.model_dump(mode="json")}
         else:
-            effective = MulticastSyncPlan.compile(workload, graph_model).record.model_dump(mode="json")
+            mixed_plan = MulticastSyncPlan.compile(workload, graph_model)
+            effective = mixed_plan.record.model_dump(mode="json")
 
         def multicast_execute(stops: tuple[float, ...]) -> tuple[Data, ...]:
+            if mixed_plan is not None and mixed_plan.workload.runtime is not None:
+                runtime = MulticastMemoryRuntime(mixed_plan)
+                snapshots = [obj(runtime.advance(max_aci_cycles=stop).model_dump(mode="json")) for stop in stops]
+                return (*snapshots, obj(runtime.run().model_dump(mode="json")))
             if stops:
                 raise ValueError("multicast projection does not support retained runtime interruption/resume")
             result, _ = run_multicast(path)
