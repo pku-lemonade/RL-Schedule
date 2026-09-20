@@ -108,6 +108,11 @@ the final clean external matrix and the actual-evidence delivery links cannot
 be produced on this host. This checkpoint is not final delivery and is not an
 archive candidate.
 
+Current addendum after commit `668cf3e`: the ttsim half of task 7.1 was
+re-executed from a newly generated kit in
+`/tmp/wormhole-final-clean-20260920-ouh26klr`. The Wormhole half remains
+blocked, so task 7.1 is still unchecked.
+
 Delivered and verified:
 
 - The portable report package now includes the campaign's simulator inputs and
@@ -133,6 +138,12 @@ Delivered and verified:
 - The offline validation suite passed all 123 checks in 19 cases. Its optional
   ML gate remained blocked, and its functional-reference and silicon-timing
   tiers remained unvalidated. No external tool or device was accessed.
+- A clean ttsim kit regenerated identity
+  `ttsim-kit:ca57eddb5e489f398e28f9a75fe912af48819eb29f33517c679663c0027f2a8f`.
+  Its kit and source manifests matched the committed bytes. Fresh NoC, DRAM and
+  compute executions reproduced all three committed capture directories and
+  converted reference directories byte for byte, including bundle and reference
+  identities. This re-execution supplies functional evidence only.
 
 Implementation source SHA-256 identities before this progress/task update:
 
@@ -146,6 +157,12 @@ Implementation source SHA-256 identities before this progress/task update:
 Executed verification:
 
 ```text
+clean pinned ttsim matrix from a fresh generated kit
+noc-64b: bundle 5c3b1204..., reference raw 26a04c62..., byte-identical;
+dram-read-256b: bundle f1093313..., reference raw 2ebf5cfa..., byte-identical;
+compute-bf16-32: bundle b0170416..., reference raw 67c4a315..., byte-identical;
+kit manifest and producer source manifest: byte-identical to committed evidence.
+
 .venv/bin/python -m unittest simulator_detailed.tests.test_external_audit simulator_detailed.tests.test_external_campaign simulator_detailed.tests.test_external_calibration
 12 tests passed in 4.275s; 0 failures; 0 errors; 0 skips.
 
@@ -190,9 +207,11 @@ Passed with no output.
 
 Blocked prerequisites observed on this host:
 
-- `/dev/tenstorrent` is absent, `tt-smi` is unavailable, and no ttsim shared
-  library or pinned TT-Metal checkout/build/binaries are present.
-- Task 7.1 requires fresh ttsim and Wormhole runs from clean kits. Task 7.5
+- `/dev/tenstorrent` is absent and `tt-smi` is unavailable. The reconstructed
+  pinned ttsim/TT-Metal worker completed the fresh functional half of task 7.1,
+  but no named Wormhole worker, firmware inventory or live profiler output is
+  available.
+- Task 7.1 still requires fresh Wormhole runs from the clean producer assets. Task 7.5
   requires those actual artifacts for its EV-02 through EV-07 evidence links.
   The checkpoint manifest records the implementation and test identities but
   does not substitute them for external capture identities.
