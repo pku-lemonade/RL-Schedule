@@ -10,7 +10,7 @@ import json
 import math
 from collections import Counter, defaultdict
 from fractions import Fraction
-from itertools import pairwise
+from itertools import groupby, pairwise
 
 from .data import Data, array, integer, key, number, obj, require, rows, text
 from .multicast import MulticastAuditUnavailable, expected_tree
@@ -775,33 +775,47 @@ def ownership(raw: Data, config: Data) -> None:
                 and not resource["pending_returns"],
                 "leaked physical/tree reservation",
             )
-    tokens: dict[str, str] = {}
-    for event in rows(tree["trace"]):
-        action = event["action"]
-        token = event.get("token_id")
-        if token is None:
-            continue
-        token = text(token)
-        if action == "credit_reserve":
-            require(token not in tokens, "duplicate credit token")
-            tokens[token] = "owned"
-        elif action == "credit_release":
-            require(tokens.get(token) == "owned", "credit release without owner")
-            tokens[token] = "pending"
-        elif action == "credit_return":
-            require(tokens.get(token) == "pending", "credit return without release")
-            del tokens[token]
+    capacities = {
+        key(r["lane"]): integer(r["capacity"])
+        for r in rows(tree["resources"])
+        if r.get("lane") is not None
+    }
+    tokens: dict[str, tuple[str, bool]] = {}
     lane_occupied: Counter[str] = Counter()
     lane_returning: Counter[str] = Counter()
-    for event in rows(tree["trace"]):
-        lane = key(event["lane"])
-        if event["action"] == "credit_reserve":
-            lane_occupied[lane] += 1
-        elif event["action"] == "credit_release":
-            lane_occupied[lane] -= 1
-            lane_returning[lane] += 1
-        elif event["action"] == "credit_return":
-            lane_returning[lane] -= 1
+    phases = {"credit_reserve": 0, "credit_release": 1, "credit_return": 2}
+    events = [e for e in rows(tree["trace"]) if e["action"] in phases]
+    events.sort(key=lambda e: (number(e["time_aci_cycles"]), phases[text(e["action"])]))
+    # Exported same-time events are sorted by fields, not scheduler order.
+    # Replay token transitions, then enforce bounds at each distinct timestamp.
+    for _, batch in groupby(events, key=lambda e: number(e["time_aci_cycles"])):
+        for event in batch:
+            lane, token = key(event["lane"]), text(event["token_id"])
+            require(lane in capacities, "credit on undeclared physical lane")
+            if event["action"] == "credit_reserve":
+                require(token not in tokens, "duplicate credit token")
+                tokens[token] = (lane, False)
+                lane_occupied[lane] += 1
+            elif event["action"] == "credit_release":
+                require(
+                    tokens.get(token) == (lane, False), "credit release without owner"
+                )
+                tokens[token] = (lane, True)
+                lane_occupied[lane] -= 1
+                lane_returning[lane] += 1
+            else:
+                require(
+                    tokens.get(token) == (lane, True), "credit return without release"
+                )
+                del tokens[token]
+                lane_returning[lane] -= 1
+        require(
+            all(
+                0 <= lane_occupied[lane] + lane_returning[lane] <= capacity
+                for lane, capacity in capacities.items()
+            ),
+            "event trace exceeds lane capacity",
+        )
     for state in rows(tree["resources"]):
         if state.get("lane") is not None:
             lane = key(state["lane"])

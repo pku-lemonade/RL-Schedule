@@ -58,6 +58,23 @@ class MixedValidationTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 MulticastExecutionResult.model_validate(raw)
 
+    def test_transient_credit_overallocation_cannot_hide_in_drained_snapshot(self):
+        raw = copy.deepcopy(self.raw)
+        trace = raw["tree_transport"]["trace"]
+        first = next(e for e in trace if e["action"] == "credit_reserve")
+        copies = [
+            copy.deepcopy(e)
+            for e in trace
+            if e.get("token_id") == first["token_id"]
+            and e["action"] in {"credit_reserve", "credit_release", "credit_return"}
+        ]
+        self.assertEqual(len(copies), 3)
+        for event in copies:
+            event["token_id"] = "unaccounted-extra-credit"
+        trace.extend(copies)
+        with self.assertRaisesRegex(ValueError, "capacity"):
+            audit("ownership", self.admitted, raw)
+
     def test_oracles_use_inputs_not_production_helpers_and_normalization_is_lossless(
         self,
     ):

@@ -8,6 +8,8 @@
 > Shared scalar service and local waits complete Part 4 (20/35).
 > Attached finite compute and representative fixtures complete Part 5 (25/35).
 > Independent shared-runtime audits and public CLI complete Part 6 (30/35).
+> Final consolidated validation and delivery complete Part 7 (35/35).
+> Current evidence: [delivery.md](delivery.md), with all 31 acceptance scenarios.
 > Reopened scalar/compute items retain their implementation for repair;
 > their specified scope has not been reduced. See [implementation-audit.md](implementation-audit.md).
 
@@ -61,8 +63,8 @@
 
 ## 7. Consolidated evidence and umbrella-audit handoff (MS-01..12)
 
-- [ ] 7.1 Run `.venv/bin/python -m unittest discover -s simulator_detailed/tests`, strict Pyright with `--pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json`, scoped Ruff over all changed production/tests and existing predecessor scopes, `openspec validate wormhole-multicast-sync --strict --no-interactive`, and `git diff --check`. Record actual totals, skips, failures and commands; resolve new regressions before claiming delivery.
-- [ ] 7.2 Execute the new analytical/pipeline/Wormhole suites and all new CLI examples, including expected incompleteness and invalid-output preservation. Compare prior topology v1/torus v2/memory v1/compute v1 timing/digest fixtures and rerun the named actual root Darknet19 smoke gate. Preserve known historical root failures and optional model-tool unavailability as separate evidence.
-- [ ] 7.3 Audit every MS-01..12 acceptance scenario against implemented tests and independent checks; re-review tree/response/memory/phase/slot dependencies under minimal capacities and slow branches. Verify source/recipient byte conservation, common-address restrictions, reply reordering, phase-overtake rejection and no evidence promotion from synthetic fixtures.
-- [ ] 7.4 Write delivery/progress/source-input identity evidence with exact commands/results/commits, model-policy limitations, configurable assumptions and a bounded TR-05/MT-06/VA-04 mapping. Update the handoff to identify the completed child and next umbrella reconciliation; do not treat the parent's unchecked milestones or overlapping deltas as automatically delivered or synchronized.
-- [ ] 7.5 Review the final diff, verified examples, compatibility contracts and requirement evidence; confirm all 35 child tasks are actually complete, run final strict artifact/whitespace checks and commit Part 7. Hand off the separate umbrella audit without syncing/archiving changes or pushing commits unless requested.
+- [x] 7.1 Run `.venv/bin/python -m unittest discover -s simulator_detailed/tests`, strict Pyright with `--pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json`, scoped Ruff over all changed production/tests and existing predecessor scopes, `openspec validate wormhole-multicast-sync --strict --no-interactive`, and `git diff --check`. Record actual totals, skips, failures and commands; resolve new regressions before claiming delivery.
+- [x] 7.2 Execute the new analytical/pipeline/Wormhole suites and all new CLI examples, including expected incompleteness and invalid-output preservation. Compare prior topology v1/torus v2/memory v1/compute v1 timing/digest fixtures and rerun the named actual root Darknet19 smoke gate. Preserve known historical root failures and optional model-tool unavailability as separate evidence.
+- [x] 7.3 Audit every MS-01..12 acceptance scenario against implemented tests and independent checks; re-review tree/response/memory/phase/slot dependencies under minimal capacities and slow branches. Verify source/recipient byte conservation, common-address restrictions, reply reordering, phase-overtake rejection and no evidence promotion from synthetic fixtures.
+- [x] 7.4 Write delivery/progress/source-input identity evidence with exact commands/results/commits, model-policy limitations, configurable assumptions and a bounded TR-05/MT-06/VA-04 mapping. Update the handoff to identify the completed child and next umbrella reconciliation; do not treat the parent's unchecked milestones or overlapping deltas as automatically delivered or synchronized.
+- [x] 7.5 Review the final diff, verified examples, compatibility contracts and requirement evidence; confirm all 35 child tasks are actually complete, run final strict artifact/whitespace checks and commit Part 7. Hand off the separate umbrella audit without syncing/archiving changes or pushing commits unless requested.

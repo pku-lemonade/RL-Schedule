@@ -1,5 +1,10 @@
 # Implementation progress
 
+**Delivered: 35/35 tasks, 2026-09-20.** The current evidence is in
+[delivery.md](delivery.md), the exact [identity manifest](delivery-identities.json)
+and the verified [31-scenario audit](implementation-audit.md). Dated prototype
+entries below remain historical and do not supersede the repaired implementation.
+
 > Correction on 2026-09-18: the Part 1–5 entries below are historical records
 > of committed prototype work, not proof that their full task scope was met.
 > The [implementation audit](implementation-audit.md) supersedes those completion
@@ -9,6 +14,66 @@
 > completes Part 1. Shared tree transport now completes Part 2: 10/35
 > verified at that checkpoint. Canonical memory now completes Part 3:
 > 15/35 verified; scalar/compute integration remains open.
+
+## Consolidated delivery and umbrella handoff — 2026-09-20
+
+Tasks 7.1–7.5 are complete in the commit containing this entry: **35/35**.
+The final review strengthens the independent credit oracle to replay each token's
+lane and enforce capacity at every distinct event timestamp. A corruption test
+adds an extra token with a complete reserve/release/return lifecycle, demonstrating
+that a clean final snapshot cannot conceal temporary over-allocation. No runtime
+policy or legacy result contract changed in Part 7.
+
+The approved specification has 12 requirements and **31**, not 32, acceptance
+scenarios. Its contents are unchanged; the old progress count was wrong. Every
+scenario now has a current evidence row in `implementation-audit.md`, including
+idle-with-pending fault/resume, return reordering, local generations, both fabrics,
+shared service, minimal capacities, slow branches and full drain. Resource and
+application dependency assumptions are explicit. Legacy projection evidence is
+kept separate from the executable shared runtime.
+
+Final checks and actual outcomes:
+
+* `.venv/bin/python -m unittest discover -s simulator_detailed/tests -q` —
+  **557 discovered, 556 passed, 0 failures/errors, 1 optional Torch/PyG skip**,
+  **189.838 s**. Before the final corruption test, 556 discovered/555 passed/one
+  skip in 189.639 s. The final 8-test mixed validation module also passed in
+  14.016 s before full rerun.
+* `.venv/bin/pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json` — 0 errors, 0 warnings, 0 informations.
+* Scoped Ruff over all changed Python files since `e6ae2e8` and the validation
+  predecessor scope — 45 explicit paths, passed. Exact argv is in the manifest.
+  The documented compute predecessor scope and post-audit oracle/test scope pass.
+* `openspec validate wormhole-multicast-sync --strict --no-interactive` and
+  `git diff --check` pass. The pre-existing OpenSpec configuration is unchanged.
+* All five actual new replay CLIs pass, with cycles 79.5/154/137/500/287. All
+  three new analytical/pipeline/profile suites pass over 1/3/1 cases. Their
+  external evidence tiers remain unvalidated. Partial/invalid/output-protection
+  and retained interruption behaviors pass in the actual CLI tests.
+* Ten predecessor topology/torus/memory/compute CLI examples preserve versions,
+  timings and expected completion exits; exact results are in `delivery.md` and
+  the manifest. Full-suite exact packet/digest and consumer-boundary tests pass.
+* Six predecessor validation CLI modes pass: offline 19 cases/123 checks with
+  optional ML blocked; synthetic suite 1 case/1 check; both synthetic imports;
+  both synthetic memory/compute fitting examples. Synthetic evidence stays scoped.
+* Actual named `root_darknet19_smoke` gate passes: **37,888 nodes, 16 cores,
+  48 links, 11 windows, JSON round-trip true**. It executes the root model.
+  Historical root remap failures were not rerun or counted as passing.
+
+Temporary verification drivers initially omitted the gate's required requirements
+field, expected multicast's incomplete exit for the legacy memory CLI, and used
+`runs` instead of the existing report `cases`. Each driver was corrected and
+rerun successfully; no production contract was changed to satisfy a driver.
+An added import needed Ruff sorting before final checks. All generated replay
+traces/reports stayed temporary.
+
+`delivery-identities.json` hashes 167 detailed Python files, the root smoke's
+source roots and declared input/profile/graph/suite assets, with actual CLI argv,
+plan identities, environment and Part 1–6 revisions. It identifies Part 6 plus
+hashed Part 7 audit bytes without a circular hash of the containing commit.
+The handoff now identifies this completed child and the separate next audit of
+27 umbrella requirements/38 milestones. TR-05/MT-06/VA-04 mapping is bounded to
+executed finite model policies. No umbrella milestone or specification was
+synchronized, no change archived and no commit pushed.
 
 ## Independent audits and public mixed replay — 2026-09-20
 
@@ -296,7 +361,7 @@ the existing pipeline's early atomic submission fails the causality check.
 It also fixes the no-progress resume loop, scalar dependency/horizon handling,
 native-clock conversion and owner-qualified address comparisons. This is not
 completion of Part 6 or delivery of the shared runtime. See the implementation
-audit for the 32 acceptance scenarios and remaining implementation work.
+audit for the 31 acceptance scenarios (the original entry miscounted 32) and remaining implementation work.
 
 Checks run against the repaired source:
 
