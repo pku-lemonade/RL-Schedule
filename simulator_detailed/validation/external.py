@@ -117,6 +117,46 @@ def admit_external_capture(path: Path) -> AdmittedExternalCapture:
     build = next((item for item in campaign.builds if item.build_id == producer.build_id), None)
     if build is None or build != document.build:
         raise ValueError("capture source/build identity disagrees with the admitted campaign")
+    binding = next(item for item in case.producers if item.producer_id == document.producer_id)
+    declarations = {item.artifact_id: item for item in binding.outputs}
+    if document.intended_classification == "hardware_capture" and document.outcome.outcome == "pass":
+        if any(item.artifact_id not in declarations for item in document.raw_artifacts):
+            raise ValueError("hardware capture contains an undeclared producer artifact")
+        required_roles = {"functional_record", "profiler_csv", "capture_manifest"}
+        captured_roles = {
+            declarations[item.artifact_id].role for item in document.raw_artifacts
+        }
+        if captured_roles != required_roles:
+            raise ValueError("successful hardware capture requires every declared output role")
+        if len(document.profiler_selections) != len(case.boundary_maps):
+            raise ValueError("hardware capture requires one profiler selection per boundary")
+        for boundary in case.boundary_maps:
+            selection = next(
+                (
+                    item
+                    for item in document.profiler_selections
+                    if item.zone == boundary.producer_zone
+                ),
+                None,
+            )
+            if selection is None:
+                raise ValueError("hardware capture omits a declared profiler zone")
+            try:
+                run_ids = tuple(int(item) for item in boundary.samples.repetition_ids)
+                warmups = tuple(
+                    int(item) for item in boundary.samples.warmup_repetition_ids
+                )
+            except ValueError as exc:
+                raise ValueError("profiler repetition identities must be decimal integers") from exc
+            if (
+                selection.boundary != boundary.simulator_boundary
+                or selection.clock_domain != boundary.clock_domain
+                or selection.metric_id != boundary.simulator_interval.metric_id
+                or selection.run_ids != run_ids
+                or selection.warmup_run_ids != warmups
+                or selection.aggregation != boundary.samples.aggregation
+            ):
+                raise ValueError("profiler selection disagrees with its campaign boundary")
     paths = (campaign_path, *(
         _verify_artifact(root, artifact) for artifact in document.raw_artifacts
     ))

@@ -1,5 +1,89 @@
 # Wormhole external validation progress
 
+## Part 4 - Wormhole collection and profiler import
+
+Status: implementation checkpoint on 2026-09-20; tasks 4.1 and 4.2 are
+complete, while tasks 4.3, 4.4 and 4.5 remain open. No Wormhole device was
+accessed and no silicon timing evidence is claimed.
+
+Delivered and verified:
+
+- A strict `wormhole_tt_metal_profiler_v1` collection plan with an explicit
+  worker, device index, PCIe slot and Wormhole architecture; fixed argv and
+  profiler environment; finite repetition, warm-up, timeout and output-byte
+  limits; exact source/build/binary identity; effective conditions; and three
+  declared output roles.
+- A bounded collector that verifies the copied campaign, case input and every
+  binary before launching the named host program. It preserves existing worker
+  and bundle outputs, passes the explicit device selector, suppresses unbounded
+  process output, parses a typed worker result, retains captured host/device,
+  software, firmware, clocks and enabled layout, and publishes an atomic,
+  hash-verified capture bundle. Missing prerequisites and producer failures
+  produce a blocked bundle with unknown metadata reasons and no raw evidence.
+- Sparse `DeviceZoneScopedN` regions in the shared NoC, DRAM and compute
+  producer sources. The DRAM zone ends at the read barrier, before the separate
+  completion-marker write. Tests require each source/line/zone tuple to be
+  unique and require the ttsim kit and silicon plan to carry the same
+  build/binary manifest and effective campaign conditions. The newly generated
+  instrumented kit identity is
+  `ttsim-kit:d9142e2abd6a4283ccd24809ad4450a6d60bc26730bd8beac670131c5ef22a56`.
+- Hardware capture admission now requires all three declared output roles and
+  one exact profiler selection per boundary. The selection fixes device, core,
+  RISC, zone, source file/line, clock, metric, run IDs, warm-ups and aggregation.
+  This stricter rule is scoped to successful hardware captures so existing
+  functional-capture contracts remain compatible.
+- Atomic profiler-reference conversion from an admitted hardware bundle through
+  the existing version-1 importer, including a second raw/campaign hash check.
+  A discovered single-retained-run defect was fixed so its measurement window
+  retains the original integer begin/end counters instead of rewriting them as
+  zero/duration. Tests cover counters above `2**53`, raw mutation and output
+  preservation.
+
+Implementation source SHA-256 identities before this progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `configs/schemas/external_validation.py` | `893f5eb05cae3f0a2c19792a59b1fe178a11b9b9f55227e3208b4e9977a3e1fe` |
+| `validation/external.py` | `af5b679027d9b7089fa81459ef0735fc8f8e67c5471243b3bcaa1a35f2ca42b4` |
+| `validation/external_collector.py` | `52f549ae47aa14f94a97659331bba4d69edc54a7592d2b71d6690149e9861485` |
+| `validation/references.py` | `8c320e583270c9d71c6141fcac16a993c4345b28199107771e8102b1fdb734a0` |
+| `tests/test_external_wormhole_collector.py` | `8d6318aedcd3523e5835ac42e5d4f3647d5a39f6987dc0d60d69a521483c2b40` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/noc_ack_roundtrip.cpp` | `fb1803dbb60f33d43c6e98af1c481feec95cf779f728c2921e06a9ec6ef6a77f` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/dram_read_return.cpp` | `84809bb95c6c6b61fcb4fbbf258ca807ced5bb4386c1d53008862dde37863cd7` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/compute_service.cpp` | `4fa6490d3df50d5d04b6536625a00790b3b7c1a9822285d72f8b41e78267f432` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_wormhole_collector simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+153 tests passed in 115.747s; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_wormhole_collector simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts
+42 tests passed in 2.624s after the final PCIe-selection guard; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/external_validation.py simulator_detailed/configs/schemas/validation.py simulator_detailed/validation simulator_detailed/tests/test_external_wormhole_collector.py simulator_detailed/tests/test_external_capture_kit.py simulator_detailed/tests/test_external_validation_intervals.py simulator_detailed/tests/test_validation_adapters.py simulator_detailed/tests/test_mixed_validation.py simulator_detailed/tests/test_validation_references.py simulator_detailed/tests/test_external_validation_contracts.py
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Blocked prerequisites observed on this host:
+
+- `/dev/tenstorrent` remains absent and `tt-smi` is not installed.
+- No pinned TT-Metal checkout, matching built host/device artifacts, named
+  Wormhole board, firmware inventory or device-profiler output was supplied.
+- Task 4.3 remains open until the converter is checked against CSV from that
+  pinned live environment. Tasks 4.4 and 4.5 require the three actual functional
+  records, profiler CSVs and complete worker manifests; unit-test worker bytes
+  do not satisfy those evidence requirements.
+
 ## Part 1 - Campaign contracts and fail-closed admission
 
 Status: complete on 2026-09-20. Implementation started from

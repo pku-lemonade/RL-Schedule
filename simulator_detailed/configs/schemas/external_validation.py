@@ -27,6 +27,7 @@ from .validation import (
     IntervalSemanticScope,
     Metadata,
     Positive,
+    ProfilerSelection,
     ReferenceConditions,
     Text,
     ValidationRecord,
@@ -328,6 +329,86 @@ class TTSimCaptureKitManifest(ValidationRecord):
         )
         if output_budget > self.max_total_output_bytes:
             raise ValueError("capture-kit output bytes exceed its budget")
+        return self
+
+
+class WormholeDeviceSelection(ValidationRecord):
+    worker_id: Identifier
+    device_index: Index
+    pcie_slot: Text
+    architecture: Literal["wormhole_b0"]
+
+
+class WormholeProfilerEnvironmentVariable(ValidationRecord):
+    name: Literal["TT_METAL_DEVICE_PROFILER", "TT_METAL_SLOW_DISPATCH_MODE"]
+    value: Literal["1"]
+
+
+class WormholeCollectionPlan(ValidationRecord):
+    kind: Literal["wormhole_collection_plan"]
+    schema_version: Version
+    plan_id: Identifier
+    campaign: ExternalArtifactIdentity
+    campaign_id: Identifier
+    case_id: Identifier
+    producer: ProducerDefinition
+    build: SourceBuildIdentity
+    binary_manifest: tuple[BuildArtifactIdentity, ...] = Field(min_length=1)
+    selection: WormholeDeviceSelection
+    conditions: ReferenceConditions
+    argv: tuple[Text, ...] = Field(min_length=23, max_length=23)
+    environment: tuple[WormholeProfilerEnvironmentVariable, ...] = Field(
+        min_length=2, max_length=2
+    )
+    repetition_ids: tuple[Identifier, ...] = Field(min_length=1)
+    warmup_repetition_ids: tuple[Identifier, ...] = ()
+    timeout_seconds: Positive
+    max_output_bytes: PositiveInt
+    outputs: tuple[OutputDeclaration, ...] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def fixed_collection(self) -> Self:
+        if self.producer.adapter != "wormhole_tt_metal_profiler_v1":
+            raise ValueError("collection plan requires the named Wormhole profiler adapter")
+        if self.producer.build_id != self.build.build_id or self.binary_manifest != self.build.artifacts:
+            raise ValueError("collection-plan source/build/binary manifests disagree")
+        if (
+            self.conditions.architecture.value is not None
+            and self.conditions.architecture.value != self.selection.architecture
+        ):
+            raise ValueError("collection-plan architecture disagrees with device selection")
+        unique(self.repetition_ids, "Wormhole collection repetition")
+        unique(self.warmup_repetition_ids, "Wormhole collection warm-up")
+        if not set(self.warmup_repetition_ids) < set(self.repetition_ids):
+            raise ValueError("Wormhole collection warm-ups must be a proper subset of repetitions")
+        expected_flags = (
+            "--recipe", "--input", "--functional-output", "--profiler-output", "--manifest-output",
+            "--repetitions", "--warmup-repetitions", "--timeout-seconds", "--max-output-bytes",
+            "--device-index", "--pcie-slot",
+        )
+        host = next((item for item in self.binary_manifest if item.role == "host_binary"), None)
+        if host is None or self.argv[0] != host.logical_path or self.argv[1::2] != expected_flags:
+            raise ValueError("Wormhole collector argv does not use the fixed named interface")
+        for index in (0, 4, 6, 8, 10):
+            _portable_path(self.argv[index], "Wormhole collector argv path")
+        if self.argv[12] != str(len(self.repetition_ids)):
+            raise ValueError("Wormhole collection repetition argv disagrees with its budget")
+        if self.argv[14] != str(len(self.warmup_repetition_ids)):
+            raise ValueError("Wormhole collection warm-up argv disagrees with its budget")
+        if self.argv[16] != format(self.timeout_seconds, "g") or self.argv[18] != str(self.max_output_bytes):
+            raise ValueError("Wormhole collection argv disagrees with its finite budget")
+        if self.argv[20] != str(self.selection.device_index) or self.argv[22] != self.selection.pcie_slot:
+            raise ValueError("Wormhole collection argv disagrees with explicit device selection")
+        if {item.name for item in self.environment} != {
+            "TT_METAL_DEVICE_PROFILER", "TT_METAL_SLOW_DISPATCH_MODE",
+        }:
+            raise ValueError("Wormhole profiler environment is incomplete")
+        if {item.role for item in self.outputs} != {
+            "functional_record", "profiler_csv", "capture_manifest",
+        }:
+            raise ValueError("Wormhole collection output contract is incomplete")
+        if {item.logical_path for item in self.outputs} != {self.argv[6], self.argv[8], self.argv[10]}:
+            raise ValueError("Wormhole collection argv disagrees with its output contract")
         return self
 
 
@@ -712,6 +793,52 @@ class CaptureEnvironment(ValidationRecord):
     enabled_layout: Metadata[CanonicalJSON]
 
 
+class WormholeWorkerResult(ValidationRecord):
+    kind: Literal["wormhole_worker_result"]
+    schema_version: Version
+    plan_id: Identifier
+    campaign_id: Identifier
+    case_id: Identifier
+    producer_id: Identifier
+    build_id: Identifier
+    selection: WormholeDeviceSelection
+    environment: CaptureEnvironment
+    conditions: ReferenceConditions
+    profiler_selections: tuple[ProfilerSelection, ...] = Field(min_length=1)
+    counters: tuple[CaptureCounter, ...]
+    diagnostics: tuple[Text, ...]
+
+    @model_validator(mode="after")
+    def explicit_worker_identity(self) -> Self:
+        unique(tuple(item.name for item in self.counters), "worker-result counter")
+        unique(
+            tuple(
+                (
+                    item.device,
+                    item.core_x,
+                    item.core_y,
+                    item.risc,
+                    item.zone,
+                    item.source_file,
+                    item.source_line,
+                )
+                for item in self.profiler_selections
+            ),
+            "worker-result profiler source",
+        )
+        if (
+            self.conditions.architecture.value is not None
+            and self.conditions.architecture.value != self.selection.architecture
+        ):
+            raise ValueError("worker architecture disagrees with explicit device selection")
+        if any(
+            item.device != self.selection.pcie_slot
+            for item in self.profiler_selections
+        ):
+            raise ValueError("profiler device disagrees with explicit PCIe selection")
+        return self
+
+
 class ExternalOutcome(ValidationRecord):
     stage: ExternalStage
     required: StrictBool
@@ -762,6 +889,7 @@ class ExternalCaptureBundle(ValidationRecord):
     conditions: ReferenceConditions
     outcome: ExternalOutcome
     raw_artifacts: tuple[ExternalArtifactIdentity, ...]
+    profiler_selections: tuple[ProfilerSelection, ...] = ()
     counters: tuple[CaptureCounter, ...]
     lineage: tuple[ArtifactLineage, ...]
     diagnostics: tuple[Text, ...]
@@ -777,6 +905,21 @@ class ExternalCaptureBundle(ValidationRecord):
             tuple(item.logical_path for item in self.raw_artifacts), "raw artifact path"
         )
         unique(tuple(item.name for item in self.counters), "capture counter")
+        unique(
+            tuple(
+                (
+                    item.device,
+                    item.core_x,
+                    item.core_y,
+                    item.risc,
+                    item.zone,
+                    item.source_file,
+                    item.source_line,
+                )
+                for item in self.profiler_selections
+            ),
+            "profiler source selection",
+        )
         unique(tuple(item.artifact_id for item in self.lineage), "lineage artifact")
         artifacts = {
             self.campaign.artifact_id,
@@ -798,6 +941,8 @@ class ExternalCaptureBundle(ValidationRecord):
             raise ValueError(
                 "ttsim is functional evidence; Wormhole profiler is hardware evidence"
             )
+        if self.profiler_selections and self.adapter != "wormhole_tt_metal_profiler_v1":
+            raise ValueError("only the Wormhole profiler adapter can select profiler rows")
         if (
             self.outcome.case_id != self.case_id
             or self.outcome.producer_id != self.producer_id

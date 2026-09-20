@@ -19,6 +19,7 @@ void kernel_main() {
     if (byte_count == 0 || byte_count > kMaximumBytes) {
         return;
     }
+    DeviceZoneScopedN("NOC_ACK_ROUNDTRIP");
     const std::uint64_t destination =
         get_noc_addr(destination_x, destination_y, destination_l1_address);
     noc_async_write(source_l1_address, destination, byte_count);

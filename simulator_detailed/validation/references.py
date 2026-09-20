@@ -129,9 +129,17 @@ def _profiler(reference: ValidationReference, raw: str) -> tuple[NormalizedObser
     dispersion = float(sum(abs(Fraction(s) - mean) for s in samples) / len(samples))
     statistics = SampleStatistics(sample_count=len(samples), durations_cycles=tuple(samples), minimum_cycles=min(samples),
                                   maximum_cycles=max(samples), mean_absolute_deviation_cycles=dispersion)
+    retained_runs = tuple(
+        run for run in selection.run_ids if run not in selection.warmup_run_ids
+    )
+    if len(retained_runs) == 1:
+        retained_pair = pairs[retained_runs[0]]
+        window_start, window_end = retained_pair["begin"], retained_pair["end"]
+    else:
+        window_start, window_end = 0, value
     window = MeasurementWindow(boundary=selection.boundary,
-                               start=TimePoint(value=0, unit="cycles", clock_domain=selection.clock_domain),
-                               end=TimePoint(value=value, unit="cycles", clock_domain=selection.clock_domain),
+                               start=TimePoint(value=window_start, unit="cycles", clock_domain=selection.clock_domain),
+                               end=TimePoint(value=window_end, unit="cycles", clock_domain=selection.clock_domain),
                                excluded_warmups=tuple(str(r) for r in selection.warmup_run_ids), repetitions=len(samples), aggregation=selection.aggregation)
     if conditions.measurement.value is not None:
         declared = conditions.measurement.value

@@ -18,9 +18,12 @@ void kernel_main() {
     if (byte_count == 0 || byte_count > kMaximumBytes) {
         return;
     }
-    const auto dram = TensorAccessor(dram_accessor_args, dram_address, byte_count);
-    noc_async_read_page(0, dram, destination_l1_address);
-    noc_async_read_barrier();
+    {
+        DeviceZoneScopedN("DRAM_READ_RETURN");
+        const auto dram = TensorAccessor(dram_accessor_args, dram_address, byte_count);
+        noc_async_read_page(0, dram, destination_l1_address);
+        noc_async_read_barrier();
+    }
 
     auto* completion = reinterpret_cast<volatile tt_l1_ptr std::uint32_t*>(completion_l1_address);
     completion[0] = kCompletionValue;
