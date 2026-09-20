@@ -5,20 +5,20 @@
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.valid.json",
-    "sha256": "8ecbd87dc5aaf9720368a3a8091e237014cb9ae2d8efec568375f6e977cf558c",
-    "size_bytes": 10649
+    "sha256": "072d7a47373f7f6cc12ffe5584e71b400ff4c08727353bfbcfe759bbb9ab9973",
+    "size_bytes": 12498
   },
   "bundles": [
     {
       "artifact_id": "ttsim-bundle",
       "logical_path": "capture.valid.json",
-      "sha256": "57ce641fdec9fbc5937cac8bc6bcdada3467c79089dd17f3fe0bc2173caf73ca",
+      "sha256": "fafe6d1cc3728d661bcfce1659579eac6f7adb1f1b3ce516d31da5ad3a55fb6b",
       "size_bytes": 4111
     },
     {
       "artifact_id": "wormhole-unavailable-bundle",
       "logical_path": "capture.unavailable.json",
-      "sha256": "0b525eef2115f62c9c8121706cb6c63e6b27041f3f4b34dedf9992eac5ec515d",
+      "sha256": "cf889771911f609af039c9f83b9cb57248a7809e17c844d441dde4ae9df93cfd",
       "size_bytes": 3558
     }
   ],
@@ -29,7 +29,21 @@
       "producer_zone": "NOC_ACK_ROUNDTRIP",
       "simulator_boundary": "operation_submission_to_acknowledged_completion",
       "clock_domain": "tensix",
-      "completion_scope": "acknowledged_operation"
+      "completion_scope": "acknowledged_operation",
+      "simulator_interval": {
+        "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+        "boundary": "operation_submission_to_acknowledged_completion",
+        "subject_id": "transfer:\"noc-64b\"",
+        "resource_id": null,
+        "start_event_id": "noc-64b:submission",
+        "end_event_id": "noc-64b:acknowledged_completion",
+        "semantic_scope": "acknowledged_operation"
+      },
+      "samples": {
+        "repetition_ids": ["0", "1"],
+        "warmup_repetition_ids": ["0"],
+        "aggregation": "none"
+      }
     }
   ],
   "outcomes": [

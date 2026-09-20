@@ -80,3 +80,76 @@ Passed with no output.
 
 Remaining external evidence: none of the fixtures is an admitted ttsim or
 Wormhole execution. Parts 3 and 4 retain their explicit worker/device gates.
+
+## Part 2 - Supported model intervals and comparison admission
+
+Status: complete on 2026-09-20. Work started from Part 1 commit
+`c4884ca`. No replay result contract, configured hardware value, external
+producer or device environment was changed or invoked.
+
+Delivered:
+
+- Additive interval metrics derived from normalized source events for
+  acknowledged operation completion, memory service and compute-resource
+  service. Each metric retains its exact start/end event identities, subject,
+  optional resource, ACI clock, completion scope and raw configured duration.
+  Incomplete replay behavior remains compatible and raw replay outputs remain
+  byte-for-byte independent of normalization.
+- Typed campaign model-interval selectors and repetition policies with explicit
+  repetition/warm-up identities and none/mean/median aggregation. Campaign
+  admission ties each policy to its finite case budget and supported family.
+- Deterministic model repetition execution that runs every declared repetition,
+  excludes only named warm-ups, preserves per-run endpoint events, emits the
+  matching retained sample policy and reports mean absolute deviation.
+- A strict boundary registry for the legacy total-run window and the three
+  source-local intervals. Comparison checks completion semantics, exact local
+  identities, explicit cross-producer entity and clock maps, equal frequencies
+  for cycles, and explicit conversion for seconds. Host dispatch, whole kernels,
+  ambiguous intervals, cross-core subtraction and overhead-adjusted boundaries
+  remain blocked.
+- Profiler imports now retain endpoint identities for supported interval
+  boundaries while preserving raw integer timestamps, selected runs, warm-ups
+  and sample statistics.
+
+Implementation source SHA-256 identities before the progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `configs/schemas/validation.py` | `39c3ca6afeae7d91d408a773473071a4b294b3f9b1be402573d428b36dad7756` |
+| `configs/schemas/external_validation.py` | `b2513a9bd1c7283f2eb3f58e1653d7ad46660de1274e282de6eafed558c4a73f` |
+| `validation/normalize.py` | `74a9e268a548075fbe4dc46cbaf36a87ed8ec8cff906d907588784238d0a2536` |
+| `validation/mixed_normalize.py` | `4581a8fd00045d206743b09fa52149462624a335126751aa7b5064bc89df6e02` |
+| `validation/intervals.py` | `ffa77a4621a6a4f8e6ff2d836f9cbbb4370b33001516e5c1811998ad2b2fbc9d` |
+| `validation/comparison.py` | `a2ba74a896316166a4335bf7b53ca9d4e15a3c21f30cd609fe2e01ac52536352` |
+| `validation/references.py` | `3444c75aa41f004725b92a2dad473e7c197008589ed73dd266eab941fc935a44` |
+| `validation/external.py` | `d26b86144dde41c1cb45f8b3de31e327728164f4caf63a5c389c39f01380423d` |
+| `tests/test_external_validation_intervals.py` | `027d1c0ae7f2c9c08aee39edd64169e084e6a716623db401f2b47f9a93e8cfce` |
+| `tests/test_validation_references.py` | `15005fcf3ce4bc1a6eda1fb0cef408204cc65d12c40185e0ec489d08f04f408a` |
+
+Revised fixture SHA-256 identities:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `campaign.valid.json` | `072d7a47373f7f6cc12ffe5584e71b400ff4c08727353bfbcfe759bbb9ab9973` |
+| `capture.valid.json` | `fafe6d1cc3728d661bcfce1659579eac6f7adb1f1b3ce516d31da5ad3a55fb6b` |
+| `capture.unavailable.json` | `cf889771911f609af039c9f83b9cb57248a7809e17c844d441dde4ae9df93cfd` |
+| `report.blocked.json` | `f39ecb785d70f2c48c841e1f0445c3032d0e50be4c2ce249e4cecb6d004ba36f` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+139 tests passed in 111.447s; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/validation.py simulator_detailed/configs/schemas/external_validation.py simulator_detailed/validation simulator_detailed/tests/test_external_validation_intervals.py simulator_detailed/tests/test_validation_adapters.py simulator_detailed/tests/test_mixed_validation.py simulator_detailed/tests/test_validation_references.py simulator_detailed/tests/test_external_validation_contracts.py
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+git diff --check
+Passed with no output.
+```

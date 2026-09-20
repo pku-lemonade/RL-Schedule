@@ -5,8 +5,8 @@
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.valid.json",
-    "sha256": "8ecbd87dc5aaf9720368a3a8091e237014cb9ae2d8efec568375f6e977cf558c",
-    "size_bytes": 10649
+    "sha256": "072d7a47373f7f6cc12ffe5584e71b400ff4c08727353bfbcfe759bbb9ab9973",
+    "size_bytes": 12498
   },
   "case_id": "noc-64b",
   "producer_id": "wormhole-profiler",

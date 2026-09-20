@@ -24,6 +24,7 @@ from ..configs.schemas.validation import (
 from .adapters import Admission
 from .data import Data, array, integer, key, number, obj, rows, text
 from .identity import canonical_record, content_digest
+from .intervals import interval_metric
 
 ObservationRole = Literal["endpoint", "resource", "worker", "router", "link", "job", "transfer", "slot"]
 
@@ -180,6 +181,7 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     effects: list[AddressedEffect] = []
     intervals: list[OccupancyInterval] = []
     routes: list[RouteObservation] = []
+    derived_metrics: list[MetricObservation] = []
     occurrences: Counter[str] = Counter()
 
     def entity(role: str, value: object) -> str:
@@ -211,17 +213,43 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     session = obj(raw["memory_session"]) if "memory_session" in raw else raw
     previous: dict[str, str] = {}
     lifecycle_ids: dict[tuple[str, str], str] = {}
+    lifecycle_points: dict[str, dict[str, list[tuple[str, TimePoint]]]] = {}
     for group, role, field in (("stages", "job", "job_id"), ("lifecycle", "transfer", "operation_id")):
         source = raw if group == "stages" else session
         for row in rows(source.get(group, [])):
             subject = entity(role, row[field])
             identifier = event(group, row, subject)
             if group == "lifecycle":
-                lifecycle_ids[(text(row["operation_id"]), text(row["action"]))] = identifier
+                operation_id = text(row["operation_id"])
+                action = text(row["action"])
+                lifecycle_ids[(operation_id, action)] = identifier
+                lifecycle_points.setdefault(operation_id, {}).setdefault(action, []).append(
+                    (identifier, point(number(row["time_aci_cycles"])))
+                )
             # Per-subject orders are meaningful; independent subjects have no invented edges.
             if subject in previous:
                 edges.append(CausalEdge(before=previous[subject], after=identifier))
             previous[subject] = identifier
+    acknowledged = {
+        text(operation["operation_id"])
+        for operation in rows(config.get("operations", []))
+        if operation.get("kind") == "write_acknowledged"
+    }
+    for operation_id in sorted(acknowledged):
+        actions = lifecycle_points.get(operation_id, {})
+        submissions = actions.get("submission", [])
+        completions = actions.get("complete", [])
+        if state == "complete" and submissions and completions:
+            start_event, start = min(submissions, key=lambda item: item[1].value)
+            end_event, end = max(completions, key=lambda item: item[1].value)
+            derived_metrics.append(interval_metric(
+                metric_id="operation_submission_to_acknowledged_completion:" + key(operation_id),
+                boundary="operation_submission_to_acknowledged_completion",
+                semantic_scope="acknowledged_operation",
+                subject_id=entity("transfer", operation_id), resource_id=None,
+                start_event_id=start_event, end_event_id=end_event, start=start, end=end,
+                value=end.value - start.value,
+            ))
     for index, row in enumerate(rows(session.get("ownership_trace", []))):
         resource = entity("resource", row["resource_id"])
         subject = entity("endpoint", ["buffer", row["buffer_id"]])
@@ -240,20 +268,44 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
         resource = entity("resource", row["resource_id"])
         owner = entity("transfer", row["client_id"])
         if row.get("start_aci_cycles") is not None:
-            intervals.append(OccupancyInterval(interval_id="service:" + text(row["service_id"]), resource_id=resource,
-                                              owner_id=owner, start=point(number(row["start_aci_cycles"])),
-                                              end=point(number(row["end_aci_cycles"])) if row.get("end_aci_cycles") is not None else None))
-    active: dict[str, tuple[str, str, TimePoint]] = {}
+            interval_id = "service:" + text(row["service_id"])
+            start = point(number(row["start_aci_cycles"]))
+            end = point(number(row["end_aci_cycles"])) if row.get("end_aci_cycles") is not None else None
+            start_event = interval_id + ":begin"
+            events.append(ObservationEvent(event_id=start_event, action="memory_service_begin", subject_id=owner,
+                                           time=start, details=canonical_record(row)))
+            end_event = interval_id + ":end"
+            if end is not None:
+                events.append(ObservationEvent(event_id=end_event, action="memory_service_end", subject_id=owner,
+                                               time=end, details=canonical_record(row)))
+                if state == "complete":
+                    derived_metrics.append(interval_metric(
+                        metric_id="memory_service_begin_to_end:" + text(row["service_id"]),
+                        boundary="memory_service_begin_to_end", semantic_scope="memory_service",
+                        subject_id=owner, resource_id=resource, start_event_id=start_event,
+                        end_event_id=end_event, start=start, end=end, value=end.value - start.value,
+                    ))
+            intervals.append(OccupancyInterval(interval_id=interval_id, resource_id=resource,
+                                               owner_id=owner, start=start, end=end))
+    active: dict[str, tuple[str, str, TimePoint, str, bool]] = {}
     for row in rows(raw.get("resource_events", [])):
         resource = entity("resource", [row["worker_tile_id"], row["kind"], row["engine_index"]])
         owner = entity("job", row["job_id"])
         when = point(number(row["time_aci_cycles"]))
+        event_id = event("resource_events", row, owner)
         if row["action"] == "acquire":
-            active[resource] = (owner, resource + ":" + owner, when)
+            active[resource] = (owner, resource + ":" + owner, when, event_id, row["kind"] == "compute")
         elif resource in active:
-            saved_owner, identifier, start = active.pop(resource)
+            saved_owner, identifier, start, start_event, is_compute = active.pop(resource)
             intervals.append(OccupancyInterval(interval_id=identifier, resource_id=resource, owner_id=saved_owner, start=start, end=when))
-    for resource, (owner, identifier, start) in active.items():
+            if state == "complete" and is_compute:
+                derived_metrics.append(interval_metric(
+                    metric_id="compute_resource_acquire_to_release:" + start_event,
+                    boundary="compute_resource_acquire_to_release", semantic_scope="compute_service",
+                    subject_id=saved_owner, resource_id=resource, start_event_id=start_event,
+                    end_event_id=event_id, start=start, end=when, value=when.value - start.value,
+                ))
+    for resource, (owner, identifier, start, _start_event, _is_compute) in active.items():
         intervals.append(OccupancyInterval(interval_id=identifier, resource_id=resource, owner_id=owner, start=start, end=None))
     transport = obj(session["transport"]) if "transport" in session else raw
     for row in rows(transport.get("trace", [])):
@@ -279,7 +331,7 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     elapsed = number(raw.get("elapsed_aci_cycles", 0))
     window = MeasurementWindow(boundary="simulation_start_to_snapshot", start=point(0), end=point(elapsed),
                                excluded_warmups=(), repetitions=1, aggregation="none")
-    metrics: list[MetricObservation] = []
+    metrics: list[MetricObservation] = list(derived_metrics)
 
     def metric(name: str, value: float, unit: str, numerator: str, denominator: str = "one run") -> None:
         metrics.append(MetricObservation(metric_id=name, value=value, unit=unit, clock_domain="aci" if "cycle" in unit else None,

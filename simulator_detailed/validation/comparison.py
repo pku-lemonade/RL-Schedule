@@ -19,6 +19,7 @@ from ..configs.schemas.validation import (
 from .adapters import Admission
 from .data import Data, obj, require
 from .identity import canonical_record
+from .intervals import boundary_rule
 from .matching import functional_match
 from .normalize import converted_seconds
 
@@ -73,22 +74,52 @@ def admit_conditions(admitted: Admission, actual: ReferenceConditions | None, re
         if (left_window.boundary, left_window.repetitions, left_window.aggregation, left_window.excluded_warmups) != (
                 right_window.boundary, right_window.repetitions, right_window.aggregation, right_window.excluded_warmups):
             raise IncompatibleReference("incompatible measurement window/repetitions/aggregation")
-        if left_window.boundary != "simulation_start_to_snapshot":
-            raise IncompatibleReference("kernel/host/unmodeled interval has no supported simulator boundary")
+        try:
+            boundary_rule(left_window.boundary)
+        except ValueError as exc:
+            raise IncompatibleReference(str(exc)) from exc
 
 
 def metric_pair(actual: NormalizedObservations, reference: NormalizedObservations, policy: MetricPolicy,
-                clock_mapping: dict[str, str]) -> tuple[Fraction, Fraction]:
+                clock_mapping: dict[str, str], entity_mapping: dict[str, str] | None = None) -> tuple[Fraction, Fraction]:
     left = next((m for m in actual.metrics if m.metric_id == policy.metric_id), None)
     right = next((m for m in reference.metrics if m.metric_id == policy.metric_id), None)
     if left is None or right is None:
         raise IncompatibleReference(f"missing observable metric: {policy.metric_id}")
+    try:
+        rule = boundary_rule(policy.boundary)
+    except ValueError as exc:
+        raise IncompatibleReference(str(exc)) from exc
     for metric in (left, right):
-        if metric.completion_scope != "complete_run" or metric.window.boundary != policy.boundary:
+        if metric.completion_scope != rule.completion_scope or metric.window.boundary != policy.boundary:
             raise IncompatibleReference("incomplete or mismatched measurement boundary")
+        identity = metric.interval
+        if rule.semantic_scope is None:
+            if identity is not None:
+                raise IncompatibleReference("total-run metric cannot claim an interval identity")
+        elif (
+            identity is None
+            or identity.semantic_scope != rule.semantic_scope
+            or rule.resource_required != (identity.resource_id is not None)
+        ):
+            raise IncompatibleReference("metric semantic identity disagrees with its supported boundary")
     if (left.window.repetitions, left.window.aggregation, left.window.excluded_warmups) != (
             right.window.repetitions, right.window.aggregation, right.window.excluded_warmups):
         raise IncompatibleReference("metric repetitions/warmups/aggregation differ")
+    if rule.semantic_scope is not None:
+        if left.interval is None or right.interval is None:
+            raise IncompatibleReference("supported interval requires exact endpoint identities")
+        if left.interval.semantic_scope != right.interval.semantic_scope:
+            raise IncompatibleReference("metric completion semantics differ")
+        if len(left.interval.samples) != len(right.interval.samples):
+            raise IncompatibleReference("metric interval sample identities differ")
+        mappings = entity_mapping or {}
+        if (right.interval.subject_id != left.interval.subject_id
+                and mappings.get(right.interval.subject_id) != left.interval.subject_id):
+            raise IncompatibleReference("missing explicit interval subject mapping")
+        if (right.interval.resource_id != left.interval.resource_id
+                and mappings.get(right.interval.resource_id or "") != left.interval.resource_id):
+            raise IncompatibleReference("missing explicit interval resource mapping")
     if left.clock_domain != right.clock_domain and clock_mapping.get(right.clock_domain or "") != left.clock_domain:
         raise IncompatibleReference("missing explicit clock-domain mapping")
 
@@ -149,7 +180,13 @@ def compare(selection: CheckSelection, admitted: Admission, conditions: Referenc
                         declared_clock = clock_ids.get(clock.domain_id)
                         if declared_clock is None or declared_clock.hz.state != "known" or declared_clock.hz != clock.hz:
                             raise IncompatibleReference("declared clocks contradict observed clock domains/frequencies")
-                left, right = metric_pair(actual, expected, policy, {m.reference: m.simulator for m in selection.clock_mappings})
+                left, right = metric_pair(
+                    actual,
+                    expected,
+                    policy,
+                    {m.reference: m.simulator for m in selection.clock_mappings},
+                    {m.reference: m.simulator for m in selection.entity_mappings},
+                )
                 detail = f"{policy.metric_id}: {metric_error_summary(left, right)}"
                 require(tolerance_pass(left, right, policy), f"{detail}; outside declared tolerance")
                 details.append(detail)

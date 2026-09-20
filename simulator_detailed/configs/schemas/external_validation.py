@@ -23,6 +23,7 @@ from ...validation.outcomes import CheckOutcome, ReportStatus
 from .topology import Digest, Identifier, Index, PositiveInt, unique
 from .validation import (
     CanonicalJSON,
+    IntervalSemanticScope,
     Metadata,
     Positive,
     ReferenceConditions,
@@ -33,6 +34,11 @@ from .validation import (
 
 ProducerAdapter = Literal["ttsim_tt_metal_v1", "wormhole_tt_metal_profiler_v1"]
 CaseFamily = Literal["noc_ack_roundtrip", "dram_read_return", "compute_service"]
+ExternalIntervalBoundary = Literal[
+    "operation_submission_to_acknowledged_completion",
+    "memory_service_begin_to_end",
+    "compute_resource_acquire_to_release",
+]
 EvidenceClassification = Literal["functional_capture", "hardware_capture"]
 EvidenceGate = Literal["functional_reference", "silicon_timing"]
 OutputRole = Literal["functional_record", "profiler_csv", "capture_manifest"]
@@ -141,13 +147,77 @@ class ExternalCaseBudget(ValidationRecord):
         return self
 
 
+class RepetitionAggregation(ValidationRecord):
+    repetition_ids: tuple[Identifier, ...] = Field(min_length=1)
+    warmup_repetition_ids: tuple[Identifier, ...] = ()
+    aggregation: Literal["none", "mean", "median"]
+
+    @model_validator(mode="after")
+    def finite_samples(self) -> Self:
+        unique(self.repetition_ids, "external repetition")
+        unique(self.warmup_repetition_ids, "external warm-up repetition")
+        if not set(self.warmup_repetition_ids) < set(self.repetition_ids):
+            raise ValueError("warm-ups must be a proper subset of campaign repetitions")
+        retained = len(self.repetition_ids) - len(self.warmup_repetition_ids)
+        if self.aggregation == "none" and retained != 1:
+            raise ValueError("unaggregated campaign metric requires one retained run")
+        return self
+
+
+class ModelIntervalSelection(ValidationRecord):
+    metric_id: Identifier
+    boundary: ExternalIntervalBoundary
+    subject_id: Identifier
+    resource_id: Identifier | None
+    start_event_id: Identifier
+    end_event_id: Identifier
+    semantic_scope: IntervalSemanticScope
+
+    @model_validator(mode="after")
+    def supported_identity(self) -> Self:
+        expected: dict[ExternalIntervalBoundary, tuple[IntervalSemanticScope, bool]] = {
+            "operation_submission_to_acknowledged_completion": ("acknowledged_operation", False),
+            "memory_service_begin_to_end": ("memory_service", True),
+            "compute_resource_acquire_to_release": ("compute_service", True),
+        }
+        scope, resource_required = expected[self.boundary]
+        if self.semantic_scope != scope:
+            raise ValueError("model interval semantic scope disagrees with its boundary")
+        if resource_required != (self.resource_id is not None):
+            raise ValueError("model interval resource identity disagrees with its boundary")
+        if self.start_event_id == self.end_event_id:
+            raise ValueError("model interval requires distinct start/end events")
+        return self
+
+
 class BoundaryMap(ValidationRecord):
     boundary_id: Identifier
     case_family: CaseFamily
     producer_zone: Identifier
-    simulator_boundary: Identifier
+    simulator_boundary: ExternalIntervalBoundary
     clock_domain: Identifier
-    completion_scope: Literal["acknowledged_operation", "memory_service", "compute_service"]
+    completion_scope: IntervalSemanticScope
+    simulator_interval: ModelIntervalSelection
+    samples: RepetitionAggregation
+
+    @model_validator(mode="after")
+    def consistent_mapping(self) -> Self:
+        expected: dict[CaseFamily, tuple[ExternalIntervalBoundary, IntervalSemanticScope]] = {
+            "noc_ack_roundtrip": (
+                "operation_submission_to_acknowledged_completion",
+                "acknowledged_operation",
+            ),
+            "dram_read_return": ("memory_service_begin_to_end", "memory_service"),
+            "compute_service": ("compute_resource_acquire_to_release", "compute_service"),
+        }
+        if (self.simulator_boundary, self.completion_scope) != expected[self.case_family]:
+            raise ValueError("case family uses an unsupported boundary/completion scope")
+        if (
+            self.simulator_interval.boundary != self.simulator_boundary
+            or self.simulator_interval.semantic_scope != self.completion_scope
+        ):
+            raise ValueError("model interval selection disagrees with its boundary map")
+        return self
 
 
 class ProducerBinding(ValidationRecord):
@@ -179,6 +249,12 @@ class ExternalValidationCase(ValidationRecord):
         unique(self.required_evidence, "required evidence gate")
         if any(item.case_family != self.family for item in self.boundary_maps):
             raise ValueError("boundary map case family disagrees with its case")
+        for item in self.boundary_maps:
+            if (
+                len(item.samples.repetition_ids) != self.budget.repetitions
+                or len(item.samples.warmup_repetition_ids) != self.budget.warmup_repetitions
+            ):
+                raise ValueError("boundary sample policy disagrees with the case budget")
         canonical = (
             self.conditions.enabled_layout,
             self.conditions.workload,

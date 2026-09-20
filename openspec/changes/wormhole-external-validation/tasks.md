@@ -8,11 +8,11 @@
 
 ## 2. Supported model intervals and comparison admission
 
-- [ ] 2.1 Derive `operation_submission_to_acknowledged_completion`, `memory_service_begin_to_end` and `compute_resource_acquire_to_release` metrics from existing normalized lifecycle/service/resource events without changing raw replay results; verify exact start/end event identities, clocks, completion scopes and configurable values across memory, compute and mixed fixtures.
-- [ ] 2.2 Add typed interval selection and matching repetition/aggregation records to campaign admission, and execute deterministic model repetitions when measured references retain multiple runs; verify one model sample cannot silently represent a repeated hardware aggregate.
-- [ ] 2.3 Replace the hard-coded total-run comparison gate with a strict supported-boundary registry and semantic identity checks; verify total-run compatibility remains intact while host dispatch, full kernels, ambiguous intervals, cross-core subtraction and undocumented overhead correction remain blocked.
-- [ ] 2.4 Add independent positive/corruption tests for each interval and for cycles/seconds conversion, large counters, clock-domain mappings, warm-ups, mean/median aggregation and sample dispersion; verify mismatched frequency, completion or aggregation cannot pass.
-- [ ] 2.5 Run focused normalization/comparison and existing validation regression tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with measured outcomes and commit Part 2 before continuing.
+- [x] 2.1 Derive `operation_submission_to_acknowledged_completion`, `memory_service_begin_to_end` and `compute_resource_acquire_to_release` metrics from existing normalized lifecycle/service/resource events without changing raw replay results; verify exact start/end event identities, clocks, completion scopes and configurable values across memory, compute and mixed fixtures.
+- [x] 2.2 Add typed interval selection and matching repetition/aggregation records to campaign admission, and execute deterministic model repetitions when measured references retain multiple runs; verify one model sample cannot silently represent a repeated hardware aggregate.
+- [x] 2.3 Replace the hard-coded total-run comparison gate with a strict supported-boundary registry and semantic identity checks; verify total-run compatibility remains intact while host dispatch, full kernels, ambiguous intervals, cross-core subtraction and undocumented overhead correction remain blocked.
+- [x] 2.4 Add independent positive/corruption tests for each interval and for cycles/seconds conversion, large counters, clock-domain mappings, warm-ups, mean/median aggregation and sample dispersion; verify mismatched frequency, completion or aggregation cannot pass.
+- [x] 2.5 Run focused normalization/comparison and existing validation regression tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with measured outcomes and commit Part 2 before continuing.
 
 ## 3. Portable capture kit and ttsim functional evidence
 

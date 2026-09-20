@@ -77,7 +77,21 @@
           "producer_zone": "NOC_ACK_ROUNDTRIP",
           "simulator_boundary": "operation_submission_to_acknowledged_completion",
           "clock_domain": "tensix",
-          "completion_scope": "acknowledged_operation"
+          "completion_scope": "acknowledged_operation",
+          "simulator_interval": {
+            "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+            "boundary": "operation_submission_to_acknowledged_completion",
+            "subject_id": "transfer:\"noc-64b\"",
+            "resource_id": null,
+            "start_event_id": "noc-64b:submission",
+            "end_event_id": "noc-64b:acknowledged_completion",
+            "semantic_scope": "acknowledged_operation"
+          },
+          "samples": {
+            "repetition_ids": ["0", "1"],
+            "warmup_repetition_ids": ["0"],
+            "aggregation": "none"
+          }
         }
       ],
       "producers": [
@@ -131,7 +145,21 @@
           "producer_zone": "DRAM_READ_RETURN",
           "simulator_boundary": "memory_service_begin_to_end",
           "clock_domain": "tensix",
-          "completion_scope": "memory_service"
+          "completion_scope": "memory_service",
+          "simulator_interval": {
+            "metric_id": "memory_service_begin_to_end:dram-read-256b",
+            "boundary": "memory_service_begin_to_end",
+            "subject_id": "transfer:\"dram-read-256b\"",
+            "resource_id": "resource:\"dram-0\"",
+            "start_event_id": "service:dram-read-256b:begin",
+            "end_event_id": "service:dram-read-256b:end",
+            "semantic_scope": "memory_service"
+          },
+          "samples": {
+            "repetition_ids": ["0", "1"],
+            "warmup_repetition_ids": ["0"],
+            "aggregation": "none"
+          }
         }
       ],
       "producers": [
@@ -185,7 +213,21 @@
           "producer_zone": "COMPUTE_SERVICE",
           "simulator_boundary": "compute_resource_acquire_to_release",
           "clock_domain": "tensix",
-          "completion_scope": "compute_service"
+          "completion_scope": "compute_service",
+          "simulator_interval": {
+            "metric_id": "compute_resource_acquire_to_release:compute-bf16-32",
+            "boundary": "compute_resource_acquire_to_release",
+            "subject_id": "job:\"compute-bf16-32\"",
+            "resource_id": "resource:[\"worker-0\",\"compute\",0]",
+            "start_event_id": "compute-bf16-32:acquire",
+            "end_event_id": "compute-bf16-32:release",
+            "semantic_scope": "compute_service"
+          },
+          "samples": {
+            "repetition_ids": ["0", "1"],
+            "warmup_repetition_ids": ["0"],
+            "aggregation": "none"
+          }
         }
       ],
       "producers": [

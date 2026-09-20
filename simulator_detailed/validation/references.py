@@ -9,8 +9,10 @@ from pathlib import Path
 
 from ..configs.schemas.validation import (
     ClockDomain,
+    IntervalSampleIdentity,
     MeasurementWindow,
     Metadata,
+    MetricIntervalIdentity,
     MetricObservation,
     NormalizedObservations,
     ObservationEntity,
@@ -21,6 +23,7 @@ from ..configs.schemas.validation import (
 )
 from .data import obj, require
 from .identity import content_digest, read_verified_artifact
+from .intervals import boundary_rule
 
 EXTRACTOR = "wormhole_reference_import"
 EXTRACTOR_VERSION = "1"
@@ -135,14 +138,41 @@ def _profiler(reference: ValidationReference, raw: str) -> tuple[NormalizedObser
         require((declared.boundary, declared.repetitions, declared.aggregation, declared.excluded_warmups, declared.start.unit, declared.start.clock_domain)
                 == (window.boundary, window.repetitions, window.aggregation, window.excluded_warmups, "cycles", selection.clock_domain),
                 "profiler selection contradicts measurement metadata")
+    interval_identity: MetricIntervalIdentity | None = None
+    completion_scope: str = "complete_run"
+    profiler_entities = [ObservationEntity(entity_id="profiler_zone", role="worker")]
+    try:
+        rule = boundary_rule(selection.boundary)
+    except ValueError:
+        rule = None
+    if rule is not None and rule.semantic_scope is not None:
+        resource_id = "profiler_resource" if rule.resource_required else None
+        if resource_id is not None:
+            profiler_entities.append(ObservationEntity(entity_id=resource_id, role="resource"))
+        interval_identity = MetricIntervalIdentity(
+            semantic_scope=rule.semantic_scope,
+            subject_id="profiler_zone",
+            resource_id=resource_id,
+            samples=tuple(
+                IntervalSampleIdentity(
+                    repetition_id=str(run),
+                    start_event_id=f"run:{run}:begin",
+                    end_event_id=f"run:{run}:end",
+                )
+                for run in selection.run_ids
+                if run not in selection.warmup_run_ids
+            ),
+        )
+        completion_scope = "interval"
     from ..configs.schemas.validation import CausalEdge
     observation = NormalizedObservations(
         observation_id="reference:" + content_digest({"raw": reference.provenance.raw_artifact.sha256, "selection": selection.model_dump(mode="json")}),
         source_result_sha256=reference.provenance.raw_artifact.sha256, execution="complete",
         clocks=(ClockDomain(domain_id=selection.clock_domain, hz=Metadata[float](state="known", value=float(frequency))),),
-        entities=(ObservationEntity(entity_id="profiler_zone", role="worker"),), events=tuple(events), effects=(),
+        entities=tuple(profiler_entities), events=tuple(events), effects=(),
         causal_edges=tuple(CausalEdge(before=f"run:{run}:begin", after=f"run:{run}:end") for run in pairs), routes=(), intervals=(),
         metrics=(MetricObservation(metric_id=selection.metric_id, value=value, unit="cycles", clock_domain=selection.clock_domain,
                                    numerator="same-core zone end minus begin", denominator="one retained run" if selection.aggregation == "none" else f"{selection.aggregation} of retained runs",
-                                   window=window, completion_scope="complete_run"),), pending=(), missing=())
+                                   window=window, completion_scope=completion_scope,
+                                   interval=interval_identity),), pending=(), missing=())
     return observation, statistics

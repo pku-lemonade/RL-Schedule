@@ -105,6 +105,20 @@ class ReferenceTests(unittest.TestCase):
             d["conditions"]["measurement"]["value"]["aggregation"] = "median"
         self.assertEqual(self.csv_variant(document_transform=change).observations.metrics[0].value, 27)
 
+    def test_supported_profiler_interval_retains_exact_sample_identities(self):
+        def change(document):
+            document["profiler"]["boundary"] = "memory_service_begin_to_end"
+            document["conditions"]["measurement"]["value"]["boundary"] = "memory_service_begin_to_end"
+
+        metric = self.csv_variant(document_transform=change).observations.metrics[0]
+        self.assertEqual(metric.completion_scope, "interval")
+        self.assertEqual(metric.interval.semantic_scope, "memory_service")
+        self.assertEqual(metric.interval.resource_id, "profiler_resource")
+        self.assertEqual(
+            tuple((sample.repetition_id, sample.start_event_id, sample.end_event_id) for sample in metric.interval.samples),
+            (("1", "run:1:begin", "run:1:end"), ("2", "run:2:begin", "run:2:end"), ("3", "run:3:begin", "run:3:end")),
+        )
+
     def test_ambiguous_and_missing_pairs_rejected(self):
         raw = (REFS / "synthetic_profiler.csv").read_text()
         for changed in (raw + raw.splitlines()[2] + "\n", "\n".join(raw.splitlines()[:-1])):

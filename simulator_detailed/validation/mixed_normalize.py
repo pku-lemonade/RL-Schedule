@@ -4,6 +4,7 @@ from ..configs.schemas.validation import (
     AddressedEffect,
     ClockDomain,
     Metadata,
+    MetricObservation,
     MissingObservation,
     NormalizedObservations,
     ObservationCounter,
@@ -14,13 +15,17 @@ from ..configs.schemas.validation import (
 )
 from .data import Data, array, integer, key, number, obj, rows, text
 from .identity import canonical_record, content_digest
+from .intervals import interval_metric
 
 
 def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
+    complete = raw["status"] == "complete"
     entities: dict[str, ObservationEntity] = {}
     events: list[ObservationEvent] = []
     effects: list[AddressedEffect] = []
     intervals: list[OccupancyInterval] = []
+    metrics: list[MetricObservation] = []
+    lifecycle_points: dict[str, dict[str, list[tuple[str, TimePoint]]]] = {}
 
     def point(value: float) -> TimePoint:
         return TimePoint(value=value, unit="cycles", clock_domain="aci")
@@ -54,7 +59,7 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
         for index, row in enumerate(items):
             event_id = f"{group}:{index}"
             subject = entity(
-                "transfer",
+                "job" if group.startswith("compute:") and row.get("job_id") is not None else "transfer",
                 row.get(
                     "operation_id",
                     row.get(
@@ -91,6 +96,12 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
                     details=canonical_record(row),
                 )
             )
+            if group == "lifecycle":
+                operation_id = text(row["operation_id"])
+                action = text(row["action"])
+                lifecycle_points.setdefault(operation_id, {}).setdefault(action, []).append(
+                    (event_id, point(number(row["time_aci_cycles"])))
+                )
             if group == "ownership_trace" and row["action"] == "publish":
                 effects.append(
                     AddressedEffect(
@@ -103,16 +114,53 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
                         visibility_event=event_id,
                     )
                 )
+    acknowledged = {
+        text(operation["operation_id"])
+        for operation in rows(configuration.get("operations", []))
+        if operation.get("kind") == "write_acknowledged"
+    }
+    acknowledged.update(
+        text(operation["operation_id"])
+        for operation in rows(configuration.get("writes", []))
+        if operation.get("completion") == "write_acknowledged"
+    )
+    for operation_id in sorted(acknowledged):
+        actions = lifecycle_points.get(operation_id, {})
+        submissions = actions.get("submission", [])
+        completions = actions.get("complete", [])
+        if complete and submissions and completions:
+            start_event, start = min(submissions, key=lambda item: item[1].value)
+            end_event, end = max(completions, key=lambda item: item[1].value)
+            metrics.append(interval_metric(
+                metric_id="operation_submission_to_acknowledged_completion:" + key(operation_id),
+                boundary="operation_submission_to_acknowledged_completion",
+                semantic_scope="acknowledged_operation",
+                subject_id=entity("transfer", operation_id), resource_id=None,
+                start_event_id=start_event, end_event_id=end_event, start=start, end=end,
+                value=end.value - start.value,
+            ))
     for group in ("chunks", "scalar_service"):
         for index, row in enumerate(rows(raw[group])):
             subject = entity("transfer", row["client_id"])
             identifier = f"{group}:{index}"
+            start = point(number(row["start_aci_cycles"]))
+            end = point(number(row["end_aci_cycles"]))
+            start_event = f"service-begin:{group}:{index}"
+            events.append(
+                ObservationEvent(
+                    event_id=start_event,
+                    action="memory_service_begin" if group == "chunks" else "scalar_service_begin",
+                    subject_id=subject,
+                    time=start,
+                    details=canonical_record(row),
+                )
+            )
             events.append(
                 ObservationEvent(
                     event_id=identifier,
                     action=text(row["direction"]),
                     subject_id=subject,
-                    time=point(number(row["end_aci_cycles"])),
+                    time=end,
                     details=canonical_record(row),
                     counters=tuple(
                         ObservationCounter(
@@ -138,10 +186,41 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
                     interval_id=identifier,
                     resource_id=entity("resource", row["resource_id"]),
                     owner_id=subject,
-                    start=point(number(row["start_aci_cycles"])),
-                    end=point(number(row["end_aci_cycles"])),
+                    start=start,
+                    end=end,
                 )
             )
+            if complete and group == "chunks":
+                resource = entity("resource", row["resource_id"])
+                metrics.append(interval_metric(
+                    metric_id="memory_service_begin_to_end:" + identifier,
+                    boundary="memory_service_begin_to_end", semantic_scope="memory_service",
+                    subject_id=subject, resource_id=resource, start_event_id=start_event,
+                    end_event_id=identifier, start=start, end=end, value=end.value - start.value,
+                ))
+    if isinstance(compute, dict):
+        active: dict[str, tuple[str, str, TimePoint, str, bool]] = {}
+        for index, row in enumerate(rows(compute["resource_events"])):
+            resource = entity("resource", [row["worker_tile_id"], row["kind"], row["engine_index"]])
+            subject = entity("job", row["job_id"])
+            when = point(number(row["time_aci_cycles"]))
+            event_id = f"compute:resource_events:{index}"
+            if row["action"] == "acquire":
+                active[resource] = (subject, "compute-resource:" + event_id, when, event_id, row["kind"] == "compute")
+            elif resource in active:
+                owner, interval_id, start, start_event, is_compute = active.pop(resource)
+                intervals.append(OccupancyInterval(interval_id=interval_id, resource_id=resource,
+                                                   owner_id=owner, start=start, end=when))
+                if complete and is_compute:
+                    metrics.append(interval_metric(
+                        metric_id="compute_resource_acquire_to_release:" + start_event,
+                        boundary="compute_resource_acquire_to_release", semantic_scope="compute_service",
+                        subject_id=owner, resource_id=resource, start_event_id=start_event,
+                        end_event_id=event_id, start=start, end=when, value=when.value - start.value,
+                    ))
+        for resource, (owner, interval_id, start, _event, _is_compute) in active.items():
+            intervals.append(OccupancyInterval(interval_id=interval_id, resource_id=resource,
+                                               owner_id=owner, start=start, end=None))
     # Snapshots retain pending owners, destinations, returns and integer state verbatim.
     records = {
         name: raw[name]
@@ -178,7 +257,7 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
     return NormalizedObservations(
         observation_id="obs:" + content_digest(raw),
         source_result_sha256=content_digest(raw),
-        execution="complete" if raw["status"] == "complete" else "incomplete",
+        execution="complete" if complete else "incomplete",
         clocks=(
             ClockDomain(
                 domain_id="aci",
@@ -194,7 +273,7 @@ def normalize_mixed(raw: Data, configuration: Data) -> NormalizedObservations:
         causal_edges=(),
         routes=(),
         intervals=tuple(intervals),
-        metrics=(),
+        metrics=tuple(metrics),
         pending=tuple(sorted(pending)),
         missing=(
             MissingObservation(

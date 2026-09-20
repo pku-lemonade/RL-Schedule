@@ -55,6 +55,7 @@ GateName = Literal[
 ]
 ExecutionState = Literal["inspected", "complete", "incomplete", "rejected", "unavailable"]
 SourceClass = Literal["synthetic", "architecture_document", "functional_capture", "hardware_capture"]
+IntervalSemanticScope = Literal["acknowledged_operation", "memory_service", "compute_service"]
 T = TypeVar("T")
 
 
@@ -226,6 +227,37 @@ class OccupancyInterval(ValidationRecord):
         return self
 
 
+class IntervalSampleIdentity(ValidationRecord):
+    repetition_id: Identifier
+    start_event_id: Identifier
+    end_event_id: Identifier
+
+    @model_validator(mode="after")
+    def distinct_endpoints(self) -> Self:
+        if self.start_event_id == self.end_event_id:
+            raise ValueError("interval sample requires distinct start/end events")
+        return self
+
+
+class MetricIntervalIdentity(ValidationRecord):
+    semantic_scope: IntervalSemanticScope
+    subject_id: Identifier
+    resource_id: Identifier | None
+    samples: tuple[IntervalSampleIdentity, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_samples(self) -> Self:
+        unique(tuple(sample.repetition_id for sample in self.samples), "interval repetition")
+        unique(
+            tuple((sample.start_event_id, sample.end_event_id) for sample in self.samples),
+            "interval endpoint pair",
+        )
+        resource_required = self.semantic_scope in ("memory_service", "compute_service")
+        if resource_required != (self.resource_id is not None):
+            raise ValueError("metric interval resource identity disagrees with its semantic scope")
+        return self
+
+
 class MetricObservation(ValidationRecord):
     metric_id: Identifier
     value: Number
@@ -235,6 +267,7 @@ class MetricObservation(ValidationRecord):
     denominator: Text
     window: MeasurementWindow
     completion_scope: Literal["complete_run", "interval", "partial"]
+    interval: MetricIntervalIdentity | None = None
 
 
 class MissingObservation(ValidationRecord):
@@ -309,6 +342,39 @@ class NormalizedObservations(ValidationRecord):
                 raise ValueError("metric references an unknown clock domain")
             if self.execution != "complete" and metric.completion_scope == "complete_run":
                 raise ValueError("incomplete/inspection evidence cannot carry complete-run metrics")
+            identity = metric.interval
+            if identity is not None:
+                if metric.completion_scope != "interval":
+                    raise ValueError("interval identity requires interval completion scope")
+                if len(identity.samples) != metric.window.repetitions:
+                    raise ValueError("interval samples must match retained repetitions")
+                if identity.subject_id not in entities:
+                    raise ValueError("metric interval references an unknown subject")
+                if identity.resource_id is not None:
+                    resource = entities.get(identity.resource_id)
+                    if resource is None or resource.role != "resource":
+                        raise ValueError("metric interval references an unknown resource")
+                event_records = {event.event_id: event for event in self.events}
+                for sample in identity.samples:
+                    start = event_records.get(sample.start_event_id)
+                    end = event_records.get(sample.end_event_id)
+                    if start is None or end is None:
+                        raise ValueError("metric interval references an unknown endpoint event")
+                    if start.subject_id != identity.subject_id or end.subject_id != identity.subject_id:
+                        raise ValueError("metric interval endpoints disagree with the selected subject")
+                    if start.time is None or end.time is None:
+                        raise ValueError("metric interval endpoints require timestamps")
+                    if ((start.time.unit, start.time.clock_domain) != (end.time.unit, end.time.clock_domain)
+                            or end.time.value < start.time.value):
+                        raise ValueError("metric interval endpoints must be ordered in one domain/unit")
+                    if metric.clock_domain != start.time.clock_domain:
+                        raise ValueError("metric interval clock disagrees with endpoint events")
+                if metric.window.repetitions == 1:
+                    sample = identity.samples[0]
+                    start = event_records[sample.start_event_id].time
+                    end = event_records[sample.end_event_id].time
+                    if start != metric.window.start or end != metric.window.end:
+                        raise ValueError("single-sample metric window must retain its exact endpoints")
         if any(t.clock_domain not in clocks for t in times):
             raise ValueError("observation references an unknown clock domain")
         if self.execution == "complete" and (self.pending or any(i.end is None for i in self.intervals)):
