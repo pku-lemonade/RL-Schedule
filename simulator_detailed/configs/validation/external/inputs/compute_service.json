@@ -1,1 +1,1 @@
-{"case_family":"compute_service","completion":"resource_release","data_type":"bf16","fidelity":"hifi2","shape":[32,32,32],"work":65536}
+{"case_family":"compute_service","completion":"resource_release","data_type":"bf16","fidelity":"hifi2","input_layout":"tile","output_address":16384,"output_bytes":2048,"output_layout":"tile","sentinel_elements":16,"sentinel_seed":1,"shape":[32,32,32],"work":65536,"worker_core":[0,0]}

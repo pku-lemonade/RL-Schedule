@@ -1,1 +1,1 @@
-{"bytes":64,"case_family":"noc_ack_roundtrip","completion":"returned_acknowledgement","destination":"worker-1","fabric_id":0,"source":"worker-0"}
+{"bytes":64,"case_family":"noc_ack_roundtrip","completion":"returned_acknowledgement","count":1,"destination":"worker-1","destination_address":8192,"destination_core":[1,0],"fabric_id":0,"pattern_seed":3,"pattern_stride":17,"source":"worker-0","source_core":[0,0]}

@@ -52,8 +52,8 @@
       "simulator_input": {
         "artifact_id": "sim-noc-64b",
         "logical_path": "inputs/noc_ack_roundtrip.json",
-        "sha256": "4a28f188c343c2280993759d56d3fdeff0956dfb3eb86a306eff4e446b09a662",
-        "size_bytes": 146
+        "sha256": "f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88",
+        "size_bytes": 265
       },
       "conditions": {
         "architecture": {"state": "known", "value": "wormhole_b0"},
@@ -62,8 +62,8 @@
         "profile_version": {"state": "known", "value": "wormhole_b0_n150_assumed"},
         "enabled_layout": {"state": "known", "value": {"text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"}},
         "clocks": {"state": "known", "value": [{"domain_id": "tensix", "hz": {"state": "known", "value": 1000000000}}]},
-        "workload": {"state": "known", "value": {"text": "{\"bytes\":64,\"completion\":\"returned_acknowledgement\",\"operation\":\"remote_l1_write\"}"}},
-        "mapping": {"state": "known", "value": {"text": "{\"destination\":\"worker-1\",\"fabric_id\":0,\"source\":\"worker-0\"}"}},
+        "workload": {"state": "known", "value": {"text": "{\"bytes\":64,\"completion\":\"returned_acknowledgement\",\"count\":1,\"destination_address\":8192,\"operation\":\"remote_l1_write\",\"pattern_seed\":3,\"pattern_stride\":17}"}},
+        "mapping": {"state": "known", "value": {"text": "{\"destination\":\"worker-1\",\"destination_core\":[1,0],\"fabric_id\":0,\"source\":\"worker-0\",\"source_core\":[0,0]}"}},
         "software": {"state": "known", "value": "pinned-tt-metal-build"},
         "firmware": {"state": "unknown", "reason": "collected on the Wormhole worker"},
         "instrumentation": {"state": "known", "value": {"text": "{\"profiler\":\"sparse_same_risc_zone\"}"}},
@@ -120,8 +120,8 @@
       "simulator_input": {
         "artifact_id": "sim-dram-read-256b",
         "logical_path": "inputs/dram_read_return.json",
-        "sha256": "8f03972b819ca9624b2d37667a58e401fb84ceda7f5b8ae976ab3802a8cd78c4",
-        "size_bytes": 140
+        "sha256": "6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df",
+        "size_bytes": 226
       },
       "conditions": {
         "architecture": {"state": "known", "value": "wormhole_b0"},
@@ -130,8 +130,8 @@
         "profile_version": {"state": "known", "value": "wormhole_b0_n150_assumed"},
         "enabled_layout": {"state": "known", "value": {"text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"}},
         "clocks": {"state": "known", "value": [{"domain_id": "tensix", "hz": {"state": "known", "value": 1000000000}}]},
-        "workload": {"state": "known", "value": {"text": "{\"address\":4096,\"bytes\":256,\"completion\":\"worker_visible\",\"operation\":\"dram_read\"}"}},
-        "mapping": {"state": "known", "value": {"text": "{\"destination\":\"worker-0\",\"resource_id\":\"dram-0\"}"}},
+        "workload": {"state": "known", "value": {"text": "{\"address\":4096,\"bytes\":256,\"completion\":\"worker_visible\",\"count\":1,\"operation\":\"dram_read\",\"pattern_seed\":7,\"pattern_stride\":29}"}},
+        "mapping": {"state": "known", "value": {"text": "{\"destination\":\"worker-0\",\"destination_core\":[0,0],\"dram_bank\":0,\"resource_id\":\"dram-0\"}"}},
         "software": {"state": "known", "value": "pinned-tt-metal-build"},
         "firmware": {"state": "unknown", "reason": "collected on the Wormhole worker"},
         "instrumentation": {"state": "known", "value": {"text": "{\"profiler\":\"sparse_same_risc_zone\"}"}},
@@ -188,8 +188,8 @@
       "simulator_input": {
         "artifact_id": "sim-compute-bf16-32",
         "logical_path": "inputs/compute_service.json",
-        "sha256": "dfe3e52b101bdcd6e101ba46ad2504ca27e89454a36158f6a19111af72b74d35",
-        "size_bytes": 136
+        "sha256": "41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c",
+        "size_bytes": 285
       },
       "conditions": {
         "architecture": {"state": "known", "value": "wormhole_b0"},
@@ -198,8 +198,8 @@
         "profile_version": {"state": "known", "value": "wormhole_b0_n150_assumed"},
         "enabled_layout": {"state": "known", "value": {"text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"}},
         "clocks": {"state": "known", "value": [{"domain_id": "tensix", "hz": {"state": "known", "value": 1000000000}}]},
-        "workload": {"state": "known", "value": {"text": "{\"data_type\":\"bf16\",\"fidelity\":\"hifi2\",\"operation\":\"matmul\",\"shape\":[32,32,32],\"work\":65536}"}},
-        "mapping": {"state": "known", "value": {"text": "{\"resource\":\"worker-0-tensix\",\"worker\":\"worker-0\"}"}},
+        "workload": {"state": "known", "value": {"text": "{\"data_type\":\"bf16\",\"fidelity\":\"hifi2\",\"input_layout\":\"tile\",\"operation\":\"matmul\",\"output_address\":16384,\"output_bytes\":2048,\"output_layout\":\"tile\",\"sentinel_elements\":16,\"sentinel_seed\":1,\"shape\":[32,32,32],\"work\":65536}"}},
+        "mapping": {"state": "known", "value": {"text": "{\"output_resource\":\"worker-0-l1\",\"resource\":\"worker-0-tensix\",\"worker\":\"worker-0\",\"worker_core\":[0,0]}"}},
         "software": {"state": "known", "value": "pinned-tt-metal-build"},
         "firmware": {"state": "unknown", "reason": "collected on the Wormhole worker"},
         "instrumentation": {"state": "known", "value": {"text": "{\"profiler\":\"sparse_same_risc_zone\"}"}},

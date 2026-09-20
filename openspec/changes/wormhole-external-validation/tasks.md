@@ -16,9 +16,9 @@
 
 ## 3. Portable capture kit and ttsim functional evidence
 
-- [ ] 3.1 Implement a capture-kit generator with named `ttsim_tt_metal_v1` recipes, fixed argument construction, source/build/binary manifests, finite budgets and explicit output contracts; verify generated kits are deterministic, portable and contain no repository-local absolute paths or evaluated shell text.
+- [x] 3.1 Implement a capture-kit generator with named `ttsim_tt_metal_v1` recipes, fixed argument construction, source/build/binary manifests, finite budgets and explicit output contracts; verify generated kits are deterministic, portable and contain no repository-local absolute paths or evaluated shell text.
 - [ ] 3.2 Add finite TT-Metal producer assets for `noc_ack_roundtrip`, `dram_read_return` and `compute_service`, including deterministic sentinel/status output and explicit completion markers; verify build inputs and operation/layout/fidelity parameters are fully recorded rather than defaulted.
-- [ ] 3.3 Implement conversion from the producer's raw functional record into hash-verified `validation_reference` v1 observations with explicit effect/event mappings; verify altered payloads, missing markers, wrong addresses/counts and simulator-specific-path declarations fail or block as specified.
+- [x] 3.3 Implement conversion from the producer's raw functional record into hash-verified `validation_reference` v1 observations with explicit effect/event mappings; verify altered payloads, missing markers, wrong addresses/counts and simulator-specific-path declarations fail or block as specified.
 - [ ] 3.4 On a compatible pinned ttsim/TT-Metal worker, build and run the three case families with the generated kit and return raw capture bundles; verify the imported references are classified `functional_capture`, all required functional comparisons pass, and no ttsim timing is classified as silicon evidence. Leave this task unchecked with exact blocked prerequisites if no worker is supplied.
 - [ ] 3.5 Run converter/kit tests plus the actual ttsim evidence checks when available, strict Pyright, scoped Ruff and strict OpenSpec validation; record producer revisions, raw hashes, results and limitations in `progress.md`, then commit Part 3 only when its required functional evidence is complete.
 

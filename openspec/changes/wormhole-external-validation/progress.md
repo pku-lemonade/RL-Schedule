@@ -78,6 +78,101 @@ git diff --check
 Passed with no output.
 ```
 
+## Part 3 - Portable capture kit and functional conversion
+
+Status: implementation checkpoint on 2026-09-20; tasks 3.1 and 3.3 are
+complete, while tasks 3.2, 3.4 and 3.5 remain open. No ttsim execution or
+external functional evidence is claimed, and Part 3 has not been committed as
+complete.
+
+Delivered and verified:
+
+- A deterministic `ttsim_tt_metal_v1` capture-kit generator. It admits and
+  hashes the campaign first, copies only declared inputs and checked producer
+  assets, emits three fixed argument vectors, fixes the four simulator
+  environment variables, carries the source/build/binary manifests and checks
+  finite invocation/output budgets. Generation from an unrelated working
+  directory produced byte-identical kits with identity
+  `ttsim-kit:1ef14dab165ed67d903dfe2bbbb6b2ae6a52013c2ec74de0d8d700022e63329a`.
+- Strict producer functional-record contracts and conversion to ordinary
+  `validation_reference` version 1 plus explicit entity/event/effect mapping
+  sidecars. Conversion starts from an admitted capture bundle, rechecks the raw
+  SHA-256, exact build/input/condition identities, all repetitions, causal
+  events, completion markers, independently recomputed sentinel bytes and the
+  declared effect address, size and count before writing atomically.
+- Fully explicit fixture inputs for NoC destination address/core/count/pattern,
+  DRAM address/bank/core/count/pattern and compute shape, work, BF16 HiFi2
+  fidelity, tile layouts, output range/core and sentinel selection. No producer
+  or converter default supplies these hardware/workload parameters.
+- Bounded TT-Metal device source assets for the three case families and a fixed
+  host invocation/build contract. These assets are not yet a completed task
+  3.2 producer: the host intentionally refuses evidence until the pinned worker
+  links the recipe-specific Metalium dispatch and deterministic record writer.
+  Static source presence is not treated as a successful build or run.
+
+Pinned ttsim source snapshot:
+
+- Source URL: `https://github.com/tenstorrent/ttsim`.
+- Revision: `40bb1a2ad6a755279c4628ddc65e30b10721fdef`.
+- GitHub revision tarball SHA-256:
+  `92d33ef15728f17ed5488d28d24dac13550ef58d3b2da16c9fa8a63bd6bb69d0`.
+
+Implementation identities before this progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `configs/schemas/external_validation.py` | `fffb808d9acabdd6d105ddce0fe4f1cbc064b5e67fddefbd833179975ed59c39` |
+| `validation/external_capture.py` | `9ecc4c23320c51c5579e54f8608ad2a9bf0063a786e71140f34b9d37c7f765ca` |
+| `tests/test_external_capture_kit.py` | `79904d3b37879e48485f8c7310bc946f8f6f3aa99eba889a4c4e209046512d2b` |
+| `capture_assets/ttsim_tt_metal_v1/CMakeLists.txt` | `dc4a65ee1cd4561d78ef8a51b11834286eb2a02fee1a7285fa7c97f78f3b0cdf` |
+| `capture_assets/ttsim_tt_metal_v1/host/wormhole_external_validation.cpp` | `49a3982366a9a31500d2ffa73d3ed3aed0daa643b577dd67ea271d3be332afd7` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/noc_ack_roundtrip.cpp` | `6b9d98b4a1b3fc91651c68d898ddf77270d20bfc03b49bfb359330deac7ec7e6` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/dram_read_return.cpp` | `b05cc66876252b7c6d073dba311fd51d4d4e2ca508819091a7ef56f3f5d92172` |
+| `capture_assets/ttsim_tt_metal_v1/kernels/compute_service.cpp` | `500aaf139631606bff6e4415e50e3a707472d4fba06ba215dc15d5f90f66a7e5` |
+
+Revised fixture identities:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `campaign.valid.json` | `a1b116f38e009113afbe3b1d8b7b5db5b0ab24e41a4edd78c7d002abcd3e5325` |
+| `capture.valid.json` | `0037271f55589d579ce192fdd6a0abe09e8d7b2d0adf3e0fb869a03460c0adc9` |
+| `capture.unavailable.json` | `aef2c9868d00c34336d37fbad0c43f14555aaf3164d3166a9ec78ae05b004982` |
+| `report.blocked.json` | `9288992be7435e7fce35631556ac4a6c76fdffa69513e3f0964bb12716cdf68f` |
+| `inputs/noc_ack_roundtrip.json` | `f5ee0bd5197561801e07435d246977c7e5823314e1052869863efe67ff756a88` |
+| `inputs/dram_read_return.json` | `6b63840a699975521080434ddb1153ba8eb1b0a93a25db986fc0c95bc61049df` |
+| `inputs/compute_service.json` | `41afb6bd06c3b7dd869dac1104f2cd6d52ce6f2e5b531b1e0af25d3de39d178c` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_external_capture_kit simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_validation_adapters simulator_detailed.tests.test_mixed_validation simulator_detailed.tests.test_validation_references simulator_detailed.tests.test_external_validation_contracts simulator_detailed.tests.test_validation_contracts simulator_detailed.tests.test_validation_identity simulator_detailed.tests.test_validation_runner simulator_detailed.tests.test_validation_cli
+145 tests passed in 112.284s; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/external_validation.py simulator_detailed/configs/schemas/validation.py simulator_detailed/validation simulator_detailed/tests/test_external_capture_kit.py simulator_detailed/tests/test_external_validation_intervals.py simulator_detailed/tests/test_validation_adapters.py simulator_detailed/tests/test_mixed_validation.py simulator_detailed/tests/test_validation_references.py simulator_detailed/tests/test_external_validation_contracts.py
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Blocked prerequisites observed on this host:
+
+- `/dev/tenstorrent` is absent and `tt-smi` is not installed.
+- No pinned TT-Metal checkout or `libttsim_wh.so`/`libttsim.so` was found under
+  the workspace or supplied worker roots.
+- Task 3.2 requires the worker-side Metalium recipe dispatch/record writer and a
+  successful build against the declared TT-Metal revision.
+- Task 3.4 then requires that exact build plus the pinned ttsim revision and
+  shared-library identity to run all three generated recipes and return raw
+  bundles. Task 3.5 requires those actual bundles; synthetic unit-test records
+  cannot satisfy it.
+
 Remaining external evidence: none of the fixtures is an admitted ttsim or
 Wormhole execution. Parts 3 and 4 retain their explicit worker/device gates.
 

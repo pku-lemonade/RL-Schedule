@@ -23,6 +23,7 @@ from ...validation.outcomes import CheckOutcome, ReportStatus
 from .topology import Digest, Identifier, Index, PositiveInt, unique
 from .validation import (
     CanonicalJSON,
+    IdentifierMapping,
     IntervalSemanticScope,
     Metadata,
     Positive,
@@ -42,8 +43,26 @@ ExternalIntervalBoundary = Literal[
 EvidenceClassification = Literal["functional_capture", "hardware_capture"]
 EvidenceGate = Literal["functional_reference", "silicon_timing"]
 OutputRole = Literal["functional_record", "profiler_csv", "capture_manifest"]
-ExternalStage = Literal["collection", "import", "functional", "timing", "calibration", "evaluation"]
+ExternalStage = Literal[
+    "collection", "import", "functional", "timing", "calibration", "evaluation"
+]
 PinnedRevision = Annotated[str, Field(pattern=r"^[0-9a-f]{40,64}$")]
+TTSimRecipe = Literal[
+    "noc_ack_roundtrip_v1",
+    "dram_read_return_v1",
+    "compute_service_v1",
+]
+CaptureKitFileRole = Literal[
+    "campaign", "case_input", "host_source", "device_source", "build_file"
+]
+FunctionalEntityRole = Literal["endpoint", "resource", "worker", "job", "transfer"]
+HexPayload = Annotated[str, Field(pattern=r"^(?:[0-9a-f]{2})+$")]
+
+TTSIM_SOURCE_URL = "https://github.com/tenstorrent/ttsim"
+TTSIM_PINNED_REVISION = "40bb1a2ad6a755279c4628ddc65e30b10721fdef"
+TTSIM_SOURCE_SNAPSHOT_SHA256 = (
+    "92d33ef15728f17ed5488d28d24dac13550ef58d3b2da16c9fa8a63bd6bb69d0"
+)
 
 
 def _portable_path(value: str, label: str) -> None:
@@ -122,8 +141,13 @@ class SourceBuildIdentity(ValidationRecord):
 
     @model_validator(mode="after")
     def immutable_build(self) -> Self:
-        unique(tuple(item.artifact_id for item in self.artifacts), "build artifact identity")
-        unique(tuple(item.logical_path for item in self.artifacts), "build artifact path")
+        unique(
+            tuple(item.artifact_id for item in self.artifacts),
+            "build artifact identity",
+        )
+        unique(
+            tuple(item.logical_path for item in self.artifacts), "build artifact path"
+        )
         _reject_executable_json(self.configuration, "build configuration")
         return self
 
@@ -132,6 +156,179 @@ class ProducerDefinition(ValidationRecord):
     producer_id: Identifier
     adapter: ProducerAdapter
     build_id: Identifier
+
+
+class PinnedSourceIdentity(ValidationRecord):
+    source_url: Text
+    revision: PinnedRevision
+    source_snapshot_sha256: Digest
+
+
+class CaptureKitFile(ValidationRecord):
+    artifact_id: Identifier
+    logical_path: Text
+    sha256: Digest
+    size_bytes: Index
+    role: CaptureKitFileRole
+
+    @model_validator(mode="after")
+    def portable(self) -> Self:
+        _portable_path(self.logical_path, "capture-kit file")
+        return self
+
+
+class CaptureEnvironmentVariable(ValidationRecord):
+    name: Literal[
+        "TT_METAL_HOME",
+        "TT_METAL_SIMULATOR",
+        "TT_METAL_SLOW_DISPATCH_MODE",
+        "TT_METAL_DISABLE_SFPLOADMACRO",
+    ]
+    value: Text
+
+    @model_validator(mode="after")
+    def fixed_value(self) -> Self:
+        expected = {
+            "TT_METAL_HOME": "vendor/tt-metal",
+            "TT_METAL_SIMULATOR": "runtime/ttsim/libttsim_wh.so",
+            "TT_METAL_SLOW_DISPATCH_MODE": "1",
+            "TT_METAL_DISABLE_SFPLOADMACRO": "1",
+        }
+        if self.value != expected[self.name]:
+            raise ValueError("capture-kit environment uses an unsupported value")
+        return self
+
+
+class TTSimCaptureInvocation(ValidationRecord):
+    invocation_id: Identifier
+    recipe: TTSimRecipe
+    case_id: Identifier
+    argv: tuple[Text, ...] = Field(min_length=17, max_length=17)
+    environment: tuple[CaptureEnvironmentVariable, ...] = Field(
+        min_length=4, max_length=4
+    )
+    repetition_ids: tuple[Identifier, ...] = Field(min_length=1)
+    warmup_repetition_ids: tuple[Identifier, ...] = ()
+    timeout_seconds: Positive
+    max_output_bytes: PositiveInt
+    outputs: tuple[OutputDeclaration, ...] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def fixed_arguments(self) -> Self:
+        unique(self.repetition_ids, "capture-kit repetition")
+        unique(self.warmup_repetition_ids, "capture-kit warm-up repetition")
+        if not set(self.warmup_repetition_ids) < set(self.repetition_ids):
+            raise ValueError(
+                "capture-kit warm-ups must be a proper subset of repetitions"
+            )
+        expected_flags = (
+            "--recipe",
+            "--input",
+            "--functional-output",
+            "--manifest-output",
+            "--repetitions",
+            "--warmup-repetitions",
+            "--timeout-seconds",
+            "--max-output-bytes",
+        )
+        if (
+            self.argv[0] != "bin/wormhole_external_validation"
+            or self.argv[1::2] != expected_flags
+        ):
+            raise ValueError("capture-kit argv does not use the fixed named interface")
+        if self.argv[2] != self.recipe:
+            raise ValueError("capture-kit argv recipe disagrees with its typed recipe")
+        for index in (4, 6, 8):
+            _portable_path(self.argv[index], "capture-kit argv path")
+        if self.argv[10] != str(len(self.repetition_ids)):
+            raise ValueError(
+                "capture-kit repetition argv disagrees with its finite budget"
+            )
+        if self.argv[12] != str(len(self.warmup_repetition_ids)):
+            raise ValueError(
+                "capture-kit warm-up argv disagrees with its finite budget"
+            )
+        if self.argv[14] != format(self.timeout_seconds, "g"):
+            raise ValueError(
+                "capture-kit timeout argv disagrees with its finite budget"
+            )
+        if self.argv[16] != str(self.max_output_bytes):
+            raise ValueError("capture-kit output argv disagrees with its finite budget")
+        if any(
+            any(
+                token in value
+                for token in ("\n", "\r", "`", "$(", ";", "&&", "||", "|")
+            )
+            for value in self.argv
+        ):
+            raise ValueError("capture-kit argv cannot contain evaluated shell text")
+        variables = {item.name for item in self.environment}
+        if variables != {
+            "TT_METAL_HOME",
+            "TT_METAL_SIMULATOR",
+            "TT_METAL_SLOW_DISPATCH_MODE",
+            "TT_METAL_DISABLE_SFPLOADMACRO",
+        }:
+            raise ValueError("capture-kit environment is incomplete")
+        if {item.role for item in self.outputs} != {
+            "functional_record",
+            "capture_manifest",
+        }:
+            raise ValueError("ttsim capture-kit output contract is incomplete")
+        paths = {item.logical_path for item in self.outputs}
+        if paths != {self.argv[6], self.argv[8]}:
+            raise ValueError("capture-kit argv disagrees with its output contract")
+        return self
+
+
+class TTSimCaptureKitManifest(ValidationRecord):
+    kind: Literal["ttsim_capture_kit"]
+    schema_version: Version
+    kit_id: Identifier
+    campaign: ExternalArtifactIdentity
+    campaign_id: Identifier
+    producer: ProducerDefinition
+    build: SourceBuildIdentity
+    binary_manifest: tuple[BuildArtifactIdentity, ...] = Field(min_length=1)
+    ttsim_source: PinnedSourceIdentity
+    files: tuple[CaptureKitFile, ...] = Field(min_length=1)
+    invocations: tuple[TTSimCaptureInvocation, ...] = Field(min_length=1)
+    max_invocations: PositiveInt
+    max_total_output_bytes: PositiveInt
+
+    @model_validator(mode="after")
+    def portable_bounded_kit(self) -> Self:
+        if self.producer.adapter != "ttsim_tt_metal_v1":
+            raise ValueError("capture kit requires the named ttsim adapter")
+        if (
+            self.producer.build_id != self.build.build_id
+            or self.binary_manifest != self.build.artifacts
+        ):
+            raise ValueError("capture-kit source/build/binary manifests disagree")
+        if self.ttsim_source != PinnedSourceIdentity(
+            source_url=TTSIM_SOURCE_URL,
+            revision=TTSIM_PINNED_REVISION,
+            source_snapshot_sha256=TTSIM_SOURCE_SNAPSHOT_SHA256,
+        ):
+            raise ValueError("capture kit requires the pinned ttsim source identity")
+        unique(
+            tuple(item.artifact_id for item in self.files), "capture-kit file identity"
+        )
+        unique(tuple(item.logical_path for item in self.files), "capture-kit file path")
+        unique(
+            tuple(item.invocation_id for item in self.invocations),
+            "capture-kit invocation",
+        )
+        unique(tuple(item.case_id for item in self.invocations), "capture-kit case")
+        if len(self.invocations) > self.max_invocations:
+            raise ValueError("capture-kit invocation count exceeds its budget")
+        output_budget = sum(
+            item.max_output_bytes * len(item.repetition_ids)
+            for item in self.invocations
+        )
+        if output_budget > self.max_total_output_bytes:
+            raise ValueError("capture-kit output bytes exceed its budget")
+        return self
 
 
 class ExternalCaseBudget(ValidationRecord):
@@ -176,15 +373,22 @@ class ModelIntervalSelection(ValidationRecord):
     @model_validator(mode="after")
     def supported_identity(self) -> Self:
         expected: dict[ExternalIntervalBoundary, tuple[IntervalSemanticScope, bool]] = {
-            "operation_submission_to_acknowledged_completion": ("acknowledged_operation", False),
+            "operation_submission_to_acknowledged_completion": (
+                "acknowledged_operation",
+                False,
+            ),
             "memory_service_begin_to_end": ("memory_service", True),
             "compute_resource_acquire_to_release": ("compute_service", True),
         }
         scope, resource_required = expected[self.boundary]
         if self.semantic_scope != scope:
-            raise ValueError("model interval semantic scope disagrees with its boundary")
+            raise ValueError(
+                "model interval semantic scope disagrees with its boundary"
+            )
         if resource_required != (self.resource_id is not None):
-            raise ValueError("model interval resource identity disagrees with its boundary")
+            raise ValueError(
+                "model interval resource identity disagrees with its boundary"
+            )
         if self.start_event_id == self.end_event_id:
             raise ValueError("model interval requires distinct start/end events")
         return self
@@ -202,16 +406,25 @@ class BoundaryMap(ValidationRecord):
 
     @model_validator(mode="after")
     def consistent_mapping(self) -> Self:
-        expected: dict[CaseFamily, tuple[ExternalIntervalBoundary, IntervalSemanticScope]] = {
+        expected: dict[
+            CaseFamily, tuple[ExternalIntervalBoundary, IntervalSemanticScope]
+        ] = {
             "noc_ack_roundtrip": (
                 "operation_submission_to_acknowledged_completion",
                 "acknowledged_operation",
             ),
             "dram_read_return": ("memory_service_begin_to_end", "memory_service"),
-            "compute_service": ("compute_resource_acquire_to_release", "compute_service"),
+            "compute_service": (
+                "compute_resource_acquire_to_release",
+                "compute_service",
+            ),
         }
-        if (self.simulator_boundary, self.completion_scope) != expected[self.case_family]:
-            raise ValueError("case family uses an unsupported boundary/completion scope")
+        if (self.simulator_boundary, self.completion_scope) != expected[
+            self.case_family
+        ]:
+            raise ValueError(
+                "case family uses an unsupported boundary/completion scope"
+            )
         if (
             self.simulator_interval.boundary != self.simulator_boundary
             or self.simulator_interval.semantic_scope != self.completion_scope
@@ -226,8 +439,12 @@ class ProducerBinding(ValidationRecord):
 
     @model_validator(mode="after")
     def unique_outputs(self) -> Self:
-        unique(tuple(item.artifact_id for item in self.outputs), "producer output identity")
-        unique(tuple(item.logical_path for item in self.outputs), "producer output path")
+        unique(
+            tuple(item.artifact_id for item in self.outputs), "producer output identity"
+        )
+        unique(
+            tuple(item.logical_path for item in self.outputs), "producer output path"
+        )
         unique(tuple(item.role for item in self.outputs), "producer output role")
         return self
 
@@ -252,16 +469,21 @@ class ExternalValidationCase(ValidationRecord):
         for item in self.boundary_maps:
             if (
                 len(item.samples.repetition_ids) != self.budget.repetitions
-                or len(item.samples.warmup_repetition_ids) != self.budget.warmup_repetitions
+                or len(item.samples.warmup_repetition_ids)
+                != self.budget.warmup_repetitions
             ):
-                raise ValueError("boundary sample policy disagrees with the case budget")
+                raise ValueError(
+                    "boundary sample policy disagrees with the case budget"
+                )
         canonical = (
             self.conditions.enabled_layout,
             self.conditions.workload,
             self.conditions.mapping,
             self.conditions.instrumentation,
         )
-        for name, metadata in zip(("layout", "workload", "mapping", "instrumentation"), canonical, strict=True):
+        for name, metadata in zip(
+            ("layout", "workload", "mapping", "instrumentation"), canonical, strict=True
+        ):
             if metadata.value is not None:
                 _reject_executable_json(metadata.value, f"case {name}")
         return self
@@ -286,8 +508,14 @@ class ExternalValidationCampaign(ValidationRecord):
         unique(tuple(item.producer_id for item in self.producers), "producer identity")
         unique(tuple(item.adapter for item in self.producers), "producer adapter")
         unique(tuple(item.case_id for item in self.cases), "external case")
-        unique(tuple(item.simulator_input.artifact_id for item in self.cases), "simulator input identity")
-        unique(tuple(item.simulator_input.logical_path for item in self.cases), "simulator input path")
+        unique(
+            tuple(item.simulator_input.artifact_id for item in self.cases),
+            "simulator input identity",
+        )
+        unique(
+            tuple(item.simulator_input.logical_path for item in self.cases),
+            "simulator input path",
+        )
         if len(self.cases) > self.max_cases:
             raise ValueError("case count exceeds the declared campaign budget")
         builds = {item.build_id for item in self.builds}
@@ -316,9 +544,156 @@ class ExternalValidationCampaign(ValidationRecord):
         unique(tuple(output_ids), "campaign output identity")
         unique(tuple(output_paths), "campaign output path")
         if invocations > self.max_invocations:
-            raise ValueError("producer invocation count exceeds the declared campaign budget")
+            raise ValueError(
+                "producer invocation count exceeds the declared campaign budget"
+            )
         if output_bytes > self.max_total_output_bytes:
-            raise ValueError("producer output budget exceeds the declared campaign budget")
+            raise ValueError(
+                "producer output budget exceeds the declared campaign budget"
+            )
+        return self
+
+
+class ProducerFunctionalEntity(ValidationRecord):
+    entity_id: Identifier
+    role: FunctionalEntityRole
+    simulator_id: Identifier
+    physical_owner: Identifier | None = None
+    fabric_id: Index | None = None
+
+
+class ProducerFunctionalCounter(ValidationRecord):
+    name: Identifier
+    value: Index
+    unit: Literal["bytes", "work", "count"]
+    scope: Literal["planned", "observed"]
+
+
+class ProducerFunctionalEvent(ValidationRecord):
+    event_id: Identifier
+    action: Identifier
+    subject_id: Identifier
+    sequence: Index
+    simulator_event_id: Identifier
+    counters: tuple[ProducerFunctionalCounter, ...] = ()
+
+    @model_validator(mode="after")
+    def unique_counters(self) -> Self:
+        unique(
+            tuple((item.name, item.scope) for item in self.counters),
+            "producer event counter",
+        )
+        return self
+
+
+class ProducerFunctionalEffect(ValidationRecord):
+    effect_id: Identifier
+    destination_id: Identifier
+    resource_id: Identifier
+    offset_bytes: Index
+    size_bytes: PositiveInt
+    count: PositiveInt
+    visibility_event: Identifier
+    simulator_effect_id: Identifier
+
+
+class ProducerFunctionalRepetition(ValidationRecord):
+    repetition_id: Identifier
+    status: Literal["pass", "fail"]
+    completion_marker: Literal["WORMHOLE_EXTERNAL_COMPLETE_V1"]
+    sentinel_algorithm: Literal["sha256"]
+    sentinel_payload_hex: HexPayload
+    sentinel_sha256: Digest
+    events: tuple[ProducerFunctionalEvent, ...] = Field(min_length=2)
+    effects: tuple[ProducerFunctionalEffect, ...]
+
+    @model_validator(mode="after")
+    def ordered_record(self) -> Self:
+        unique(tuple(item.event_id for item in self.events), "producer event")
+        unique(tuple(item.sequence for item in self.events), "producer event sequence")
+        unique(tuple(item.effect_id for item in self.effects), "producer effect")
+        if tuple(item.sequence for item in self.events) != tuple(
+            sorted(item.sequence for item in self.events)
+        ):
+            raise ValueError(
+                "producer events must be serialized in causal sequence order"
+            )
+        event_ids = {item.event_id for item in self.events}
+        if any(item.visibility_event not in event_ids for item in self.effects):
+            raise ValueError("producer effect references an unknown visibility event")
+        return self
+
+
+class ProducerFunctionalRecord(ValidationRecord):
+    kind: Literal["tt_metal_functional_record"]
+    schema_version: Version
+    case_id: Identifier
+    case_family: CaseFamily
+    producer_id: Identifier
+    adapter: ProducerAdapter
+    build_id: Identifier
+    input_artifact: ExternalArtifactIdentity
+    binary_artifacts: tuple[BuildArtifactIdentity, ...] = Field(min_length=1)
+    workload: CanonicalJSON
+    mapping: CanonicalJSON
+    enabled_layout: CanonicalJSON
+    instrumentation: CanonicalJSON
+    entities: tuple[ProducerFunctionalEntity, ...] = Field(min_length=1)
+    repetitions: tuple[ProducerFunctionalRepetition, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def complete_functional_record(self) -> Self:
+        unique(tuple(item.entity_id for item in self.entities), "producer entity")
+        unique(
+            tuple(item.simulator_id for item in self.entities),
+            "producer entity mapping",
+        )
+        unique(
+            tuple(item.repetition_id for item in self.repetitions),
+            "producer repetition",
+        )
+        entities = {item.entity_id for item in self.entities}
+        event_ids: list[str] = []
+        effect_ids: list[str] = []
+        for repetition in self.repetitions:
+            event_ids.extend(item.event_id for item in repetition.events)
+            effect_ids.extend(item.effect_id for item in repetition.effects)
+            if any(item.subject_id not in entities for item in repetition.events):
+                raise ValueError("producer event references an unknown entity")
+            if any(
+                item.destination_id not in entities or item.resource_id not in entities
+                for item in repetition.effects
+            ):
+                raise ValueError("producer effect references an unknown entity")
+        unique(tuple(event_ids), "producer event across repetitions")
+        unique(tuple(effect_ids), "producer effect across repetitions")
+        for label, record in (
+            ("producer workload", self.workload),
+            ("producer mapping", self.mapping),
+            ("producer enabled layout", self.enabled_layout),
+            ("producer instrumentation", self.instrumentation),
+        ):
+            _reject_executable_json(record, label)
+        return self
+
+
+class FunctionalMappingManifest(ValidationRecord):
+    kind: Literal["functional_identifier_mappings"]
+    schema_version: Version
+    reference_id: Identifier
+    source_artifact_sha256: Digest
+    entity_mappings: tuple[IdentifierMapping, ...] = Field(min_length=1)
+    event_mappings: tuple[IdentifierMapping, ...] = Field(min_length=1)
+    effect_mappings: tuple[IdentifierMapping, ...]
+
+    @model_validator(mode="after")
+    def unique_reference_ids(self) -> Self:
+        for label, items in (
+            ("entity mapping", self.entity_mappings),
+            ("event mapping", self.event_mappings),
+            ("effect mapping", self.effect_mappings),
+        ):
+            unique(tuple(item.reference for item in items), label)
         return self
 
 
@@ -394,12 +769,24 @@ class ExternalCaptureBundle(ValidationRecord):
 
     @model_validator(mode="after")
     def captured_evidence(self) -> Self:
-        unique(tuple(item.artifact_id for item in self.raw_artifacts), "raw artifact identity")
-        unique(tuple(item.logical_path for item in self.raw_artifacts), "raw artifact path")
+        unique(
+            tuple(item.artifact_id for item in self.raw_artifacts),
+            "raw artifact identity",
+        )
+        unique(
+            tuple(item.logical_path for item in self.raw_artifacts), "raw artifact path"
+        )
         unique(tuple(item.name for item in self.counters), "capture counter")
         unique(tuple(item.artifact_id for item in self.lineage), "lineage artifact")
-        artifacts = {self.campaign.artifact_id, *(item.artifact_id for item in self.raw_artifacts)}
-        if any(parent not in artifacts for item in self.lineage for parent in item.derived_from):
+        artifacts = {
+            self.campaign.artifact_id,
+            *(item.artifact_id for item in self.raw_artifacts),
+        }
+        if any(
+            parent not in artifacts
+            for item in self.lineage
+            for parent in item.derived_from
+        ):
             raise ValueError("lineage references an unknown artifact")
         if any(item.artifact_id not in artifacts for item in self.lineage):
             raise ValueError("lineage describes an unknown artifact")
@@ -408,13 +795,24 @@ class ExternalCaptureBundle(ValidationRecord):
         if (self.adapter == "ttsim_tt_metal_v1") != (
             self.intended_classification == "functional_capture"
         ):
-            raise ValueError("ttsim is functional evidence; Wormhole profiler is hardware evidence")
-        if self.outcome.case_id != self.case_id or self.outcome.producer_id != self.producer_id:
+            raise ValueError(
+                "ttsim is functional evidence; Wormhole profiler is hardware evidence"
+            )
+        if (
+            self.outcome.case_id != self.case_id
+            or self.outcome.producer_id != self.producer_id
+        ):
             raise ValueError("capture outcome identity disagrees with the bundle")
         if self.outcome.outcome == "pass" and not self.raw_artifacts:
             raise ValueError("successful collection requires raw artifacts")
-        if self.outcome.outcome != "pass" and self.intended_classification == "hardware_capture" and self.raw_artifacts:
-            raise ValueError("failed or blocked hardware collection cannot carry admitted raw evidence")
+        if (
+            self.outcome.outcome != "pass"
+            and self.intended_classification == "hardware_capture"
+            and self.raw_artifacts
+        ):
+            raise ValueError(
+                "failed or blocked hardware collection cannot carry admitted raw evidence"
+            )
         return self
 
 
@@ -433,16 +831,31 @@ class ExternalValidationReport(ValidationRecord):
 
     @model_validator(mode="after")
     def scoped_report(self) -> Self:
-        unique(tuple(item.artifact_id for item in self.bundles), "report bundle identity")
+        unique(
+            tuple(item.artifact_id for item in self.bundles), "report bundle identity"
+        )
         unique(tuple(item.logical_path for item in self.bundles), "report bundle path")
         unique(tuple(item.boundary_id for item in self.boundaries), "report boundary")
-        unique(tuple(item.artifact_id for item in self.lineage), "report lineage artifact")
-        artifacts = {self.campaign.artifact_id, *(item.artifact_id for item in self.bundles)}
+        unique(
+            tuple(item.artifact_id for item in self.lineage), "report lineage artifact"
+        )
+        artifacts = {
+            self.campaign.artifact_id,
+            *(item.artifact_id for item in self.bundles),
+        }
         if any(item.artifact_id not in artifacts for item in self.lineage):
             raise ValueError("report lineage describes an unknown artifact")
-        if any(parent not in artifacts for item in self.lineage for parent in item.derived_from):
+        if any(
+            parent not in artifacts
+            for item in self.lineage
+            for parent in item.derived_from
+        ):
             raise ValueError("report lineage references an unknown artifact")
-        if any(item not in artifacts for outcome in self.outcomes for item in outcome.artifact_ids):
+        if any(
+            item not in artifacts
+            for outcome in self.outcomes
+            for item in outcome.artifact_ids
+        ):
             raise ValueError("report outcome references an unknown artifact")
         expected: ReportStatus
         if any(item.outcome == "fail" for item in self.outcomes):
@@ -462,4 +875,6 @@ ExternalValidationDocument = Annotated[
     ExternalValidationCampaign | ExternalCaptureBundle | ExternalValidationReport,
     Field(discriminator="kind"),
 ]
-ExternalValidationDocumentAdapter: TypeAdapter[ExternalValidationDocument] = TypeAdapter(ExternalValidationDocument)
+ExternalValidationDocumentAdapter: TypeAdapter[ExternalValidationDocument] = (
+    TypeAdapter(ExternalValidationDocument)
+)
