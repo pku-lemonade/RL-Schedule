@@ -1,0 +1,88 @@
+{
+  "kind": "external_capture_bundle",
+  "schema_version": 1,
+  "bundle_id": "synthetic-ttsim-noc-64b",
+  "campaign": {
+    "artifact_id": "campaign",
+    "logical_path": "campaign.valid.json",
+    "sha256": "8ecbd87dc5aaf9720368a3a8091e237014cb9ae2d8efec568375f6e977cf558c",
+    "size_bytes": 10649
+  },
+  "case_id": "noc-64b",
+  "producer_id": "ttsim-functional",
+  "adapter": "ttsim_tt_metal_v1",
+  "build": {
+    "build_id": "tt-metal-wormhole-pinned",
+    "source_url": "https://github.com/tenstorrent/tt-metal",
+    "revision": "a4e9bec4a5bcb4d7dc048a7cfed8122499d9ab2e",
+    "source_snapshot_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "configuration": {"text": "{\"build_type\":\"release\",\"target_arch\":\"wormhole_b0\"}"},
+    "artifacts": [
+      {
+        "artifact_id": "host-program",
+        "logical_path": "bin/wormhole_external_validation",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "size_bytes": 4096,
+        "role": "host_binary"
+      },
+      {
+        "artifact_id": "device-kernels",
+        "logical_path": "bin/wormhole_external_kernels.bin",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "size_bytes": 2048,
+        "role": "device_binary"
+      }
+    ]
+  },
+  "intended_classification": "functional_capture",
+  "environment": {
+    "host": {"state": "known", "value": {"text": "{\"machine\":\"synthetic\",\"system\":\"Linux\"}"}},
+    "device": {"state": "known", "value": "ttsim-wormhole"},
+    "software": {"state": "known", "value": "synthetic-contract-only"},
+    "firmware": {"state": "unknown", "reason": "ttsim does not establish Wormhole firmware identity"},
+    "clocks": {"state": "known", "value": [{"text": "{\"domain_id\":\"tensix\",\"hz\":1000000000}"}]},
+    "enabled_layout": {"state": "known", "value": {"text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"}}
+  },
+  "conditions": {
+    "architecture": {"state": "known", "value": "wormhole_b0"},
+    "device": {"state": "known", "value": "ttsim-wormhole"},
+    "device_scope": {"state": "known", "value": "virtual_single_asic"},
+    "profile_version": {"state": "known", "value": "wormhole_b0_n150_assumed"},
+    "enabled_layout": {"state": "known", "value": {"text": "{\"fabric_ids\":[0,1],\"harvested_workers\":[]}"}},
+    "clocks": {"state": "known", "value": [{"domain_id": "tensix", "hz": {"state": "known", "value": 1000000000}}]},
+    "workload": {"state": "known", "value": {"text": "{\"bytes\":64,\"completion\":\"returned_acknowledgement\",\"operation\":\"remote_l1_write\"}"}},
+    "mapping": {"state": "known", "value": {"text": "{\"destination\":\"worker-1\",\"fabric_id\":0,\"source\":\"worker-0\"}"}},
+    "software": {"state": "known", "value": "synthetic-contract-only"},
+    "firmware": {"state": "unknown", "reason": "not silicon firmware"},
+    "instrumentation": {"state": "known", "value": {"text": "{\"functional_record\":true}"}},
+    "measurement": {"state": "unknown", "reason": "ttsim timing is not silicon evidence"},
+    "capture_group": {"state": "known", "value": "synthetic-ttsim-noc-64b"}
+  },
+  "outcome": {
+    "stage": "collection",
+    "required": true,
+    "outcome": "pass",
+    "reason": "synthetic fixture bytes collected for contract testing only",
+    "executed": true,
+    "case_id": "noc-64b",
+    "producer_id": "ttsim-functional",
+    "artifact_ids": ["raw-functional"]
+  },
+  "raw_artifacts": [
+    {
+      "artifact_id": "raw-functional",
+      "logical_path": "raw/functional_capture.json",
+      "sha256": "4bf7a65c868859e2138f165f5806e29d64ec6eee4a48c803435f4349cf2de809",
+      "size_bytes": 248
+    }
+  ],
+  "counters": [
+    {"name": "device_counter", "value": 9007199254740995, "unit": "cycles"},
+    {"name": "bytes_observed", "value": 64, "unit": "bytes"}
+  ],
+  "lineage": [
+    {"artifact_id": "raw-functional", "derived_from": ["campaign"], "transform": "synthetic_fixture_collection"}
+  ],
+  "diagnostics": ["synthetic fixture; no external producer executed"],
+  "origin_authentication": "not_authenticated"
+}

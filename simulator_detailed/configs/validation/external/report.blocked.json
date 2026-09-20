@@ -1,0 +1,65 @@
+{
+  "kind": "external_validation_report",
+  "schema_version": 1,
+  "report_id": "synthetic-external-contract-report",
+  "campaign": {
+    "artifact_id": "campaign",
+    "logical_path": "campaign.valid.json",
+    "sha256": "8ecbd87dc5aaf9720368a3a8091e237014cb9ae2d8efec568375f6e977cf558c",
+    "size_bytes": 10649
+  },
+  "bundles": [
+    {
+      "artifact_id": "ttsim-bundle",
+      "logical_path": "capture.valid.json",
+      "sha256": "57ce641fdec9fbc5937cac8bc6bcdada3467c79089dd17f3fe0bc2173caf73ca",
+      "size_bytes": 4111
+    },
+    {
+      "artifact_id": "wormhole-unavailable-bundle",
+      "logical_path": "capture.unavailable.json",
+      "sha256": "0b525eef2115f62c9c8121706cb6c63e6b27041f3f4b34dedf9992eac5ec515d",
+      "size_bytes": 3558
+    }
+  ],
+  "boundaries": [
+    {
+      "boundary_id": "noc-ack-window",
+      "case_family": "noc_ack_roundtrip",
+      "producer_zone": "NOC_ACK_ROUNDTRIP",
+      "simulator_boundary": "operation_submission_to_acknowledged_completion",
+      "clock_domain": "tensix",
+      "completion_scope": "acknowledged_operation"
+    }
+  ],
+  "outcomes": [
+    {
+      "stage": "collection",
+      "required": true,
+      "outcome": "pass",
+      "reason": "synthetic functional contract fixture admitted",
+      "executed": true,
+      "case_id": "noc-64b",
+      "producer_id": "ttsim-functional",
+      "artifact_ids": ["ttsim-bundle"]
+    },
+    {
+      "stage": "collection",
+      "required": true,
+      "outcome": "blocked",
+      "reason": "no named Wormhole worker was supplied",
+      "executed": true,
+      "case_id": "noc-64b",
+      "producer_id": "wormhole-profiler",
+      "artifact_ids": []
+    }
+  ],
+  "lineage": [
+    {"artifact_id": "campaign", "derived_from": [], "transform": "campaign_authoring"},
+    {"artifact_id": "ttsim-bundle", "derived_from": ["campaign"], "transform": "synthetic_fixture_collection"},
+    {"artifact_id": "wormhole-unavailable-bundle", "derived_from": ["campaign"], "transform": "environment_preflight"}
+  ],
+  "status": "incomplete",
+  "claim_scope": ["contract and preflight behavior only"],
+  "limitations": ["no ttsim or Wormhole worker was executed"]
+}

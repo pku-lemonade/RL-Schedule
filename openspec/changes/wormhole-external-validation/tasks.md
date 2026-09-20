@@ -1,10 +1,10 @@
 ## 1. Campaign contracts and fail-closed admission
 
-- [ ] 1.1 Add strict version-1 `external_validation_campaign`, `external_capture_bundle` and `external_validation_report` schemas with finite producer/case/budget, artifact-lineage, condition, boundary-map and outcome records; verify JSON round trips preserve integer counters, unknown metadata reasons and exact typed identities.
-- [ ] 1.2 Implement pure preflight admission for named producer adapters, source/build identities, finite repetitions/timeouts, declared output paths and supported case families; verify unknown producers, mutable sources, unbounded work, arbitrary shell strings and duplicate/path-escaping identities fail before process or device access.
-- [ ] 1.3 Add the two new document kinds to legacy replay/predictor/embedding guards without importing optional ML code; verify existing document-kind tests and focused malformed-consumer tests retain the current 7-D/4-D features, checkpoints and four-coordinate root actions.
-- [ ] 1.4 Add valid, unavailable-environment and adversarial synthetic campaign/bundle fixtures under `simulator_detailed/configs/validation/external/`; verify fixture hashes, relative-path resolution and output-preservation failures from another working directory.
-- [ ] 1.5 Run the focused contract/identity/consumer tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record actual results and source/fixture identities in `progress.md`, then commit Part 1 before continuing.
+- [x] 1.1 Add strict version-1 `external_validation_campaign`, `external_capture_bundle` and `external_validation_report` schemas with finite producer/case/budget, artifact-lineage, condition, boundary-map and outcome records; verify JSON round trips preserve integer counters, unknown metadata reasons and exact typed identities.
+- [x] 1.2 Implement pure preflight admission for named producer adapters, source/build identities, finite repetitions/timeouts, declared output paths and supported case families; verify unknown producers, mutable sources, unbounded work, arbitrary shell strings and duplicate/path-escaping identities fail before process or device access.
+- [x] 1.3 Add the two new document kinds to legacy replay/predictor/embedding guards without importing optional ML code; verify existing document-kind tests and focused malformed-consumer tests retain the current 7-D/4-D features, checkpoints and four-coordinate root actions.
+- [x] 1.4 Add valid, unavailable-environment and adversarial synthetic campaign/bundle fixtures under `simulator_detailed/configs/validation/external/`; verify fixture hashes, relative-path resolution and output-preservation failures from another working directory.
+- [x] 1.5 Run the focused contract/identity/consumer tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record actual results and source/fixture identities in `progress.md`, then commit Part 1 before continuing.
 
 ## 2. Supported model intervals and comparison admission
 

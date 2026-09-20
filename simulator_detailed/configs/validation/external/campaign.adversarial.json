@@ -1,0 +1,24 @@
+{
+  "kind": "external_validation_campaign",
+  "schema_version": 1,
+  "campaign_id": "adversarial",
+  "output_directory": "../escaped-output",
+  "max_cases": 1,
+  "max_invocations": 0,
+  "max_total_output_bytes": 1,
+  "builds": [
+    {
+      "build_id": "mutable-build",
+      "source_url": "https://example.invalid/repository",
+      "revision": "main",
+      "source_snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "configuration": {"text": "{\"shell\":\"rm -rf /tmp/external-validation\"}"},
+      "artifacts": []
+    }
+  ],
+  "producers": [
+    {"producer_id": "unknown", "adapter": "python_eval_v1", "build_id": "mutable-build"}
+  ],
+  "cases": [],
+  "shell": "touch should-never-run"
+}

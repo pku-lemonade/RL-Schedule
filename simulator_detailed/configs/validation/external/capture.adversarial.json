@@ -1,0 +1,29 @@
+{
+  "kind": "external_capture_bundle",
+  "schema_version": 1,
+  "bundle_id": "adversarial",
+  "campaign": {
+    "artifact_id": "campaign",
+    "logical_path": "../campaign.valid.json",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size_bytes": 1
+  },
+  "case_id": "noc-64b",
+  "producer_id": "unknown",
+  "adapter": "shell_v1",
+  "raw_artifacts": [
+    {
+      "artifact_id": "duplicate",
+      "logical_path": "../../etc/passwd",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size_bytes": 1
+    },
+    {
+      "artifact_id": "duplicate",
+      "logical_path": "../../etc/shadow",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size_bytes": 1
+    }
+  ],
+  "shell": "cat /etc/passwd"
+}

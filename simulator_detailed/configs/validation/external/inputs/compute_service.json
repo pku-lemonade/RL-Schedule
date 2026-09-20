@@ -1,0 +1,1 @@
+{"case_family":"compute_service","completion":"resource_release","data_type":"bf16","fidelity":"hifi2","shape":[32,32,32],"work":65536}

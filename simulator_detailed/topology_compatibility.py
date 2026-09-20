@@ -11,7 +11,10 @@ from .topology import Topology, content_digest, topology_from_legacy
 from .utils.definitions import NoCChannel
 
 CONSUMERS = frozenset({"detailed_predictor", "detailed_encoder"})
-VALIDATION_KINDS = frozenset({"validation_suite", "validation_reference", "validation_report", "calibration_plan", "calibration_result"})
+VALIDATION_KINDS = frozenset({
+    "validation_suite", "validation_reference", "validation_report", "calibration_plan", "calibration_result",
+    "external_validation_campaign", "external_capture_bundle", "external_validation_report",
+})
 NONLEGACY_KINDS = frozenset({"multicast_sync_workload", "multicast_sync_result", "multicast_sync_plan",
                             "multicast_sync_execution_result", "multicast_pipeline_workload", "multicast_pipeline_result",
                             "multicast_memory_result", "multicast_scalar_result"})
