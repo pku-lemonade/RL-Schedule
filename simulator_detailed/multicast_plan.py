@@ -26,6 +26,7 @@ from .configs.schemas.topology import (
 )
 from .memory_plan import bind_memory_system, memory_configuration_identity
 from .memory_resources import memory_resource_definitions
+from .multicast_compute_plan import MixedComputePlan, lower_compute
 from .multicast_inventory import MixedInventory, compile_inventory
 from .multicast_tree import RectangleTreePlan, compile_rectangle_tree
 from .topology import content_digest, normalize_topology
@@ -74,6 +75,7 @@ class MulticastSyncPlanRecord(GraphRecord):
     counters: tuple[ScalarCounterPlan, ...]
     waits: tuple[Identifier, ...]
     inventory: MixedInventory | None = None
+    compute: MixedComputePlan | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +124,9 @@ class MulticastSyncPlan:
             cls._write_plan(workload, topology, write) for write in workload.writes
         )
         counter_plans = cls._counter_plans(workload, topology)
-        inventory = compile_inventory(workload, topology, write_plans) if workload.runtime is not None else None
+        compute = lower_compute(workload, topology)
+        execution = cls._execution_workload(workload, compute)
+        inventory = compile_inventory(execution, topology, write_plans) if workload.runtime is not None else None
         operation_order = inventory.operation_order if inventory is not None else cls._operation_order(workload)
         workload_json = workload.model_dump(mode="json")
         # Paths are locators, not hardware or workload identity. The normalized
@@ -137,6 +141,7 @@ class MulticastSyncPlan:
                 "workload_sha256": workload_sha,
                 "topology_sha256": topology_sha,
                 "operation_order": operation_order,
+                "compute": compute.model_dump(mode="json") if compute is not None else None,
                 "inventory": inventory.model_dump(mode="json") if inventory is not None else None,
                 "writes": [item.model_dump(mode="json") for item in write_plans],
                 "counters": [item.model_dump(mode="json") for item in counter_plans],
@@ -151,9 +156,20 @@ class MulticastSyncPlan:
             writes=write_plans,
             counters=counter_plans,
             waits=tuple(wait.wait_id for wait in workload.waits),
-            inventory=inventory,
+            inventory=inventory, compute=compute,
         )
         return cls(workload=workload, topology=topology, record=record)
+
+    @staticmethod
+    def _execution_workload(workload: MulticastSyncWorkload, compute: MixedComputePlan | None) -> MulticastSyncWorkload:
+        if compute is None:
+            return workload
+        return workload.model_copy(update={"operations": workload.operations + compute.operations,
+                                           "gates": workload.gates + compute.gates, "compute": None})
+
+    @property
+    def execution_workload(self) -> MulticastSyncWorkload:
+        return self._execution_workload(self.workload, self.record.compute)
 
     def revalidate(self) -> None:
         rebuilt = self.compile(self.workload, self.topology)

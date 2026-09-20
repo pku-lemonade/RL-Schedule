@@ -1,0 +1,977 @@
+{
+  "kind": "multicast_sync_workload",
+  "schema_version": 1,
+  "model_revision": "finite_multicast_sync_v1",
+  "memory": {
+    "source": {
+      "kind": "canonical_graph",
+      "graph_path": "../topologies/multicast_sync_fixture.json"
+    },
+    "aci_clock_hz": 500000000.0,
+    "fabrics": [
+      0
+    ],
+    "packet": {
+      "physical_flit_bytes": 32,
+      "data_capacity_bytes": 32,
+      "header_flits": 1,
+      "max_segment_payload_bytes": 64,
+      "address_alignment_bytes": 32,
+      "evidence": {
+        "status": "assumed",
+        "description": "synthetic multicast contract"
+      }
+    },
+    "issue_latency_aci_cycles": 1.0,
+    "max_outstanding_segments": 2,
+    "endpoint_queue_capacity_packets": 2,
+    "endpoint_staging_capacity_flits": 4,
+    "resources": [
+      {
+        "resource_id": "r-t0_0",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 32,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "synthetic multicast contract"
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "resource_id": "r-t1_0",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 32,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "synthetic multicast contract"
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "resource_id": "r-t0_1",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 32,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "synthetic multicast contract"
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "resource_id": "r-t1_1",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 32,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "synthetic multicast contract"
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "resource_id": "r-t2_1",
+        "service": {
+          "policy": "aggregate_shared_rw_v1",
+          "native_clock_hz": 1000000000.0,
+          "service_granule_bytes": 32,
+          "chunk_bytes": 32,
+          "bytes_per_cycle": 32.0,
+          "fixed_latency_cycles": 1.0,
+          "queue_capacity": 4,
+          "evidence": {
+            "status": "assumed",
+            "description": "synthetic multicast contract"
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      }
+    ],
+    "endpoints": [
+      {
+        "endpoint_id": "ep-t0_0",
+        "fabric_id": 0,
+        "router_id": "t0_0",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "r-t0_0"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "endpoint_id": "ep-t1_0",
+        "fabric_id": 0,
+        "router_id": "t1_0",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "r-t1_0"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "endpoint_id": "ep-t0_1",
+        "fabric_id": 0,
+        "router_id": "t0_1",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "r-t0_1"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "endpoint_id": "ep-t1_1",
+        "fabric_id": 0,
+        "router_id": "t1_1",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "r-t1_1"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      },
+      {
+        "endpoint_id": "ep-t2_1",
+        "fabric_id": 0,
+        "router_id": "t2_1",
+        "roles": [
+          "initiator",
+          "target",
+          "response_sink"
+        ],
+        "resource_ids": [
+          "r-t2_1"
+        ],
+        "evidence": {
+          "status": "assumed",
+          "description": "synthetic multicast contract"
+        }
+      }
+    ],
+    "buffers": [
+      {
+        "buffer_id": "b-ep-t0_0",
+        "resource_id": "r-t0_0",
+        "base_address": 0,
+        "size_bytes": 1024,
+        "writable": true,
+        "readable": true,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "b-ep-t1_0",
+        "resource_id": "r-t1_0",
+        "base_address": 0,
+        "size_bytes": 1024,
+        "writable": true,
+        "readable": true,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "b-ep-t0_1",
+        "resource_id": "r-t0_1",
+        "base_address": 0,
+        "size_bytes": 1024,
+        "writable": true,
+        "readable": true,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "b-ep-t1_1",
+        "resource_id": "r-t1_1",
+        "base_address": 0,
+        "size_bytes": 1024,
+        "writable": true,
+        "readable": true,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "b-ep-t2_1",
+        "resource_id": "r-t2_1",
+        "base_address": 0,
+        "size_bytes": 1024,
+        "writable": true,
+        "readable": true,
+        "initially_ready": true
+      },
+      {
+        "buffer_id": "counter",
+        "resource_id": "r-t0_0",
+        "base_address": 1024,
+        "size_bytes": 32
+      },
+      {
+        "buffer_id": "inbox",
+        "resource_id": "r-t0_0",
+        "base_address": 1056,
+        "size_bytes": 32
+      }
+    ],
+    "max_aci_cycles": 10000.0,
+    "routing": [
+      {
+        "fabric_id": 0,
+        "topology_policy": "torus_2d_positive",
+        "routing_policy": "dimension_order_xy",
+        "dateline": {
+          "x": 0,
+          "y": 0
+        },
+        "router_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic contract-test setting; no hardware measurement.",
+            "sources": []
+          }
+        },
+        "link_default": {
+          "enabled": true,
+          "evidence": {
+            "status": "assumed",
+            "description": "Synthetic contract-test setting; no hardware measurement.",
+            "sources": []
+          }
+        },
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic contract-test setting; no hardware measurement.",
+          "sources": []
+        }
+      }
+    ]
+  },
+  "control": {
+    "reservation_capacity": 2,
+    "replication_capacity_flits": 4,
+    "reservation_setup_aci_cycles": 1.0,
+    "reservation_edge_aci_cycles": 1.0,
+    "atomic_native_cycles": 5.0,
+    "local_observation_aci_cycles": 1.0,
+    "evidence": {
+      "status": "assumed",
+      "description": "synthetic multicast contract"
+    },
+    "atomic_granule_bytes": 32,
+    "inline_control_bytes": 8
+  },
+  "writes": [
+    {
+      "operation_id": "distribute0",
+      "source_endpoint_id": "ep-t0_0",
+      "fabric_id": 0,
+      "source": {
+        "buffer_id": "b-ep-t0_0",
+        "offset_bytes": 0,
+        "size_bytes": 32
+      },
+      "target_offset_bytes": 128,
+      "size_bytes": 32,
+      "rectangle": {
+        "start": {
+          "x": 0,
+          "y": 1
+        },
+        "end": {
+          "x": 1,
+          "y": 1
+        },
+        "major_axis": "y",
+        "include_source": false
+      },
+      "destinations": [
+        {
+          "endpoint_id": "ep-t0_1",
+          "buffer_id": "b-ep-t0_1",
+          "offset_bytes": 128
+        },
+        {
+          "endpoint_id": "ep-t1_1",
+          "buffer_id": "b-ep-t1_1",
+          "offset_bytes": 128
+        }
+      ],
+      "completion": "write_posted"
+    },
+    {
+      "operation_id": "distribute1",
+      "source_endpoint_id": "ep-t0_0",
+      "fabric_id": 0,
+      "source": {
+        "buffer_id": "b-ep-t0_0",
+        "offset_bytes": 0,
+        "size_bytes": 32
+      },
+      "target_offset_bytes": 128,
+      "size_bytes": 32,
+      "rectangle": {
+        "start": {
+          "x": 0,
+          "y": 1
+        },
+        "end": {
+          "x": 1,
+          "y": 1
+        },
+        "major_axis": "y",
+        "include_source": false
+      },
+      "destinations": [
+        {
+          "endpoint_id": "ep-t0_1",
+          "buffer_id": "b-ep-t0_1",
+          "offset_bytes": 128
+        },
+        {
+          "endpoint_id": "ep-t1_1",
+          "buffer_id": "b-ep-t1_1",
+          "offset_bytes": 128
+        }
+      ],
+      "completion": "write_posted"
+    }
+  ],
+  "runtime": {
+    "transport": {
+      "fabrics": [
+        {
+          "fabric_id": 0,
+          "network_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "local_link": {
+            "aci_clock_hz": 500000000.0,
+            "noc_clock_hz": 500000000.0,
+            "physical_flit_bytes": 32,
+            "wire_bits_per_noc_cycle": 256,
+            "payload_bits_per_noc_cycle": 256,
+            "launch_interval_noc_cycles": 1.0,
+            "propagation_noc_cycles": 0.0,
+            "credit_return_noc_cycles": 1.0,
+            "lane_capacity_flits": 1,
+            "staging_capacity_flits": 1,
+            "arbitration_quantum_flits": 1,
+            "slowdowns": []
+          },
+          "router": {
+            "transfer_aci_cycles": 1.0,
+            "initiation_aci_cycles": 1.0,
+            "capacity_flits": 1
+          }
+        }
+      ],
+      "overrides": [],
+      "endpoint_queue_capacity_packets": 2,
+      "endpoint_staging_capacity_flits": 4,
+      "burst_quantum_flits": 1,
+      "evidence": {
+        "status": "assumed",
+        "description": "contract test assumption",
+        "sources": []
+      }
+    },
+    "responder_capacity_packets": 1,
+    "request_control_aci_cycles": 1,
+    "response_control_aci_cycles": 1,
+    "evidence": {
+      "status": "assumed",
+      "description": "synthetic multicast contract"
+    }
+  },
+  "counters": [
+    {
+      "counter_id": "count",
+      "endpoint_id": "ep-t0_0",
+      "buffer_id": "counter",
+      "offset_bytes": 0,
+      "width_bytes": 4,
+      "initial_value": 0
+    }
+  ],
+  "increments": [
+    {
+      "operation_id": "signal-0-0",
+      "source_endpoint_id": "ep-t0_1",
+      "fabric_id": 0,
+      "counter_id": "count",
+      "completion": "atomic_posted",
+      "depends_on": [
+        "job-0-0"
+      ]
+    },
+    {
+      "operation_id": "signal-0-1",
+      "source_endpoint_id": "ep-t0_1",
+      "fabric_id": 0,
+      "counter_id": "count",
+      "completion": "atomic_posted",
+      "depends_on": [
+        "job-0-1"
+      ]
+    },
+    {
+      "operation_id": "signal-1-0",
+      "source_endpoint_id": "ep-t1_1",
+      "fabric_id": 0,
+      "counter_id": "count",
+      "completion": "atomic_posted",
+      "depends_on": [
+        "job-1-0"
+      ]
+    },
+    {
+      "operation_id": "signal-1-1",
+      "source_endpoint_id": "ep-t1_1",
+      "fabric_id": 0,
+      "counter_id": "count",
+      "completion": "atomic_posted",
+      "depends_on": [
+        "job-1-1"
+      ]
+    }
+  ],
+  "waits": [
+    {
+      "wait_id": "collect0",
+      "endpoint_id": "ep-t0_0",
+      "counter_id": "count",
+      "threshold": 2,
+      "producer_operations": [
+        "signal-0-0",
+        "signal-1-0"
+      ]
+    },
+    {
+      "wait_id": "collect1",
+      "endpoint_id": "ep-t0_0",
+      "counter_id": "count",
+      "threshold": 4,
+      "producer_operations": [
+        "signal-0-0",
+        "signal-1-0",
+        "signal-0-1",
+        "signal-1-1"
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "operation_id": "distribute1",
+      "after_waits": [
+        "collect0"
+      ]
+    }
+  ],
+  "compute": {
+    "dtypes": [
+      {
+        "dtype_id": "bf16",
+        "bytes_per_element": 2,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      }
+    ],
+    "rates": [
+      {
+        "rate_id": "matrix",
+        "policy": "effective_matmul_v1",
+        "key": {
+          "operation": "matmul",
+          "a_dtype": "bf16",
+          "b_dtype": "bf16",
+          "c_dtype": "bf16",
+          "accumulator_precision": "fp32",
+          "layout": {
+            "kind": "dense_row_major"
+          },
+          "fidelity": "assumed_high"
+        },
+        "block": {
+          "m": 4,
+          "n": 8,
+          "k": 4
+        },
+        "work_per_native_cycle": 8,
+        "setup_native_cycles": 2.0,
+        "quantum_native_cycles": 0.5,
+        "minimum_native_cycles": 1.0,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      }
+    ],
+    "workers": [
+      {
+        "tile_id": "t0_1",
+        "l1_resource_id": "r-t0_1",
+        "endpoint_ids": [
+          "ep-t0_1"
+        ],
+        "rate_ids": [
+          "matrix"
+        ],
+        "native_clock_hz": 1000000000.0,
+        "reader_capacity": 1,
+        "compute_contexts": 1,
+        "writer_capacity": 1,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      },
+      {
+        "tile_id": "t1_1",
+        "l1_resource_id": "r-t1_1",
+        "endpoint_ids": [
+          "ep-t1_1"
+        ],
+        "rate_ids": [
+          "matrix"
+        ],
+        "native_clock_hz": 1000000000.0,
+        "reader_capacity": 1,
+        "compute_contexts": 1,
+        "writer_capacity": 1,
+        "evidence": {
+          "status": "assumed",
+          "description": "Synthetic scheduling example: explicit model rate, capacity, format or availability assumption; not a silicon measurement."
+        }
+      }
+    ],
+    "streams": [
+      {
+        "stream_id": "stream-t0_1",
+        "worker_tile_id": "t0_1",
+        "slots": [
+          {
+            "slot_id": "slot-t0_1",
+            "a": {
+              "buffer_id": "b-ep-t0_1",
+              "offset_bytes": 128,
+              "size_bytes": 32
+            },
+            "b": {
+              "buffer_id": "b-ep-t0_1",
+              "offset_bytes": 256,
+              "size_bytes": 32
+            },
+            "c": {
+              "buffer_id": "b-ep-t0_1",
+              "offset_bytes": 384,
+              "size_bytes": 32
+            }
+          }
+        ],
+        "jobs": [
+          {
+            "job_id": "job-0-0",
+            "operation": {
+              "kind": "matmul",
+              "shared_weights": true,
+              "a": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "b": {
+                "shape": [
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "c": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "accumulator_precision": "fp32",
+              "fidelity": "assumed_high"
+            },
+            "a": {
+              "access": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 128,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "producer",
+                "producer_id": "distribute0"
+              }
+            },
+            "b": {
+              "access": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 256,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "initial"
+              }
+            },
+            "output": {
+              "mode": "local",
+              "destination": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 384,
+                "size_bytes": 32
+              }
+            }
+          },
+          {
+            "job_id": "job-0-1",
+            "operation": {
+              "kind": "matmul",
+              "shared_weights": true,
+              "a": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "b": {
+                "shape": [
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "c": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "accumulator_precision": "fp32",
+              "fidelity": "assumed_high"
+            },
+            "a": {
+              "access": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 128,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "producer",
+                "producer_id": "distribute1"
+              }
+            },
+            "b": {
+              "access": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 256,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "initial"
+              }
+            },
+            "output": {
+              "mode": "local",
+              "destination": {
+                "buffer_id": "b-ep-t0_1",
+                "offset_bytes": 384,
+                "size_bytes": 32
+              }
+            }
+          }
+        ]
+      },
+      {
+        "stream_id": "stream-t1_1",
+        "worker_tile_id": "t1_1",
+        "slots": [
+          {
+            "slot_id": "slot-t1_1",
+            "a": {
+              "buffer_id": "b-ep-t1_1",
+              "offset_bytes": 128,
+              "size_bytes": 32
+            },
+            "b": {
+              "buffer_id": "b-ep-t1_1",
+              "offset_bytes": 256,
+              "size_bytes": 32
+            },
+            "c": {
+              "buffer_id": "b-ep-t1_1",
+              "offset_bytes": 384,
+              "size_bytes": 32
+            }
+          }
+        ],
+        "jobs": [
+          {
+            "job_id": "job-1-0",
+            "operation": {
+              "kind": "matmul",
+              "shared_weights": true,
+              "a": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "b": {
+                "shape": [
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "c": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "accumulator_precision": "fp32",
+              "fidelity": "assumed_high"
+            },
+            "a": {
+              "access": {
+                "buffer_id": "b-ep-t1_1",
+                "offset_bytes": 128,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "producer",
+                "producer_id": "distribute0"
+              }
+            },
+            "b": {
+              "access": {
+                "buffer_id": "b-ep-t1_1",
+                "offset_bytes": 256,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "initial"
+              }
+            },
+            "output": {
+              "mode": "write_acknowledged",
+              "fabric_id": 0,
+              "destination": {
+                "buffer_id": "b-ep-t0_0",
+                "offset_bytes": 640,
+                "size_bytes": 32
+              }
+            }
+          },
+          {
+            "job_id": "job-1-1",
+            "operation": {
+              "kind": "matmul",
+              "shared_weights": true,
+              "a": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "b": {
+                "shape": [
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "c": {
+                "shape": [
+                  1,
+                  4,
+                  4
+                ],
+                "dtype": "bf16",
+                "layout": {
+                  "kind": "dense_row_major"
+                }
+              },
+              "accumulator_precision": "fp32",
+              "fidelity": "assumed_high"
+            },
+            "a": {
+              "access": {
+                "buffer_id": "b-ep-t1_1",
+                "offset_bytes": 128,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "producer",
+                "producer_id": "distribute1"
+              }
+            },
+            "b": {
+              "access": {
+                "buffer_id": "b-ep-t1_1",
+                "offset_bytes": 256,
+                "size_bytes": 32
+              },
+              "version": {
+                "kind": "initial"
+              }
+            },
+            "output": {
+              "mode": "write_acknowledged",
+              "fabric_id": 0,
+              "destination": {
+                "buffer_id": "b-ep-t0_0",
+                "offset_bytes": 640,
+                "size_bytes": 32
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "operation_id": "ordinary",
+      "initiator_id": "ep-t0_0",
+      "fabric_id": 0,
+      "kind": "write_acknowledged",
+      "source": {
+        "buffer_id": "b-ep-t0_0",
+        "offset_bytes": 32,
+        "size_bytes": 32
+      },
+      "destination": {
+        "buffer_id": "b-ep-t1_1",
+        "offset_bytes": 512,
+        "size_bytes": 32
+      }
+    }
+  ]
+}

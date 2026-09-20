@@ -75,7 +75,9 @@
     "memory_adapters.py",
     "replay_memory.py",
     "replay_compute.py",
-    "replay_multicast_sync.py"
+    "replay_multicast_sync.py",
+    "mixed_compute_runtime.py",
+    "multicast_compute_plan.py"
   ],
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",

@@ -12,6 +12,14 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, StrictBool, field_validator, model_validator
 
 from ...memory_execution import MemoryRuntimeConfig
+from .compute_workload import (
+    ComputeOperation,
+    ComputeOutput,
+    ComputeRate,
+    ComputeSlot,
+    ComputeWorker,
+    StorageDtype,
+)
 from .memory_replay import (
     MemoryOperation,
     MemoryRange,
@@ -160,6 +168,41 @@ class SyncControlConfig(GraphRecord):
     evidence: TransportEvidence
 
 
+class MixedComputeJob(GraphRecord):
+    job_id: Identifier
+    operation: ComputeOperation
+    a: LocalDataPrerequisite
+    b: LocalDataPrerequisite
+    output: ComputeOutput
+    depends_on: tuple[Identifier, ...] = ()
+
+
+class MixedComputeStream(GraphRecord):
+    stream_id: Identifier
+    worker_tile_id: Identifier
+    slots: tuple[ComputeSlot, ...] = Field(min_length=1)
+    jobs: tuple[MixedComputeJob, ...] = Field(min_length=1)
+
+
+class MixedComputeConfig(GraphRecord):
+    policy: Literal["finite_compute_dataflow_v1"] = "finite_compute_dataflow_v1"
+    dtypes: tuple[StorageDtype, ...] = Field(min_length=1)
+    rates: tuple[ComputeRate, ...] = Field(min_length=1)
+    workers: tuple[ComputeWorker, ...] = Field(min_length=1)
+    streams: tuple[MixedComputeStream, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def identities(self) -> Self:
+        unique(tuple(d.dtype_id for d in self.dtypes), "storage dtype")
+        unique(tuple(r.rate_id for r in self.rates), "compute rate")
+        unique(tuple(w.tile_id for w in self.workers), "physical compute worker")
+        unique(tuple(w.l1_resource_id for w in self.workers), "physical compute L1")
+        unique(tuple(s.stream_id for s in self.streams), "compute stream")
+        unique(tuple(j.job_id for s in self.streams for j in s.jobs), "compute job")
+        unique(tuple(slot.slot_id for s in self.streams for slot in s.slots), "compute slot")
+        return self
+
+
 class MulticastSyncWorkload(GraphRecord):
     """Versioned input for the pure multicast/synchronization compiler."""
 
@@ -169,6 +212,7 @@ class MulticastSyncWorkload(GraphRecord):
     memory: MemorySystemConfig
     runtime: MemoryRuntimeConfig | None = None
     control: SyncControlConfig
+    compute: MixedComputeConfig | None = None
     operations: tuple[MemoryOperation, ...] = ()
     gates: tuple[SyncGate, ...] = ()
     writes: tuple[MulticastWrite, ...] = ()
@@ -178,14 +222,15 @@ class MulticastSyncWorkload(GraphRecord):
 
     @model_validator(mode="after")
     def identities(self) -> Self:
-        if not self.writes and not self.increments and not self.waits and not self.operations:
+        if not self.writes and not self.increments and not self.waits and not self.operations and self.compute is None:
             raise ValueError("multicast/synchronization workload requires an operation")
         unique(tuple(w.operation_id for w in self.writes), "multicast operation")
         unique(tuple(i.operation_id for i in self.increments), "atomic operation")
         unique(tuple(w.wait_id for w in self.waits), "scalar wait")
         unique(tuple(c.counter_id for c in self.counters), "scalar counter")
+        job_ids = tuple(j.job_id for st in self.compute.streams for j in st.jobs) if self.compute else ()
         all_operations = (tuple(w.operation_id for w in self.writes) + tuple(i.operation_id for i in self.increments)
-                          + tuple(o.operation_id for o in self.operations))
+                          + tuple(o.operation_id for o in self.operations) + job_ids)
         unique(all_operations + tuple(w.wait_id for w in self.waits), "operation/wait")
         operation_ids = set(all_operations)
         counter_ids = {c.counter_id for c in self.counters}

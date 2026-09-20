@@ -23,6 +23,12 @@ from .memory_resources import (
     MemoryResourceState,
 )
 from .memory_service import MemoryChunkRecord, MemoryServiceEvent
+from .mixed_compute_runtime import (
+    LocalOperationCapability,
+    MixedComputeComponent,
+    MixedComputeSnapshot,
+)
+from .multicast_compute_plan import MixedComputePlan
 from .multicast_inventory import inventory_id
 from .multicast_network import MulticastNetworkPlan
 from .multicast_plan import MulticastSyncPlan, MulticastSyncPlanRecord
@@ -106,6 +112,7 @@ class MulticastExecutionResult(GraphRecord):
     counters: tuple[CounterState, ...] = ()
     scalar_service: tuple[ScalarServiceRecord, ...] = ()
     inbox_values: tuple[tuple[Identifier, int], ...] = ()
+    compute: MixedComputeSnapshot | None = None
 
     @model_validator(mode="after")
     def conserved(self) -> Self:
@@ -119,6 +126,7 @@ class MulticastExecutionResult(GraphRecord):
             raise ValueError("only drained mixed work can complete")
         if self.status == "complete" and (self.pending_operations or not self.teardown_complete
                 or self.tree_transport.status != "complete" or self.unicast_transport.status != "complete"
+                or (self.compute is not None and self.compute.pending)
                 or any(d.occupied for d in self.descriptors) or any(r.reserved_bytes for r in self.released_resources)):
             raise ValueError("mixed execution completed before all effects and ownership drained")
         return self
@@ -177,7 +185,7 @@ class MulticastMemoryRuntime:
     def __init__(self, plan: MulticastSyncPlan):
         network = MulticastNetworkPlan.compile(plan)
         self.plan, self.network = plan, network
-        self.config = plan.workload
+        self.config = plan.execution_workload
         assert self.config.runtime is not None
         self.settings = self.config.runtime
         resource_plan = MemoryResourcePlan.for_system(self.config.memory, plan.topology, plan_sha256=plan.record.plan_sha256)
@@ -231,6 +239,10 @@ class MulticastMemoryRuntime:
         self.unicast = PacketTransport(self.env, network.network, _UnicastHooks(self), registry=self.registry)
         self._final: MulticastExecutionResult | None = None
         self._before_teardown: tuple[MemoryResourceState, ...] | None = None
+        self._activation: dict[str, Event] = {o.operation_id: self.env.event() for o in plan.record.compute.operations} if plan.record.compute else {}
+        self._capabilities: dict[tuple[str, str], LocalOperationCapability] = {}
+        self._compute_attached = False
+        self.compute = MixedComputeComponent(self, plan.record.compute) if plan.record.compute else None
         for packet in network.trees:
             self.env.process(self._multicast(packet))
         for item in network.packets.values():
@@ -292,7 +304,44 @@ class MulticastMemoryRuntime:
         while not resource.is_ready(handle, offset_bytes=access.offset_bytes, size_bytes=access.size_bytes, version=version):
             yield resource.changed
 
+    def attach_compute(self, plan: MixedComputePlan) -> dict[str, LocalOperationCapability]:
+        if self._compute_attached or plan != self.plan.record.compute:
+            raise ValueError("duplicate or unadmitted compute capacity attachment")
+        self._compute_attached = True
+        return {o.operation_id: self.local_operation(self._owners[o.operation_id], o.operation_id) for o in plan.operations}
+
+    def local_operation(self, resource_id: str, operation: str) -> LocalOperationCapability:
+        if self._owners.get(operation) != resource_id:
+            raise ValueError("local capability cannot expose remote completion")
+        key = resource_id, operation
+        if key not in self._capabilities:
+            self._capabilities[key] = LocalOperationCapability(operation, resource_id)
+        return self._capabilities[key]
+
+    def _check_capability(self, capability: LocalOperationCapability) -> str:
+        if self._capabilities.get((capability.resource_id, capability.operation_id)) is not capability:
+            raise ValueError("foreign or forged local lifecycle capability")
+        return capability.operation_id
+
+    def activate_local(self, capability: LocalOperationCapability) -> None:
+        operation = self._check_capability(capability)
+        gate = self._activation.get(operation)
+        if gate is None or gate.triggered:
+            raise ValueError("operation is not an inactive admitted compute stage")
+        gate.succeed()
+
+    def local_completion(self, capability: LocalOperationCapability) -> Event:
+        return self._facts[self._check_capability(capability), "complete"]
+
+    def wait_local_prerequisites(self, capability: LocalOperationCapability) -> ProcessGenerator:
+        yield from self._prerequisites(self._check_capability(capability))
+
     def _dependencies(self, operation: str) -> ProcessGenerator:
+        if operation in self._activation:
+            yield self._activation[operation]
+        yield from self._prerequisites(operation)
+
+    def _prerequisites(self, operation: str) -> ProcessGenerator:
         declaration = self._writes.get(operation) or self._increments.get(operation) or self._ordinary[operation]
         for parent in declaration.depends_on:
             yield self._facts[parent, "complete"]
@@ -579,7 +628,7 @@ class MulticastMemoryRuntime:
         return tuple(r.snapshot() for r in self.memory.resources.values())
 
     def is_drained(self) -> bool:
-        return (all(e.triggered for e in self._facts.values()) and self.memory.is_drained and self.registry.is_drained
+        return ((self.compute is None or self.compute.is_drained) and all(e.triggered for e in self._facts.values()) and self.memory.is_drained and self.registry.is_drained
                 and not self.tree.snapshot().pending and not self.unicast.snapshot(require_idle_environment=False).pending_packets
                 and all(not p.owners for pools in (self._issues, self._responders, self._locals) for p in pools.values()))
 
@@ -618,7 +667,7 @@ class MulticastMemoryRuntime:
         final = self._before_teardown is not None
         complete = final and not pending and self.registry.is_drained
         chunks = tuple(c for r in self.memory.resources.values() for c in r.service.records)
-        return MulticastExecutionResult(plan=self.plan.record, configuration=self.config, status="complete" if complete else "incomplete",
+        return MulticastExecutionResult(plan=self.plan.record, configuration=self.plan.workload, compute=self.compute.snapshot() if self.compute else None, status="complete" if complete else "incomplete",
             counters=tuple(self.memory.resources[self._counter_owners[c]].service.counter_state(h) for c, h in self._counter_handles.items()),
             scalar_service=tuple(r for owner in self.memory.resources.values() for r in owner.service.scalar_records),
             inbox_values=tuple(self.inbox_values),

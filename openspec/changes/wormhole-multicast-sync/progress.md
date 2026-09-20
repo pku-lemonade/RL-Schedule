@@ -10,6 +10,50 @@
 > verified at that checkpoint. Canonical memory now completes Part 3:
 > 15/35 verified; scalar/compute integration remains open.
 
+## Attached mixed compute and representative fixtures — 2026-09-20
+
+Tasks 5.1–5.5 are complete (25/35). `MixedComputeComponent` attaches the existing
+`BoundedPipeline` and `StagePool` scheduler to the mixed session. It allocates no
+environment, NoC, byte reservation or memory server. One declared pool per
+physical worker/stage serves all streams; duplicate component attachment and
+forged/remote lifecycle capabilities are rejected. Standalone compute wrappers
+and effective cost policies are unchanged.
+
+Pure lowering binds imported local A/B versions to FIFO slot generations,
+charges actual local operand reads and C publication, and lowers acknowledged
+outputs to ordinary shared network writes. No duplicate reader transfer is
+created for a multicast-populated operand. Slot reuse, stream stage order,
+consumer lifetimes, local wait gates and memory conflicts share the pre-allocation
+DAG. Local or acknowledged output completion enables scalar signals. The scoped
+mixed component rejects posted compute outputs as signal evidence; standalone
+posted compute remains supported. Every mixed snapshot includes live slots,
+contexts, stage/resource events and pending jobs; finalization includes compute.
+
+The published `mixed_two_rounds.json` has two workers, one slot each, overlapping
+math, ordinary competing traffic, one acknowledged result stream and a collector
+counter owned by the distributor. Thresholds 2 and 4 enforce the two phases.
+`mixed_opposite_fabric.json`, `mixed_slow_clock.json` and
+`wormhole_b0_mixed_assumed.json` exercise reversed fabric coordinates, minimum
+capacities, changed clocks, a directed slowdown and actual profile binding.
+All four complete with 416 source useful bytes and 352 destination useful bytes;
+their cycle/channel-byte pairs are 154/2464, 137/2080, 500/2464 and 287/6912.
+The slowdown fixture includes its configured end notification at cycle 500.
+All timing/rates remain model assumptions, with no measured-silicon promotion.
+
+Checks:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_mixed_compute_runtime simulator_detailed.tests.test_compute_runtime simulator_detailed.tests.test_compute_overlap simulator_detailed.tests.test_compute_buffers simulator_detailed.tests.test_multicast_memory_runtime simulator_detailed.tests.test_scalar_shared_runtime -q` — 55 passed in 17.288 s (initial three mixed tests).
+* Expanded `.venv/bin/python -m unittest simulator_detailed.tests.test_mixed_compute_runtime -q` — 5 passed in 1.759 s, adding shared-worker capacity and all four published fixtures with multiple interruptions.
+* Published `replay_compute --workload` examples: generic_matmul 91.75,
+  streaming_depth1 45, streaming_depth2 33, wormhole_bf16_matmul 105 ACI cycles;
+  all exit 0 and complete.
+* Strict Pyright: 0 errors/warnings/informations. Scoped Ruff, strict OpenSpec
+  and whitespace checks passed. Initial fixture corner/fabric bindings and
+  annotation errors were corrected before this checkpoint.
+
+The old serial prototype CLI/adapter remains explicitly scoped until Part 6.
+No push, spec synchronization or archive was performed.
+
 ## Shared scalar service and local waits — 2026-09-20
 
 Tasks 4.1–4.5 are complete (20/35). Addressed monotonic counters register in the

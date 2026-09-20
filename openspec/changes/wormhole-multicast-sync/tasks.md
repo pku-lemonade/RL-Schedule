@@ -6,6 +6,7 @@
 > The shared tree transport repair completes Part 2 (10/35).
 > Canonical memory integration completes Part 3 (15/35).
 > Shared scalar service and local waits complete Part 4 (20/35).
+> Attached finite compute and representative fixtures complete Part 5 (25/35).
 > Reopened scalar/compute items retain their implementation for repair;
 > their specified scope has not been reduced. See [implementation-audit.md](implementation-audit.md).
 
@@ -43,11 +44,11 @@
 
 ## 5. Finite pipeline composition and representative workloads (MS-05, MS-08..10)
 
-- [ ] 5.1 Refactor finite compute stages into an attachable component using one admitted environment/session/transport/memory registry and typed lifecycle capabilities. Preserve standalone v1 wrappers, cost policies and result hashes; test that mixed execution cannot allocate duplicate NoC/L1/compute capacity or reach private remote events.
-- [ ] 5.2 Extend the mixed compiler to bind multicast-produced operands into specific A/B slot generations, explicit scalar waits/signals and legal local or acknowledged completion gates. Retain local operand/result service, avoid duplicate reader packets, and validate the complete memory/compute/phase/FIFO/reuse DAG before runtime allocation.
-- [ ] 5.3 Add small generic distribute-compute-collect JSON fixtures with at least two workers, including two rounds whose distributor owns the collector counter and waits locally before the next distribution. Exercise bounded slot reuse, increasing thresholds, shared unicast traffic and backpressure; independently check bytes, expected scalar values, causal release and complete drain.
-- [ ] 5.4 Add an explicitly assumed Wormhole-profile fixture plus opposite-fabric, changed-clock/capacity and temporary-slowdown variants. Implement unified finite snapshots/finalization and test one-shot/resume equivalence, posted tails, pending waits, exactly-once teardown and absence of premature cleanup; keep generated traces in temporary directories.
-- [ ] 5.5 Run mixed pipeline/liveness tests, existing compute/memory examples and affected baseline tests, strict Pyright and scoped Ruff; review representative evidence and unsupported scope, record results and commit Part 5 before Part 6.
+- [x] 5.1 Refactor finite compute stages into an attachable component using one admitted environment/session/transport/memory registry and typed lifecycle capabilities. Preserve standalone v1 wrappers, cost policies and result hashes; test that mixed execution cannot allocate duplicate NoC/L1/compute capacity or reach private remote events.
+- [x] 5.2 Extend the mixed compiler to bind multicast-produced operands into specific A/B slot generations, explicit scalar waits/signals and legal local or acknowledged completion gates. Retain local operand/result service, avoid duplicate reader packets, and validate the complete memory/compute/phase/FIFO/reuse DAG before runtime allocation.
+- [x] 5.3 Add small generic distribute-compute-collect JSON fixtures with at least two workers, including two rounds whose distributor owns the collector counter and waits locally before the next distribution. Exercise bounded slot reuse, increasing thresholds, shared unicast traffic and backpressure; independently check bytes, expected scalar values, causal release and complete drain.
+- [x] 5.4 Add an explicitly assumed Wormhole-profile fixture plus opposite-fabric, changed-clock/capacity and temporary-slowdown variants. Implement unified finite snapshots/finalization and test one-shot/resume equivalence, posted tails, pending waits, exactly-once teardown and absence of premature cleanup; keep generated traces in temporary directories.
+- [x] 5.5 Run mixed pipeline/liveness tests, existing compute/memory examples and affected baseline tests, strict Pyright and scoped Ruff; review representative evidence and unsupported scope, record results and commit Part 5 before Part 6.
 
 ## 6. Independent audits, CLI and compatibility gates (MS-11..12)
 

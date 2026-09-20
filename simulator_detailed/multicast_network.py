@@ -107,7 +107,7 @@ class MulticastNetworkPlan:
             packets[packet] = UnicastPacket(definition, layout, None, control.packet_id)
         routes = {r.operation_id: r for r in inventory.ordinary_routes}
         buffers = {b.buffer_id: b for b in memory.buffers}
-        for operation in admitted.workload.operations:
+        for operation in admitted.execution_workload.operations:
             if operation.operation_id not in routes:
                 continue
             route = routes[operation.operation_id]
