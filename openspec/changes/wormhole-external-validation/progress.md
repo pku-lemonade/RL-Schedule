@@ -1,5 +1,47 @@
 # Wormhole external validation progress
 
+## Current blocked silicon campaign checkpoint
+
+Status: executed on 2026-09-20 after the clean ttsim rerun. Progress remains
+25/35 because this host has no Wormhole device. No hardware-dependent task was
+marked complete and no unavailable result was promoted to silicon evidence.
+
+The committed three-case ttsim campaign was paired with fresh
+`write_unavailable_wormhole_capture` bundles using the observed prerequisite
+failure: `/dev/tenstorrent` is absent and `tt-smi` is unavailable. The run
+packaged all six case/producer bundles plus three field-level equivalence
+results into an external report. Each case produced the same fail-closed
+behavior:
+
+- Silicon collection was `blocked` before device access or producer launch.
+- Canonical equivalence was `blocked` on 14 unavailable clock, enabled-layout
+  and instrumentation fields; workload, mapping and source/build identity were
+  not fabricated or rewritten.
+- Profiler import rejected the bundle with `profiler conversion requires a
+  successful Wormhole capture`.
+- Paired functional and timing outcomes remained blocked, and the report status
+  was `incomplete`.
+- Independent final-evidence audit rejected the unavailable software condition
+  instead of accepting the incomplete report as delivery evidence.
+- Measured-calibration planning rejected an empty hardware binding set with
+  `external calibration requires case bindings`.
+
+Temporary execution identities (the generated directory is intentionally not
+tracked evidence):
+
+| Identity | Value |
+| --- | --- |
+| Campaign SHA-256 | `5754e19d3e7e30be85a59c8bab162fe2f2c6fe6409c44ed32360c735850a3be3` |
+| Blocked report ID | `external-report:b284fa5ea8571d170127c4b526b5e9325664e9edf3b19dcd34b3cdc44abe6293` |
+| Blocked report SHA-256 | `8c6b2afb8e10dd0ef2f637d255735238ec4fb57a2395cafff5e89912213db8e7` |
+| Bundles / derived artifacts / outcomes | `6 / 3 / 9` |
+
+This exercise confirms the downstream evidence gates using the actual pinned
+ttsim captures, but it does not satisfy tasks 4.3-4.5, 5.4-5.5, 6.3-6.5,
+7.1 or 7.5. Those tasks still require live CSV and complete manifests from a
+named Wormhole worker, followed by matched comparison, disjoint measured fit
+and held-out evaluation, a clean silicon rerun and final delivery identities.
+
 ## Part 3 - Portable capture kit and ttsim functional evidence completion
 
 Status: complete on 2026-09-20. Tasks 3.1-3.5 are complete and the change is
