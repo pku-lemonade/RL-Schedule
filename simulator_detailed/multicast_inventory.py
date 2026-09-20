@@ -53,6 +53,7 @@ class ControlPacketPlan(GraphRecord):
     purpose: Literal["multicast_ack", "atomic_request", "atomic_return"]
     route: RouteRecord
     inline_bytes: Index
+    flit_count: PositiveInt = 1
     physical_bytes: PositiveInt
     planned_channel_bytes: PositiveInt
     after_effect: Identifier | None = None
@@ -211,11 +212,12 @@ class _Admission:
 
     def control(self, operation: str, segment: int, purpose: Literal["multicast_ack", "atomic_request", "atomic_return"],
                 route: RouteRecord, inline: int, effect: str | None = None) -> None:
-        physical = self.memory.packet.physical_flit_bytes
+        flits = self.memory.packet.header_flits if purpose == "multicast_ack" else 1
+        physical = self.memory.packet.physical_flit_bytes * flits
         self.controls.append(ControlPacketPlan(
             packet_id=inventory_id(operation, segment, purpose, route.source, route.destination),
             operation_id=operation, segment_index=segment, purpose=purpose, route=route,
-            inline_bytes=inline, physical_bytes=physical, planned_channel_bytes=len(route.hops) * physical,
+            inline_bytes=inline, flit_count=flits, physical_bytes=physical, planned_channel_bytes=len(route.hops) * physical,
             after_effect=effect))
 
     def multicast(self) -> None:

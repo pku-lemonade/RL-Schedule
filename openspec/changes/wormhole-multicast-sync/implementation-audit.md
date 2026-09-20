@@ -7,7 +7,7 @@ shared transport/memory/compute design. This correction preserves that design
 and reopens the incomplete tasks instead of reducing their acceptance criteria.
 The correction initially retained the reproduced baseline (1.1) and Part 1
 check/commit boundary (1.5). The subsequent tree-admission repair verifies 1.3:
-**10/35 fully verified tasks** after the 2026-09-20 admission and shared-transport repairs. The validation predecessor remains delivered.
+**15/35 fully verified tasks** after the 2026-09-20 admission and shared-transport repairs. The validation predecessor remains delivered.
 
 The tree compiler now uses selected-fabric coordinates, validates the common
 physical target address, rejects unavailable workers and duplicate aliases,
@@ -23,7 +23,10 @@ The new `multicast_network.py` / `tree_runtime.py` path now executes real shared
 links/router stages, finite credits/replication/reservations, both fabrics,
 ordinary request/response contention and retained resume. The old serial
 prototype modules described below still back the old CLI until Part 6 and must
-not be confused with this new path. Part 3 memory hooks are not yet attached.
+not be confused with this new path. Part 3 now attaches canonical memory hooks, addressed ordinary clients, real
+acknowledgements, retained service/lease state and exactly-once finalization
+through `MulticastMemoryRuntime`. Scalar/compute and CLI/adapter integration
+remain open.
 
 ## Concrete findings
 

@@ -43,6 +43,7 @@
     "virtual_channel.py",
     "tree_wire.py",
     "multicast_network.py",
+    "multicast_memory_runtime.py",
     "tree_runtime.py",
     "torus_transport.py",
     "memory_records.py",

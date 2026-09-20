@@ -113,10 +113,14 @@ class MemoryResourcePlan:
         # Preserve structural admission as a separate, pure boundary. Earlier
         # wire-only plans need not satisfy an unused memory-service geometry.
         plan = plan.revalidate()
-        config = plan.config
-        definitions = memory_resource_definitions(config, plan.graph)
+        return cls.for_system(plan.config, plan.graph, plan_sha256=plan.plan_sha256)
+
+    @classmethod
+    def for_system(cls, config: MemorySystemConfig, graph: CanonicalTopology, *, plan_sha256: str) -> MemoryResourcePlan:
+        """Admit one canonical registry without fabricating standalone operations."""
+        definitions = memory_resource_definitions(config, graph)
         aliases = {(e.endpoint_id, r): r for e in config.endpoints if e.enabled for r in e.resource_ids}
-        return cls(plan.plan_sha256, tuple(definitions), config.buffers, MappingProxyType(aliases))
+        return cls(plan_sha256, tuple(definitions), config.buffers, MappingProxyType(aliases))
 
 
 def memory_resource_definitions(config: MemorySystemConfig, graph: CanonicalTopology) -> tuple[MemoryResourceDefinition, ...]:
@@ -283,7 +287,8 @@ class MemoryResource:
                                 s.lease.handle.buffer.base_address + s.lease.access.offset_bytes + s.lease.access.size_bytes)
                        for s in self._accesses.values())
 
-    def try_acquire(self, handle: BufferHandle, access: MemoryAccess) -> AccessLease | None:
+    def can_acquire(self, handle: BufferHandle, access: MemoryAccess) -> bool:
+        """Nonmutating bundle preflight, including permissions and readiness."""
         access = MemoryAccess.model_validate(access.model_dump(mode="python"))
         start, end = self._validate_access(handle, access)
         for state in self._accesses.values():
@@ -291,10 +296,15 @@ class MemoryResource:
             other_start = other.handle.buffer.base_address + other.access.offset_bytes
             if _overlap(start, end, other_start, other_start + other.access.size_bytes) and (
                     access.direction == "write" or other.access.direction == "write"):
-                return None
-        if access.direction == "read" and not self.is_ready(handle, offset_bytes=access.offset_bytes,
-                                                           size_bytes=access.size_bytes, version=access.version):
+                return False
+        return access.direction != "read" or self.is_ready(handle, offset_bytes=access.offset_bytes,
+                                                           size_bytes=access.size_bytes, version=access.version)
+
+    def try_acquire(self, handle: BufferHandle, access: MemoryAccess) -> AccessLease | None:
+        access = MemoryAccess.model_validate(access.model_dump(mode="python"))
+        if not self.can_acquire(handle, access):
             return None
+        start, end = self._validate_access(handle, access)
         lease = AccessLease(self._next_access, handle, access)
         self._next_access += 1
         self._accesses[lease.access_id] = _AccessState(lease)
@@ -400,6 +410,36 @@ class MemoryResources:
         if canonical is None:
             raise ValueError("unavailable memory attachment/resource alias")
         return self.resources[canonical]
+
+    def try_acquire_bundle(self, requests: tuple[tuple[str, MemoryAccess], ...]) -> tuple[AccessLease, ...] | None:
+        """Acquire all ranges without yielding; failed preflight changes no state.
+
+        Provisional writes are never used: they would invalidate readiness even
+        if subsequently released. Cross-request conflicts are rejected before
+        attempting any acquisition.
+        """
+        checked = tuple((self.handles[buffer], MemoryAccess.model_validate(access.model_dump(mode="python")))
+                        for buffer, access in requests)
+        for index, (handle, access) in enumerate(checked):
+            owner = self.resources[handle.buffer.resource_id]
+            # Validate every range even if an earlier one is temporarily busy.
+            owner.can_acquire(handle, access)
+            start = handle.buffer.base_address + access.offset_bytes
+            for other_handle, other in checked[:index]:
+                other_start = other_handle.buffer.base_address + other.offset_bytes
+                if (handle.buffer.resource_id == other_handle.buffer.resource_id
+                        and (access.direction == "write" or other.direction == "write")
+                        and _overlap(start, start + access.size_bytes, other_start, other_start + other.size_bytes)):
+                    raise ValueError("access bundle contains conflicting ranges")
+        if not all(self.resources[h.buffer.resource_id].can_acquire(h, a) for h, a in checked):
+            return None
+        leases: list[AccessLease] = []
+        for handle, access in checked:
+            lease = self.resources[handle.buffer.resource_id].try_acquire(handle, access)
+            if lease is None:
+                raise AssertionError("non-yielding memory bundle changed after preflight")
+            leases.append(lease)
+        return tuple(leases)
 
     @property
     def is_drained(self) -> bool:

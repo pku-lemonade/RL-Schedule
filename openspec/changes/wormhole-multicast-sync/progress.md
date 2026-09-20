@@ -7,7 +7,49 @@
 > incomplete. The initial correction retained 2/35 tasks; the subsequent tree
 > repair brought the checklist to 3/35. The mixed-admission repair below
 > completes Part 1. Shared tree transport now completes Part 2: 10/35
-> verified; memory/scalar/compute integration remains open.
+> verified at that checkpoint. Canonical memory now completes Part 3:
+> 15/35 verified; scalar/compute integration remains open.
+
+## Canonical addressed multicast memory — 2026-09-20
+
+Tasks 3.1–3.5 now execute in `MulticastMemoryRuntime` through one environment,
+one physical transport registry and the existing canonical `MemoryResources` /
+`MemoryService` owners. `try_acquire_bundle` preflights every source/recipient
+lease without mutation; issue and responder capacities are checked/acquired in
+the same non-yielding admission step before any tree reservation. Failed bundle
+admission neither invalidates ready data nor retains provisional leases.
+
+Streaming source hooks service each useful source byte once; recipient hooks
+service each useful byte at every actual destination. Header/padding flits do
+not cause payload service. Segment leases publish physical-owner-qualified
+producer versions through the canonical registry; full-extent queries require
+all segments. Source-read release, injection handoff, per-recipient service,
+returned acknowledgements, source completion and diagnostic all-effects remain
+separate. Each acknowledgement uses its admitted real response route after
+recipient service and request-credit release. Configured header counts apply to
+acknowledgements as well as data packets. Reply descriptors are preprovisioned
+and released after response handoff; finalization waits for all returned credits.
+
+Ordinary read/posted/acknowledged and local memory operations use the same
+servers and physical objects. Both fabrics alias the same L1 owners. Snapshots
+retain live service, leases, descriptors and grants; resume is identical to an
+uninterrupted run. Exactly-once finalization releases full buffer reservations.
+Scalar-containing execution is explicitly rejected until Part 4 is attached.
+
+Checks:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_multicast_memory_runtime simulator_detailed.tests.test_multicast_inventory simulator_detailed.tests.test_tree_runtime simulator_detailed.tests.test_memory_resources simulator_detailed.tests.test_memory_runtime simulator_detailed.tests.test_memory_session simulator_detailed.tests.test_packet_runtime simulator_detailed.tests.test_phase3_dma -q` — 82 passed in 13.991 s.
+* A subsequently added canonical alias test, `.venv/bin/python -m unittest simulator_detailed.tests.test_multicast_memory_runtime.MulticastMemoryRuntimeTests.test_aliases_on_both_fabrics_share_canonical_l1_service -q` — 1 passed in 0.250 s.
+* Boundary sizes 1/31/32/33/63/64/65/96, source inclusion, slow target tails,
+  source reuse, failed bundle immutability, response backpressure, configured
+  three-flit headers, delayed credits, mixed unicast readback/local clients,
+  full-extent readiness and live resume all pass independent byte/lifetime checks.
+* Strict Pyright — 0 errors, warnings or informations. Scoped Ruff over new
+  runtime/tests, `memory_resources.py`, `multicast_network.py` and
+  `multicast_inventory.py` — passed. Strict OpenSpec and whitespace — passed.
+
+No legacy result schema or standalone timing contract changed. The old prototype
+CLI remains explicitly labeled until Part 6; no commits were pushed.
 
 ## Shared tree transport repair — 2026-09-20
 

@@ -101,9 +101,9 @@ class MulticastNetworkPlan:
         for control in inventory.controls:
             packet = PacketIdentity(transfer_id=control.packet_id, traffic_class=control.route.traffic_class)
             layout = MemoryPacketLayout(physical_flit_bytes=geometry.physical_flit_bytes,
-                                        data_capacity_bytes=geometry.data_capacity_bytes, header_flits=1, useful_bytes=0)
-            definition = PacketDefinition(packet=packet, route=control.route, flit_count=1, useful_bytes=0,
-                                          physical_bytes=geometry.physical_flit_bytes)
+                                        data_capacity_bytes=geometry.data_capacity_bytes, header_flits=control.flit_count, useful_bytes=0)
+            definition = PacketDefinition(packet=packet, route=control.route, flit_count=control.flit_count, useful_bytes=0,
+                                          physical_bytes=control.physical_bytes)
             packets[packet] = UnicastPacket(definition, layout, None, control.packet_id)
         routes = {r.operation_id: r for r in inventory.ordinary_routes}
         buffers = {b.buffer_id: b for b in memory.buffers}
