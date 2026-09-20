@@ -207,6 +207,30 @@ class _Receive:
     ready: deque[tuple[_Lease, CreditToken]] = field(default_factory=lambda: deque[tuple[_Lease, CreditToken]]())
 
 
+class PhysicalTransportRegistry:
+    """Own the one physical link/router allocation for an admitted mixed plan."""
+
+    def __init__(self, env: simpy.Environment, plan: PacketNetworkPlan):
+        self.env, self.plan = env, plan
+        self.links = {key: VirtualChannelLink(env, contract) for key, contract in plan.links.items()}
+        self.pipelines = {key: RouterPipeline(env, fabric_id=key[0], router_id=key[1],
+                                             transfer_aci_cycles=config.transfer_aci_cycles,
+                                             initiation_aci_cycles=config.initiation_aci_cycles,
+                                             capacity=config.capacity_flits) for key, config in plan.routers.items()}
+        self._attachments: set[str] = set()
+
+    def attach(self, component: str, env: simpy.Environment, plan: PacketNetworkPlan) -> None:
+        if env is not self.env or plan is not self.plan:
+            raise ValueError("component must attach to its admitted environment and physical plan")
+        if component in self._attachments:
+            raise ValueError("physical registry already has this component; duplicate capacity is forbidden")
+        self._attachments.add(component)
+
+    @property
+    def is_drained(self) -> bool:
+        return all(link.is_drained for link in self.links.values()) and all(p.is_drained for p in self.pipelines.values())
+
+
 class PacketTransport:
     """One shared environment/network and finite, nonblocking packet admission.
 
@@ -214,17 +238,16 @@ class PacketTransport:
     own control metadata. No SimPy put waiter is allowed to hide queued data.
     """
 
-    def __init__(self, env: simpy.Environment, plan: PacketNetworkPlan, hooks: PacketHooks):
+    def __init__(self, env: simpy.Environment, plan: PacketNetworkPlan, hooks: PacketHooks,
+                 *, registry: PhysicalTransportRegistry | None = None):
         if hooks.env is not env:
             raise ValueError("packet hooks must use the shared environment")
         self.env, self.plan, self.hooks = env, plan, hooks
         self._changed = env.event()
         self.endpoint_events: list[PacketEndpointEvent] = []
-        self.links = {key: VirtualChannelLink(env, contract) for key, contract in plan.links.items()}
-        self.pipelines = {key: RouterPipeline(env, fabric_id=key[0], router_id=key[1],
-                                             transfer_aci_cycles=config.transfer_aci_cycles,
-                                             initiation_aci_cycles=config.initiation_aci_cycles,
-                                             capacity=config.capacity_flits) for key, config in plan.routers.items()}
+        physical = registry if registry is not None else PhysicalTransportRegistry(env, plan)
+        physical.attach("unicast", env, plan)
+        self.links, self.pipelines = physical.links, physical.pipelines
         self._receipts = {packet: env.event() for packet in plan.packets}
         self._handoffs = {packet: env.event() for packet in plan.packets}
         self._states = {packet: PacketDelivery(packet=packet, submitted=False, received_flits=0,
@@ -328,6 +351,8 @@ class PacketTransport:
                 yield incoming.changed
                 token = incoming.take(lane)
             flit = token.envelope
+            if not isinstance(flit, PacketFlit):
+                raise TypeError("unicast forwarding requires a packet flit")
             definition = self.plan.packets[flit.packet]
             hop = definition.route.hops[flit.hop_index + 1]
             outgoing = self.links[hop.lane.channel.model_dump_json()]
@@ -348,6 +373,8 @@ class PacketTransport:
             if token is None:
                 yield link.changed
                 continue
+            if not isinstance(token.envelope, PacketFlit):
+                raise TypeError("unicast ejection requires a packet flit")
             lease = rx.staging.acquire(token.envelope.packet)
             rx.ready.append((lease, token))
             self.notify_changed()

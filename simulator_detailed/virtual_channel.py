@@ -31,6 +31,13 @@ from .configs.schemas.torus_replay import (
 from .packet_transport import LinkService, WireFlit
 from .torus import TorusPlan
 from .torus_records import ResourceState, TransportTraceEvent
+from .tree_wire import (
+    KernelLane,
+    KernelPacket,
+    SharedResourceState,
+    TreeFlit,
+    TreeTraceEvent,
+)
 from .utils.definitions import compute_flit_count
 
 
@@ -227,11 +234,11 @@ class _Slot:
 
 @dataclass
 class _Lane:
-    identity: LaneIdentity
+    identity: KernelLane
     slots: dict[str, _Slot] = field(default_factory=lambda: dict[str, _Slot]())
     ready: deque[CreditToken] = field(default_factory=lambda: deque[CreditToken]())
     received: deque[CreditToken] = field(default_factory=lambda: deque[CreditToken]())
-    owner: PacketIdentity | None = None
+    owner: KernelPacket | None = None
     peak: int = 0
     arrival_tail: float = 0.0
 
@@ -251,18 +258,18 @@ class VirtualChannelLink:
         self.config = contract.config
         self._lanes = {lane: _Lane(lane) for lane in contract.lanes}
         self._order = tuple(self._lanes)
-        self._next_reserve: dict[PacketIdentity, int] = {}
-        self._next_stage: dict[PacketIdentity, int] = {}
+        self._next_reserve: dict[KernelPacket, int] = {}
+        self._next_stage: dict[KernelPacket, int] = {}
         self._sequence = 0
         self._staging = 0
         self._staging_peak = 0
         self._cursor = 0
         # Round-robin preference only; it holds no physical grant while waiting.
-        self._turn_lane: LaneIdentity | None = None
+        self._turn_lane: KernelLane | None = None
         self._quantum_left = 0
         self._busy_until = float(env.now)
         self._changed = env.event()
-        self._events: list[TransportTraceEvent] = []
+        self._events: list[TransportTraceEvent | TreeTraceEvent] = []
         env.process(self._serialize())
         if self.config.slowdowns:
             env.process(self._failure_events())
@@ -274,6 +281,10 @@ class VirtualChannelLink:
 
     @property
     def events(self) -> tuple[TransportTraceEvent, ...]:
+        return tuple(e for e in self._events if isinstance(e, TransportTraceEvent))
+
+    @property
+    def all_events(self) -> tuple[TransportTraceEvent | TreeTraceEvent, ...]:
         return tuple(self._events)
 
     def log_event(self, action: str, token: CreditToken, *, duration: float | None = None,
@@ -289,7 +300,8 @@ class VirtualChannelLink:
              router_id: str | None = None) -> None:
         flit = token.envelope
         launched = action == "link_launch"
-        self._events.append(TransportTraceEvent.model_validate({
+        record = TreeTraceEvent if isinstance(flit, TreeFlit) else TransportTraceEvent
+        self._events.append(record.model_validate({
             "action": action, "time_aci_cycles": self.env.now, "fabric_id": flit.fabric_id,
             "router_id": router_id, "port_id": None, "channel": flit.lane.channel, "lane": flit.lane,
             "packet": flit.packet, "flit_index": flit.flit_index, "token_id": token.token_id,
@@ -361,7 +373,7 @@ class VirtualChannelLink:
         self._log("link_ready", token)
         self._notify()
 
-    def take(self, identity: LaneIdentity) -> CreditToken | None:
+    def take(self, identity: KernelLane) -> CreditToken | None:
         lane = self._lanes[identity]
         if not lane.received:
             return None
@@ -466,12 +478,26 @@ class VirtualChannelLink:
             available=self.config.lane_capacity_flits - len(lane.slots),
             occupied=sum(s.stage != "returning" for s in lane.slots.values()),
             pending_returns=sum(s.stage == "returning" for s in lane.slots.values()),
+            peak_occupied=lane.peak, owners=(lane.owner,) if isinstance(lane.owner, PacketIdentity) else (),
+        ) for identity, lane in self._lanes.items() if isinstance(identity, LaneIdentity))
+
+    def shared_resources(self) -> tuple[SharedResourceState, ...]:
+        return tuple(SharedResourceState(
+            resource_id=identity.model_dump_json(), kind="lane", fabric_id=identity.channel.fabric_id,
+            lane=identity, capacity=self.config.lane_capacity_flits,
+            available=self.config.lane_capacity_flits - len(lane.slots),
+            occupied=sum(s.stage != "returning" for s in lane.slots.values()),
+            pending_returns=sum(s.stage == "returning" for s in lane.slots.values()),
             peak_occupied=lane.peak, owners=() if lane.owner is None else (lane.owner,),
         ) for identity, lane in self._lanes.items())
 
+    def lane_drained(self, identity: KernelLane) -> bool:
+        lane = self._lanes[identity]
+        return not lane.slots and lane.owner is None
+
     @property
     def is_drained(self) -> bool:
-        return (all(r.is_drained for r in self.resources()) and not self._staging
+        return (all(r.is_drained for r in self.shared_resources()) and not self._staging
                 and self.env.now >= self._busy_until)
 
     def inspect(self) -> dict[str, object]:

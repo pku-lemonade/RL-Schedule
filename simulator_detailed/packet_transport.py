@@ -23,6 +23,7 @@ from .configs.schemas.torus_replay import (
     TransportEnvelope,
 )
 from .torus_records import ResourceState
+from .tree_wire import KernelLane, KernelPacket, SharedResourceState, TreeFlit
 
 if TYPE_CHECKING:
     from .virtual_channel import CreditToken, ResolvedLinkConfig, VirtualChannelLink
@@ -65,7 +66,7 @@ class PacketFlit(GraphRecord):
         return self.flit_index + 1 == self.flit_count
 
 
-WireFlit = TransportEnvelope | PacketFlit
+WireFlit = TransportEnvelope | PacketFlit | TreeFlit
 
 
 class LinkService(Protocol):
@@ -76,7 +77,7 @@ class LinkService(Protocol):
     @property
     def config(self) -> ResolvedLinkConfig: ...
     @property
-    def lanes(self) -> tuple[LaneIdentity, ...]: ...
+    def lanes(self) -> tuple[KernelLane, ...]: ...
     def envelope(self, packet: PacketIdentity, flit_index: int) -> WireFlit: ...
     def validate(self, envelope: WireFlit) -> WireFlit: ...
 
@@ -100,7 +101,7 @@ class RouterPipeline:
         self.capacity = capacity
         self.active = 0
         self.peak = 0
-        self._owners: dict[str, PacketIdentity] = {}
+        self._owners: dict[str, KernelPacket] = {}
         self._waiting: deque[ChannelIdentity] = deque()
         self._waiting_set: set[str] = set()
         self._next_start = float(env.now)
@@ -114,7 +115,7 @@ class RouterPipeline:
         self._changed.succeed()
         self._changed = self.env.event()
 
-    def try_start(self, output: ChannelIdentity, packet: PacketIdentity) -> bool:
+    def try_start(self, output: ChannelIdentity, packet: KernelPacket) -> bool:
         output_key = output.model_dump_json()
         if output_key not in self._waiting_set:
             self._waiting.append(output)
@@ -138,7 +139,7 @@ class RouterPipeline:
         yield self.env.timeout(delay)
         self._notify()
 
-    def finish(self, output: ChannelIdentity, packet: PacketIdentity) -> None:
+    def finish(self, output: ChannelIdentity, packet: KernelPacket) -> None:
         for key, owner in tuple(self._owners.items()):
             if owner == packet and key.startswith(f"{output.model_dump_json()}:"):
                 del self._owners[key]
@@ -149,13 +150,19 @@ class RouterPipeline:
         self._notify()
 
     def resources(self) -> ResourceState:
-        owners = tuple(dict.fromkeys(self._owners.values()))
+        owners = tuple(dict.fromkeys(p for p in self._owners.values() if isinstance(p, PacketIdentity)))
         return ResourceState(
             resource_id=f"router-pipeline:{self.router_id}", kind="router_pipeline",
             fabric_id=self.fabric_id, unit="flits", lane=None, capacity=self.capacity,
             available=self.capacity - self.active, occupied=self.active, pending_returns=0,
             peak_occupied=self.peak, owners=owners,
         )
+
+    def shared_resources(self) -> SharedResourceState:
+        return SharedResourceState(resource_id=f"router-pipeline:{self.router_id}", kind="router_pipeline",
+                                   fabric_id=self.fabric_id, capacity=self.capacity,
+                                   available=self.capacity - self.active, occupied=self.active, peak_occupied=self.peak,
+                                   owners=tuple(dict.fromkeys(self._owners.values())))
 
     @property
     def is_drained(self) -> bool:

@@ -6,7 +6,50 @@
 > claims. Shared transport/memory/compute execution and retained resume remain
 > incomplete. The initial correction retained 2/35 tasks; the subsequent tree
 > repair brought the checklist to 3/35. The mixed-admission repair below
-> completes Part 1: 5/35 fully verified, with runtime tasks still open.
+> completes Part 1. Shared tree transport now completes Part 2: 10/35
+> verified; memory/scalar/compute integration remains open.
+
+## Shared tree transport repair — 2026-09-20
+
+Tasks 2.1–2.5 now execute through `MulticastNetworkPlan`, the single
+`PhysicalTransportRegistry`, and `TreeTransport`. Distinct tree packet/branch
+identities and lanes use the existing `VirtualChannelLink` serializer and
+`RouterPipeline`; unicast attaches to those same objects. Duplicate component
+attachment is rejected. The legacy public envelope and result serializers stay
+unchanged; mixed snapshots explicitly include tree identities and all resources.
+
+FIFO controller capacity bounds waiting and active grants. Each grant claims
+all tree channels without yielding, charges configured setup/edge service, and
+releases exactly once after terminal/ejection effects and delayed credits drain.
+Forwarders retain incoming credits and charged replication slots, reserve each
+child/ejection before finite router service, and retain bounded pending-output
+metadata. Transit terminals consume finite router service without payload writes.
+A blocked branch owns no router grant. Request/response lanes remain independent
+of multicast reservation ownership while sharing physical bandwidth. Disjoint
+trees can hold simultaneous grants. Fair finite physical arbitration, the pure
+acyclic tree, preprovisioned responders/accesses (Part 3), and the existing
+unicast dateline ranks are the stated dependency assumptions; no hardware VC or
+reservation-control packet timing is inferred.
+
+Checks:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_tree_runtime simulator_detailed.tests.test_packet_runtime simulator_detailed.tests.test_torus_transport simulator_detailed.tests.test_memory_runtime simulator_detailed.tests.test_memory_session simulator_detailed.tests.test_topology_transport simulator_detailed.tests.test_phase3_dma -q` — 75 passed in 12.744 s.
+* New tests independently replay credit tokens, physical launch intervals,
+  per-channel/per-flit uniqueness, source/recipient bytes and grant lifetimes;
+  cover both fabrics, terminal opt-outs, minimal capacities, disjoint trees,
+  actual shared unicast/response traffic, directed slowdown and mixed clocks.
+  Interrupted execution retains live grants/credits and resumes to exactly the
+  uninterrupted snapshot. Prior exact packet-runtime digest fixtures pass.
+* Strict Pyright — 0 errors, warnings or informations. Scoped Ruff over
+  `tree_runtime.py`, `tree_wire.py`, `multicast_network.py`, `virtual_channel.py`,
+  `packet_runtime.py`, `packet_transport.py`, and `tests/test_tree_runtime.py` — passed.
+* Strict OpenSpec and `git diff --check` — passed.
+
+An opposite-fabric fixture initially mismatched its graph/routing policy and
+was corrected. A broader command initially named nonexistent `test_dma_endpoint`;
+the recorded passing command uses `test_phase3_dma`. The old serial prototypes
+remain pending replacement in the CLI/adapter; their output is not promoted by
+this transport checkpoint. Part 3 is next; no commits were pushed.
 
 ## Mixed execution admission repair — 2026-09-20
 

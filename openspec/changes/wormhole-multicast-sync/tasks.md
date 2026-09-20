@@ -3,7 +3,8 @@
 > The correction initially retained the reproduced baseline and Part 1
 > check/commit boundary (2/35). Task 1.3 has since been repaired and verified
 > (3/35). The 2026-09-20 mixed-admission repair completes Part 1 (5/35).
-> Reopened runtime items retain their implementation for repair;
+> The shared tree transport repair completes Part 2 (10/35).
+> Reopened memory/scalar/compute items retain their implementation for repair;
 > their specified scope has not been reduced. See [implementation-audit.md](implementation-audit.md).
 
 ## 1. Baseline, strict contracts and pure tree admission (MS-01..03)
@@ -16,11 +17,11 @@
 
 ## 2. Shared bounded tree transport and reservation (MS-03..04, MS-10)
 
-- [ ] 2.1 Add internal tree/branch/flit identities and multicast lanes through a composite link contract and one shared physical transport registry. Retain old public request/response envelope validation and output serialization; verify both fabrics, same physical serializer/router sharing and unchanged existing packet-runtime results.
-- [ ] 2.2 Implement `atomic_tree_reservation_v1` with finite FIFO control admission, all-or-none lane-owner grants, explicit setup/per-edge cost, fairness and exactly-once release after tree credits drain. Test conflicting/disjoint trees, no partial ownership on failure, bounded wait metadata and unchanged unicast/response lane availability.
-- [ ] 2.3 Implement cut-through branch forwarding with charged input/replication/downstream storage, per-flit pending outputs, finite router service and terminal opt-out handling. Test exactly-once recipient delivery, one shared-prefix launch per flit, zero payload effects at nonworkers, configured packet boundaries and branch backpressure with capacities of one.
-- [ ] 2.4 Add tree/reservation/branch events and resumable transport snapshots; stress competing trees plus ordinary request/response traffic, directed temporary slowdowns and mixed clocks. Independently verify aggregate physical bandwidth, all resource capacities, finite drain and retained owners at an interrupted horizon; review the full resource-dependency argument.
-- [ ] 2.5 Run focused tree/credit/failure/packet tests and affected legacy topology/torus/DMA checks, strict Pyright and scoped Ruff; compare predecessor timing/digest fixtures, update progress evidence, review storage accounting and commit Part 2 before Part 3.
+- [x] 2.1 Add internal tree/branch/flit identities and multicast lanes through a composite link contract and one shared physical transport registry. Retain old public request/response envelope validation and output serialization; verify both fabrics, same physical serializer/router sharing and unchanged existing packet-runtime results.
+- [x] 2.2 Implement `atomic_tree_reservation_v1` with finite FIFO control admission, all-or-none lane-owner grants, explicit setup/per-edge cost, fairness and exactly-once release after tree credits drain. Test conflicting/disjoint trees, no partial ownership on failure, bounded wait metadata and unchanged unicast/response lane availability.
+- [x] 2.3 Implement cut-through branch forwarding with charged input/replication/downstream storage, per-flit pending outputs, finite router service and terminal opt-out handling. Test exactly-once recipient delivery, one shared-prefix launch per flit, zero payload effects at nonworkers, configured packet boundaries and branch backpressure with capacities of one.
+- [x] 2.4 Add tree/reservation/branch events and resumable transport snapshots; stress competing trees plus ordinary request/response traffic, directed temporary slowdowns and mixed clocks. Independently verify aggregate physical bandwidth, all resource capacities, finite drain and retained owners at an interrupted horizon; review the full resource-dependency argument.
+- [x] 2.5 Run focused tree/credit/failure/packet tests and affected legacy topology/torus/DMA checks, strict Pyright and scoped Ruff; compare predecessor timing/digest fixtures, update progress evidence, review storage accounting and commit Part 2 before Part 3.
 
 ## 3. Addressed multicast writes and completion (MS-03..05, MS-10)
 
