@@ -7,7 +7,7 @@ shared transport/memory/compute design. This correction preserves that design
 and reopens the incomplete tasks instead of reducing their acceptance criteria.
 The correction initially retained the reproduced baseline (1.1) and Part 1
 check/commit boundary (1.5). The subsequent tree-admission repair verifies 1.3:
-**15/35 fully verified tasks** after the 2026-09-20 admission and shared-transport repairs. The validation predecessor remains delivered.
+**20/35 fully verified tasks** after the 2026-09-20 admission and shared-transport repairs. The validation predecessor remains delivered.
 
 The tree compiler now uses selected-fabric coordinates, validates the common
 physical target address, rejects unavailable workers and duplicate aliases,
@@ -25,8 +25,8 @@ ordinary request/response contention and retained resume. The old serial
 prototype modules described below still back the old CLI until Part 6 and must
 not be confused with this new path. Part 3 now attaches canonical memory hooks, addressed ordinary clients, real
 acknowledgements, retained service/lease state and exactly-once finalization
-through `MulticastMemoryRuntime`. Scalar/compute and CLI/adapter integration
-remain open.
+through `MulticastMemoryRuntime`. Part 4 now adds shared addressed atomic service, actual control transport and
+charged race-safe local waits. Compute and CLI/adapter integration remain open.
 
 ## Concrete findings
 

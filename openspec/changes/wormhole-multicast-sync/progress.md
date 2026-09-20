@@ -10,6 +10,37 @@
 > verified at that checkpoint. Canonical memory now completes Part 3:
 > 15/35 verified; scalar/compute integration remains open.
 
+## Shared scalar service and local waits — 2026-09-20
+
+Tasks 4.1–4.5 are complete (20/35). Addressed monotonic counters register in the
+canonical aggregate memory server. Each atomic update is one indivisible FIFO
+job with configured final native cost, old/new values and admission/linearization
+sequences. Both fabrics and local clients share that server; independent L1s
+serve concurrently. No duplicate base read/write jobs are charged.
+
+Posted and returning operations use actual one-flit request/response routes,
+finite issue/responder descriptors and serviced local return inboxes. Replies
+can reorder while retaining the value from each update's linearization. Posted
+completion is source handoff; counter effects can remain pending. Local waits
+subscribe before charging observations on the same FIFO, recheck changes during
+service, and release only after threshold and full local data versions are ready.
+Blocked waits retain no execution resource. Pure admission proves finite phases,
+locality, overflow, granule/inbox disjointness and representable observation costs.
+
+Checks:
+
+* `.venv/bin/python -m unittest simulator_detailed.tests.test_scalar_shared_runtime simulator_detailed.tests.test_multicast_memory_runtime simulator_detailed.tests.test_memory_resources simulator_detailed.tests.test_memory_runtime simulator_detailed.tests.test_compute_runtime simulator_detailed.tests.test_compute_overlap -q` — 72 passed in 20.169 s.
+* After adding cross-fabric contention and pre-allocation overflow checks,
+  `.venv/bin/python -m unittest simulator_detailed.tests.test_scalar_shared_runtime simulator_detailed.tests.test_packet_runtime simulator_detailed.tests.test_multicast_inventory -q` — 29 passed in 5.064 s.
+* Strict Pyright: 0 errors/warnings/informations. Scoped Ruff: passed after
+  import formatting. Strict OpenSpec and whitespace checks: passed.
+
+Coverage includes generic widths 1/2/4/8, exact large integers, response
+reordering, distinct-L1 overlap, FIFO ties, observation-registration races,
+late payload readiness, increasing thresholds and retained resume. Existing
+packet digest fixtures and standalone memory/compute regressions pass. Compute
+composition and public CLI/adapter replacement remain for Parts 5–6. No push.
+
 ## Canonical addressed multicast memory — 2026-09-20
 
 Tasks 3.1–3.5 now execute in `MulticastMemoryRuntime` through one environment,

@@ -22,6 +22,7 @@ from .configs.schemas.topology import (
 )
 from .configs.schemas.torus_replay import ChannelIdentity, RouteRecord
 from .memory_routes import MemoryOperationRoutes, operation_routes
+from .memory_service import ServiceTiming
 from .memory_transport import validate_transport_settings
 from .torus import TorusRouting
 from .torus_dependencies import ResourceDependencies
@@ -291,6 +292,9 @@ class _Admission:
                 raise ValueError("atomic granules must be disjoint from payload buffers and other counters")
             counter_resources[counter.counter_id] = owner
             counter_buffers.add(counter.buffer_id)
+            service = next(r.service for r in self.memory.resources if r.resource_id == owner)
+            ServiceTiming(config=service, aci_clock_hz=self.memory.aci_clock_hz).observation_cost(
+                address, counter.width_bytes, control.local_observation_aci_cycles)
         inboxes: list[MixedAccess] = []
         for increment in self.workload.increments:
             counter = counters[increment.counter_id]

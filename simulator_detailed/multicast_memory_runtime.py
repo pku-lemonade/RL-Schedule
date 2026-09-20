@@ -32,11 +32,19 @@ from .packet_runtime import (
     PhysicalTransportRegistry,
 )
 from .packet_transport import PacketFlit
+from .scalar_service import (
+    AtomicChunk,
+    CounterDefinition,
+    CounterHandle,
+    CounterState,
+    ObservationChunk,
+    ScalarServiceRecord,
+)
 from .tree_runtime import TreeTransport, TreeTransportSnapshot
 from .tree_wire import TreeFlit, TreePacketIdentity
 
 SegmentKey = tuple[str, int]
-Fact = Literal["submission", "acceptance", "source_read_complete", "handoff", "recipient_effect", "acknowledgement", "complete", "all_effects"]
+Fact = Literal["submission", "acceptance", "source_read_complete", "handoff", "recipient_effect", "acknowledgement", "complete", "all_effects", "wait_release"]
 
 
 class MulticastLifecycleEvent(GraphRecord):
@@ -95,6 +103,9 @@ class MulticastExecutionResult(GraphRecord):
     source_useful_bytes: Index
     destination_useful_bytes: Index
     physical_channel_bytes: Index
+    counters: tuple[CounterState, ...] = ()
+    scalar_service: tuple[ScalarServiceRecord, ...] = ()
+    inbox_values: tuple[tuple[Identifier, int], ...] = ()
 
     @model_validator(mode="after")
     def conserved(self) -> Self:
@@ -165,8 +176,6 @@ class MulticastMemoryRuntime:
 
     def __init__(self, plan: MulticastSyncPlan):
         network = MulticastNetworkPlan.compile(plan)
-        if plan.workload.counters or plan.workload.increments or plan.workload.waits:
-            raise ValueError("scalar execution is not attached to this memory runtime yet")
         self.plan, self.network = plan, network
         self.config = plan.workload
         assert self.config.runtime is not None
@@ -180,15 +189,36 @@ class MulticastMemoryRuntime:
         self.descriptor_events: list[MixedDescriptorEvent] = []
         self._writes = {w.operation_id: w for w in self.config.writes}
         self._ordinary = {o.operation_id: o for o in self.config.operations}
+        self._increments = {i.operation_id: i for i in self.config.increments}
+        self._waits = {w.wait_id: w for w in self.config.waits}
         self._owners = {w.operation_id: self._endpoint_owner(w.source_endpoint_id) for w in self.config.writes}
         self._owners.update({o.operation_id: self._endpoint_owner(o.initiator_id) for o in self.config.operations})
+        self._owners.update({i.operation_id: self._endpoint_owner(i.source_endpoint_id) for i in self.config.increments})
+        self._owners.update({w.wait_id: self._endpoint_owner(w.endpoint_id) for w in self.config.waits})
         self._facts = {(operation, action): self.env.event() for operation in self._owners
-                       for action in ("source_read_complete", "handoff", "complete", "all_effects")}
+                       for action in (("complete", "all_effects") if operation in self._waits else
+                                      ("handoff", "complete", "all_effects") if operation in self._increments else
+                                      ("source_read_complete", "handoff", "complete", "all_effects"))}
         self._segments: dict[SegmentKey, _Segment] = {(p.operation_id, p.segment_index): _Segment((p.operation_id, p.segment_index)) for p in network.trees}
         for item in network.packets.values():
             if item.memory is not None:
                 p = item.memory.identity
                 self._segments.setdefault((p.operation_id, p.segment_index), _Segment((p.operation_id, p.segment_index)))
+        for operation in self._increments:
+            self._segments[(operation, 0)] = _Segment((operation, 0))
+        self._counter_handles: dict[str, CounterHandle] = {}
+        self._counter_owners: dict[str, str] = {}
+        self._previous_values: dict[str, int] = {}
+        self.inbox_values: list[tuple[str, int]] = []
+        for counter in self.config.counters:
+            buffer = self.memory.handles[counter.buffer_id].buffer
+            granule = self.config.control.atomic_granule_bytes
+            assert granule is not None
+            owner = self.memory.resources[buffer.resource_id]
+            self._counter_owners[counter.counter_id] = buffer.resource_id
+            self._counter_handles[counter.counter_id] = owner.service.register_counter(CounterDefinition(
+                counter_id=counter.counter_id, address=buffer.base_address + counter.offset_bytes,
+                width_bytes=counter.width_bytes, granule_bytes=granule, initial_value=counter.initial_value))
         self._segment_counts = {op: sum(k[0] == op for k in self._segments) for op in self._owners}
         self._counts: dict[tuple[str, str], int] = {}
         inventory = plan.record.inventory
@@ -209,6 +239,10 @@ class MulticastMemoryRuntime:
         for operation in self.config.operations:
             if operation.kind in {"local_read", "local_write", "fence"}:
                 self.env.process(self._local(operation))
+        for operation in self._increments:
+            self.env.process(self._increment(operation))
+        for wait in self._waits:
+            self.env.process(self._wait(wait))
 
     @property
     def changed(self) -> Event:
@@ -259,7 +293,7 @@ class MulticastMemoryRuntime:
             yield resource.changed
 
     def _dependencies(self, operation: str) -> ProcessGenerator:
-        declaration = self._writes.get(operation) or self._ordinary[operation]
+        declaration = self._writes.get(operation) or self._increments.get(operation) or self._ordinary[operation]
         for parent in declaration.depends_on:
             yield self._facts[parent, "complete"]
         if isinstance(declaration, MemoryOperation):
@@ -275,6 +309,8 @@ class MulticastMemoryRuntime:
                             offset_bytes=access.offset_bytes, size_bytes=access.size_bytes), version=MemoryVersion(kind="producer", producer_id=parent)))
         for gate in self.config.gates:
             if gate.operation_id == operation:
+                for wait in gate.after_waits:
+                    yield self._facts[wait, "complete"]
                 for prerequisite in gate.local_data:
                     yield from self._local_ready(prerequisite)
 
@@ -366,7 +402,7 @@ class MulticastMemoryRuntime:
                 del state.destinations[side]
                 state.completed_destinations.add(side)
                 self._log(key[0], key[1], "recipient_effect", owner.resource_id)
-                if not state.destinations:
+                if not state.destinations and key[0] not in self._increments:
                     self._fact(key, "all_effects")
 
     def _respond(self, key: SegmentKey, packet: PacketIdentity, endpoint: str) -> ProcessGenerator:
@@ -418,7 +454,16 @@ class MulticastMemoryRuntime:
         if item.control_id is not None:
             control = self._controls[item.control_id]
             if flit.is_tail:
-                self._log(control.operation_id, control.segment_index, "acknowledgement", self._owners[control.operation_id])
+                if control.purpose == "multicast_ack":
+                    self._log(control.operation_id, control.segment_index, "acknowledgement", self._owners[control.operation_id])
+                elif control.purpose == "atomic_request":
+                    yield from self._atomic_effect(control.operation_id)
+                else:
+                    increment = self._increments[control.operation_id]
+                    assert increment.return_inbox is not None
+                    yield from self._service((increment.operation_id, 0), "inbox", 0, increment.return_inbox.size_bytes)
+                    self.inbox_values.append((increment.operation_id, self._previous_values[increment.operation_id]))
+                    self._log(increment.operation_id, 0, "acknowledgement", self._owners[increment.operation_id])
             return
         assert item.memory is not None
         key = item.memory.identity.operation_id, item.memory.identity.segment_index
@@ -461,6 +506,74 @@ class MulticastMemoryRuntime:
         for action in ("source_read_complete", "handoff", "all_effects", "complete"):
             self._facts[key[0], action].succeed()
         self._log(key[0], None, "complete")
+
+    def _increment(self, operation: str) -> ProcessGenerator:
+        increment, key = self._increments[operation], (operation, 0)
+        self._log(operation, 0, "submission")
+        yield from self._dependencies(operation)
+        request = next(c for c in self._controls.values() if c.operation_id == operation and c.purpose == "atomic_request")
+        response = next((c for c in self._controls.values() if c.operation_id == operation and c.purpose == "atomic_return"), None)
+        requests = () if increment.return_inbox is None else (self._access(operation, increment.return_inbox, "write"),)
+        leases = yield from self._bundle(key, requests, (request.route.destination,) if response is not None else ())
+        if leases:
+            self._segments[key].destinations["inbox"] = leases[0]
+        yield self.env.timeout(self.config.memory.issue_latency_aci_cycles)
+        packet = PacketIdentity(transfer_id=request.packet_id, traffic_class="request")
+        while not self.unicast.try_submit(packet):
+            yield self.unicast.changed
+        yield self.unicast.handoff(packet)
+        self._fact(key, "handoff")
+        if response is not None:
+            yield self.unicast.receipt(PacketIdentity(transfer_id=response.packet_id, traffic_class="response"))
+        self._fact(key, "complete")
+        self._issues[self._owners[operation]].release(inventory_id(*key))
+
+    def _atomic_effect(self, operation: str) -> ProcessGenerator:
+        increment = self._increments[operation]
+        owner = self.memory.resources[self._counter_owners[increment.counter_id]]
+        handle = self._counter_handles[increment.counter_id]
+        job = AtomicChunk(service_id=inventory_id(operation, "atomic"), client_id=operation,
+                          counter_id=increment.counter_id, native_cycles=self.config.control.atomic_native_cycles)
+        done = owner.service.try_scalar(handle, job)
+        while done is None:
+            yield owner.service.changed
+            done = owner.service.try_scalar(handle, job)
+        record: object = yield done
+        assert isinstance(record, ScalarServiceRecord)
+        self._previous_values[operation] = record.old_value
+        self._log(operation, 0, "recipient_effect", owner.resource_id)
+        self._fact((operation, 0), "all_effects")
+        response = next((c for c in self._controls.values() if c.operation_id == operation and c.purpose == "atomic_return"), None)
+        if response is not None:
+            self.env.process(self._respond((operation, 0), PacketIdentity(transfer_id=response.packet_id, traffic_class="response"), response.route.source))
+
+    def _wait(self, wait_id: str) -> ProcessGenerator:
+        wait = self._waits[wait_id]
+        owner = self.memory.resources[self._counter_owners[wait.counter_id]]
+        handle = self._counter_handles[wait.counter_id]
+        observation = 0
+        while True:
+            # Subscribe before queued observation service. An update during that
+            # service cannot be lost; the returned value is sampled at its end.
+            changed = owner.service.counter_changed(handle)
+            job = ObservationChunk(service_id=inventory_id(wait_id, "observation", observation), client_id=wait_id,
+                                   counter_id=wait.counter_id, control_aci_cycles=self.config.control.local_observation_aci_cycles)
+            done = owner.service.try_scalar(handle, job)
+            while done is None:
+                yield owner.service.changed
+                done = owner.service.try_scalar(handle, job)
+            record: object = yield done
+            assert isinstance(record, ScalarServiceRecord)
+            observation += 1
+            if record.new_value >= wait.threshold:
+                for prerequisite in wait.local_data:
+                    yield from self._local_ready(prerequisite)
+                self._facts[wait_id, "complete"].succeed()
+                self._facts[wait_id, "all_effects"].succeed()
+                self._log(wait_id, None, "wait_release", owner.resource_id)
+                return
+            if not changed.triggered:
+                yield changed
 
     def _resources(self) -> tuple[MemoryResourceState, ...]:
         return tuple(r.snapshot() for r in self.memory.resources.values())
@@ -506,6 +619,9 @@ class MulticastMemoryRuntime:
         complete = final and not pending and self.registry.is_drained
         chunks = tuple(c for r in self.memory.resources.values() for c in r.service.records)
         return MulticastExecutionResult(plan=self.plan.record, configuration=self.config, status="complete" if complete else "incomplete",
+            counters=tuple(self.memory.resources[self._counter_owners[c]].service.counter_state(h) for c, h in self._counter_handles.items()),
+            scalar_service=tuple(r for owner in self.memory.resources.values() for r in owner.service.scalar_records),
+            inbox_values=tuple(self.inbox_values),
             reason="drained" if complete else "idle_with_pending" if self.env.peek() == float("inf") else "cycle_limit",
             elapsed_aci_cycles=self.env.now, pending_operations=pending, lifecycle=tuple(self.lifecycle), tree_transport=tree,
             unicast_transport=unicast, memory_resources=self._before_teardown or self._resources(),

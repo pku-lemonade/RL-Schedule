@@ -54,6 +54,7 @@
     "packet_runtime.py",
     "memory_transport.py",
     "memory_service.py",
+    "scalar_service.py",
     "memory_resources.py",
     "memory_execution.py",
     "memory_ordering.py",
