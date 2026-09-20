@@ -749,10 +749,18 @@ def convert_functional_capture(
     case = next(
         item for item in campaign.document.cases if item.case_id == capture.case_id
     )
-    require(
-        capture.conditions == case.conditions,
-        "capture conditions disagree with the campaign",
-    )
+    for field in (
+        "architecture",
+        "profile_version",
+        "enabled_layout",
+        "workload",
+        "mapping",
+        "instrumentation",
+    ):
+        require(
+            getattr(capture.conditions, field) == getattr(case.conditions, field),
+            f"capture {field} disagrees with the campaign",
+        )
     producer = next(
         item
         for item in campaign.document.producers
@@ -889,7 +897,7 @@ def convert_functional_capture(
         observation_id="reference:" + raw_identity.sha256,
         source_result_sha256=raw_identity.sha256,
         execution="complete",
-        clocks=case.conditions.clocks.value or (),
+        clocks=capture.conditions.clocks.value or (),
         entities=tuple(
             ObservationEntity(
                 entity_id=item.entity_id,
@@ -939,7 +947,7 @@ def convert_functional_capture(
             original_units=("bytes", "count", "work"),
             normalized_units=("bytes", "count", "work"),
         ),
-        conditions=case.conditions,
+        conditions=capture.conditions,
         observations=None,
     )
     mappings = FunctionalMappingManifest(

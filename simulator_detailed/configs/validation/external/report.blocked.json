@@ -5,20 +5,20 @@
   "campaign": {
     "artifact_id": "campaign",
     "logical_path": "campaign.valid.json",
-    "sha256": "a1b116f38e009113afbe3b1d8b7b5db5b0ab24e41a4edd78c7d002abcd3e5325",
-    "size_bytes": 12928
+    "sha256": "36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5",
+    "size_bytes": 14792
   },
   "bundles": [
     {
       "artifact_id": "ttsim-bundle",
       "logical_path": "capture.valid.json",
-      "sha256": "0037271f55589d579ce192fdd6a0abe09e8d7b2d0adf3e0fb869a03460c0adc9",
+      "sha256": "e2662ac44210a0361af5af2e0453f98ecc9ca7d5a2ec1f438dae0df7209f3672",
       "size_bytes": 4111
     },
     {
       "artifact_id": "wormhole-unavailable-bundle",
       "logical_path": "capture.unavailable.json",
-      "sha256": "aef2c9868d00c34336d37fbad0c43f14555aaf3164d3166a9ec78ae05b004982",
+      "sha256": "7d0a5e58a745118b9d2eb4f5fafb7e3d130c18c0592cabe672054826bc108f4e",
       "size_bytes": 3558
     }
   ],
@@ -43,7 +43,17 @@
         "repetition_ids": ["0", "1"],
         "warmup_repetition_ids": ["0"],
         "aggregation": "none"
-      }
+      },
+      "comparison": {
+        "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+        "unit": "cycles",
+        "boundary": "operation_submission_to_acknowledged_completion",
+        "absolute_tolerance": 0,
+        "relative_tolerance": 0,
+        "rationale": "exact arithmetic in the synthetic contract fixture"
+      },
+      "clock_mappings": [{"reference": "tensix", "simulator": "aci"}],
+      "entity_mappings": [{"reference": "profiler_zone", "simulator": "transfer:\"noc-64b\""}]
     }
   ],
   "outcomes": [

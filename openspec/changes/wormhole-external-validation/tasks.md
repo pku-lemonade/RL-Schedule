@@ -32,9 +32,9 @@
 
 ## 5. Paired campaign execution and scoped reports
 
-- [ ] 5.1 Implement a resumable campaign state machine for planned, collected, imported, functionally checked and timing-checked cases using only hash-addressed intermediate artifacts; verify interruption/restart does not rerun completed producers or accept stale/changed outputs.
-- [ ] 5.2 Implement canonical equivalence checks across simulator, ttsim and silicon source/binary, operation, byte/work count, address/shape/fidelity, mapping, fabric, clock and completion fields; verify every material mismatch blocks the paired claim with a field-level reason.
-- [ ] 5.3 Gate silicon timing on required ttsim and silicon functional effects/order/status checks, keeping deterministic external sentinel digests separate from abstract model values; verify a plausible duration with a corrupted effect contributes no timing evidence.
+- [x] 5.1 Implement a resumable campaign state machine for planned, collected, imported, functionally checked and timing-checked cases using only hash-addressed intermediate artifacts; verify interruption/restart does not rerun completed producers or accept stale/changed outputs.
+- [x] 5.2 Implement canonical equivalence checks across simulator, ttsim and silicon source/binary, operation, byte/work count, address/shape/fidelity, mapping, fabric, clock and completion fields; verify every material mismatch blocks the paired claim with a field-level reason.
+- [x] 5.3 Gate silicon timing on required ttsim and silicon functional effects/order/status checks, keeping deterministic external sentinel digests separate from abstract model values; verify a plausible duration with a corrupted effect contributes no timing evidence.
 - [ ] 5.4 Run matched comparisons for the three case families with predeclared boundaries, repetitions, units, domain maps and tolerances, and emit a lineage-complete report with errors/sample dispersion and scoped claims; verify mixed pass/fail/blocked cases remain distinct.
 - [ ] 5.5 Run campaign integration tests and the actual paired external matrix, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with exact report/capture identities and commit Part 5 before continuing.
 

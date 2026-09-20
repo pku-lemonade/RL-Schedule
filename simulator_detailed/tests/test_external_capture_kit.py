@@ -395,6 +395,41 @@ class FunctionalCaptureConversionTests(unittest.TestCase):
                     capture.document.raw_artifacts[0].sha256,
                 )
 
+    def test_runtime_metadata_is_preserved_without_weakening_workload_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = self._root(directory)
+            raw = _functional_record(
+                root / "campaign.valid.json", "noc-64b"
+            ).model_dump(mode="json")
+            capture_path = _capture(root, "noc-64b", raw)
+            document = json.loads(capture_path.read_text())
+            document["conditions"]["device"] = {
+                "state": "known",
+                "value": "runtime-selected-device",
+            }
+            document["conditions"]["firmware"] = {
+                "state": "known",
+                "value": "runtime-firmware-v1",
+            }
+            document["conditions"]["clocks"]["value"][0]["hz"]["value"] = 900000000
+            capture_path.write_text(json.dumps(document))
+            converted = convert_functional_capture(
+                admit_external_capture(capture_path), root / "converted/runtime"
+            )
+            imported = import_reference(converted.reference_path)
+            self.assertEqual(
+                converted.reference.conditions.device.value,
+                "runtime-selected-device",
+            )
+            self.assertEqual(
+                converted.reference.conditions.firmware.value,
+                "runtime-firmware-v1",
+            )
+            self.assertEqual(
+                imported.observations.clocks[0].hz.value,  # type: ignore[union-attr]
+                900000000,
+            )
+
     def test_payload_marker_address_count_and_path_corruptions_fail(self):
         variants: list[tuple[str, Callable[[dict[str, object]], None], str]] = []
 

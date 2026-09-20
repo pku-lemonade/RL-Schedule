@@ -1,5 +1,99 @@
 # Wormhole external validation progress
 
+## Part 5 - Paired campaign execution and scoped reports
+
+Status: implementation checkpoint on 2026-09-20; tasks 5.1, 5.2 and 5.3 are
+complete. Tasks 5.4 and 5.5 remain open because no actual ttsim/Wormhole capture
+pair is available. No synthetic fixture is reported as external evidence.
+
+Delivered and verified:
+
+- A resumable state machine records the ordered `planned`, `collected`,
+  `imported`, `functionally_checked` and `timing_checked` prefix independently
+  for every case/producer pair. Every transition commits the campaign and prior
+  artifact hashes, stores new output under its SHA-256, advances atomically and
+  re-verifies all retained bytes on restart. Completed stages are reused; stale
+  bytes, out-of-order stages, failed producers and output-budget violations do
+  not advance state.
+- Canonical field-level equivalence checks compare the campaign intent, ttsim
+  capture and silicon capture across pinned source/build/binary identities,
+  architecture/profile, layout, workload fields (including operation,
+  bytes/work, address, shape and fidelity), mapping/fabric, instrumentation and
+  clocks. A mismatch remains a named blocked field rather than being normalized
+  away.
+- Paired functional gates require both converted ttsim and silicon observations
+  to match addressed effects and causal order before timing is eligible. A
+  corrupted effect blocks an otherwise plausible timing result and removes its
+  accepted timing artifact IDs. External sentinel bytes remain producer
+  validation data and are not compared as simulator tensor output.
+- Boundary maps now carry explicit metric policies and clock/entity mappings.
+  The timing wrapper reuses the existing strict comparison engine and reports
+  signed, absolute and relative errors plus preserved sample count and
+  dispersion. No hardware tolerance, frequency or mapping is defaulted.
+- The report writer atomically publishes a portable campaign, independently
+  admissible capture bundles, generated artifacts, complete hashes and lineage.
+  Mixed pass/fail/blocked outcomes remain distinct and determine honest report
+  status. Runtime-selected device, firmware and clocks are preserved during
+  functional conversion while canonical workload/layout identity still has to
+  match the campaign.
+- The complete suite exposed an interval-addition compatibility issue: derived
+  intervals had displaced legacy metrics from `metrics[0]`. Legacy metrics are
+  again emitted first and additive interval metrics follow, restoring existing
+  calibration consumers without changing interval selection by identity.
+
+Implementation source SHA-256 identities before this progress/task update:
+
+| Source | SHA-256 |
+| --- | --- |
+| `configs/schemas/external_validation.py` | `5c203ce9fa99a80b763217a7fb1fcff67f589d4ae852d15c28f8869873a7cc92` |
+| `validation/external_campaign.py` | `b307c1f56805fe10d78a44d929a16e4d4eb935db9e91a9907cf1dc382fcd0963` |
+| `validation/external_capture.py` | `4f9512aa3cb36457207d7319f56ee80266f16ff9b004421214f505e9b4af6196` |
+| `validation/normalize.py` | `8737cadb3d7746ef9a92066c3d772ff844b420b2a9c5e693f74f85276ed6ba57` |
+| `tests/test_external_campaign.py` | `77ff06a8d4e69bfc09bab3e9ef275c58b1868a4376af479c4239b8bedb95f7e9` |
+| `tests/test_external_capture_kit.py` | `9e1d59b821abac7d38486aec4abea2d5c9f862a5689ff7b24297c61aa6208351` |
+| `tests/test_external_validation_intervals.py` | `d6c29b0831992ff64bea9070b01cdc31097415a5658f751cdfb9c41bc8f4f31a` |
+
+Revised synthetic fixture identities:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `campaign.valid.json` | `36a2b9d5711b87ad9dd20bcfd6d66249649affda27f9b3ee3f1ed183808060c5` |
+| `capture.valid.json` | `e2662ac44210a0361af5af2e0453f98ecc9ca7d5a2ec1f438dae0df7209f3672` |
+| `capture.unavailable.json` | `7d0a5e58a745118b9d2eb4f5fafb7e3d130c18c0592cabe672054826bc108f4e` |
+| `report.blocked.json` | `224581cca68bf638689807217a6beaa31820102007b4299d7ca21f7b77cf050f` |
+
+Executed verification:
+
+```text
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+599 tests run in 213.890s; 598 passed; 0 failures; 0 errors; 1 optional Torch/PyG gate skipped.
+
+.venv/bin/python -m unittest simulator_detailed.tests.test_validation_calibration simulator_detailed.tests.test_external_validation_intervals simulator_detailed.tests.test_external_campaign
+33 tests passed in 23.767s after restoring legacy metric order; 0 failures; 0 errors; 0 skips.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/external_validation.py simulator_detailed/configs/schemas/validation.py simulator_detailed/validation simulator_detailed/tests/test_external_campaign.py simulator_detailed/tests/test_external_capture_kit.py simulator_detailed/tests/test_external_validation_intervals.py simulator_detailed/tests/test_external_wormhole_collector.py simulator_detailed/tests/test_validation_adapters.py simulator_detailed/tests/test_mixed_validation.py simulator_detailed/tests/test_validation_references.py simulator_detailed/tests/test_external_validation_contracts.py
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate wormhole-external-validation --strict --no-interactive
+Change 'wormhole-external-validation' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Blocked prerequisites observed on this host:
+
+- Tasks 5.4 and 5.5 require successful captures from both the pinned ttsim
+  environment and one explicitly selected Wormhole device for all three case
+  families. The host still has no `/dev/tenstorrent`, `tt-smi`, pinned TT-Metal
+  checkout, matching built binaries or ttsim shared library.
+- The implemented timing/report mechanics are covered with synthetic unit data,
+  but an actual three-family comparison, real error/dispersion report and paired
+  integration result cannot be claimed until those capture bundles arrive.
+
 ## Part 4 - Wormhole collection and profiler import
 
 Status: implementation checkpoint on 2026-09-20; tasks 4.1 and 4.2 are

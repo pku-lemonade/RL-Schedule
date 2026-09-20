@@ -26,6 +26,7 @@ from .validation import (
     IdentifierMapping,
     IntervalSemanticScope,
     Metadata,
+    MetricPolicy,
     Positive,
     ProfilerSelection,
     ReferenceConditions,
@@ -43,6 +44,16 @@ ExternalIntervalBoundary = Literal[
 ]
 EvidenceClassification = Literal["functional_capture", "hardware_capture"]
 EvidenceGate = Literal["functional_reference", "silicon_timing"]
+CampaignStage = Literal[
+    "planned", "collected", "imported", "functionally_checked", "timing_checked"
+]
+CampaignArtifactRole = Literal[
+    "capture_bundle",
+    "functional_reference",
+    "profiler_reference",
+    "model_observation",
+    "comparison_result",
+]
 OutputRole = Literal["functional_record", "profiler_csv", "capture_manifest"]
 ExternalStage = Literal[
     "collection", "import", "functional", "timing", "calibration", "evaluation"
@@ -484,6 +495,9 @@ class BoundaryMap(ValidationRecord):
     completion_scope: IntervalSemanticScope
     simulator_interval: ModelIntervalSelection
     samples: RepetitionAggregation
+    comparison: MetricPolicy
+    clock_mappings: tuple[IdentifierMapping, ...] = ()
+    entity_mappings: tuple[IdentifierMapping, ...] = ()
 
     @model_validator(mode="after")
     def consistent_mapping(self) -> Self:
@@ -511,6 +525,14 @@ class BoundaryMap(ValidationRecord):
             or self.simulator_interval.semantic_scope != self.completion_scope
         ):
             raise ValueError("model interval selection disagrees with its boundary map")
+        if (
+            self.comparison.metric_id != self.simulator_interval.metric_id
+            or self.comparison.boundary != self.simulator_boundary
+        ):
+            raise ValueError("comparison policy disagrees with its boundary map")
+        for mappings in (self.clock_mappings, self.entity_mappings):
+            unique(tuple(item.reference for item in mappings), "reference mapping")
+            unique(tuple(item.simulator for item in mappings), "simulator mapping")
         return self
 
 
@@ -961,12 +983,152 @@ class ExternalCaptureBundle(ValidationRecord):
         return self
 
 
+class CampaignStateArtifact(ExternalArtifactIdentity):
+    role: CampaignArtifactRole
+
+
+class CampaignTransition(ValidationRecord):
+    stage: CampaignStage
+    input_sha256s: tuple[Digest, ...] = Field(min_length=1)
+    artifacts: tuple[CampaignStateArtifact, ...]
+
+    @model_validator(mode="after")
+    def hash_addressed(self) -> Self:
+        unique(self.input_sha256s, "campaign transition input hash")
+        unique(
+            tuple(item.artifact_id for item in self.artifacts),
+            "campaign transition artifact",
+        )
+        unique(
+            tuple(item.logical_path for item in self.artifacts),
+            "campaign transition artifact path",
+        )
+        if (self.stage == "planned") != (not self.artifacts):
+            raise ValueError("only the planned transition has no produced artifacts")
+        return self
+
+
+class ExternalCaseProgress(ValidationRecord):
+    case_id: Identifier
+    producer_id: Identifier
+    transitions: tuple[CampaignTransition, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def ordered_prefix(self) -> Self:
+        order: tuple[CampaignStage, ...] = (
+            "planned",
+            "collected",
+            "imported",
+            "functionally_checked",
+            "timing_checked",
+        )
+        observed = tuple(item.stage for item in self.transitions)
+        if observed != order[: len(observed)]:
+            raise ValueError("campaign transitions must be one ordered stage prefix")
+        return self
+
+
+class ExternalCampaignState(ValidationRecord):
+    kind: Literal["external_campaign_state"]
+    schema_version: Version
+    state_id: Identifier
+    campaign: ExternalArtifactIdentity
+    campaign_id: Identifier
+    cases: tuple[ExternalCaseProgress, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_progress(self) -> Self:
+        unique(
+            tuple((item.case_id, item.producer_id) for item in self.cases),
+            "campaign case/producer progress",
+        )
+        artifacts = tuple(
+            artifact
+            for case in self.cases
+            for transition in case.transitions
+            for artifact in transition.artifacts
+        )
+        unique(tuple(item.artifact_id for item in artifacts), "campaign state artifact")
+        unique(tuple(item.logical_path for item in artifacts), "campaign state path")
+        return self
+
+
+class EquivalenceValue(ValidationRecord):
+    producer: Literal["simulator", "ttsim", "silicon"]
+    value: CanonicalJSON
+
+
+class EquivalenceCheck(ValidationRecord):
+    field: Text
+    outcome: Literal["pass", "blocked"]
+    reason: Text
+    values: tuple[EquivalenceValue, ...] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def all_producers(self) -> Self:
+        if {item.producer for item in self.values} != {
+            "simulator",
+            "ttsim",
+            "silicon",
+        }:
+            raise ValueError("equivalence check requires all three producer values")
+        return self
+
+
+class ExternalEquivalenceResult(ValidationRecord):
+    kind: Literal["external_equivalence_result"]
+    schema_version: Version
+    result_id: Identifier
+    campaign_sha256: Digest
+    case_id: Identifier
+    ttsim_bundle_sha256: Digest
+    silicon_bundle_sha256: Digest
+    outcome: Literal["pass", "blocked"]
+    checks: tuple[EquivalenceCheck, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def aggregate(self) -> Self:
+        expected = (
+            "pass" if all(item.outcome == "pass" for item in self.checks) else "blocked"
+        )
+        if self.outcome != expected:
+            raise ValueError("equivalence result disagrees with field checks")
+        return self
+
+
+class PairedFunctionalGate(ValidationRecord):
+    kind: Literal["paired_functional_gate"]
+    schema_version: Version
+    gate_id: Identifier
+    case_id: Identifier
+    outcomes: tuple[ExternalOutcome, ...] = Field(min_length=2, max_length=2)
+    timing_eligible: StrictBool
+
+    @model_validator(mode="after")
+    def paired(self) -> Self:
+        if any(
+            item.stage != "functional" or item.case_id != self.case_id
+            for item in self.outcomes
+        ):
+            raise ValueError("functional gate outcomes disagree with the case/stage")
+        unique(
+            tuple(item.producer_id for item in self.outcomes),
+            "functional gate producer",
+        )
+        if self.timing_eligible != all(
+            item.outcome == "pass" for item in self.outcomes
+        ):
+            raise ValueError("timing eligibility disagrees with functional outcomes")
+        return self
+
+
 class ExternalValidationReport(ValidationRecord):
     kind: Literal["external_validation_report"]
     schema_version: Version
     report_id: Identifier
     campaign: ExternalArtifactIdentity
     bundles: tuple[ExternalArtifactIdentity, ...]
+    artifacts: tuple[ExternalArtifactIdentity, ...] = ()
     boundaries: tuple[BoundaryMap, ...]
     outcomes: tuple[ExternalOutcome, ...] = Field(min_length=1)
     lineage: tuple[ArtifactLineage, ...] = Field(min_length=1)
@@ -976,10 +1138,15 @@ class ExternalValidationReport(ValidationRecord):
 
     @model_validator(mode="after")
     def scoped_report(self) -> Self:
+        report_artifacts = (*self.bundles, *self.artifacts)
         unique(
-            tuple(item.artifact_id for item in self.bundles), "report bundle identity"
+            tuple(item.artifact_id for item in report_artifacts),
+            "report artifact identity",
         )
-        unique(tuple(item.logical_path for item in self.bundles), "report bundle path")
+        unique(
+            tuple(item.logical_path for item in report_artifacts),
+            "report artifact path",
+        )
         unique(tuple(item.boundary_id for item in self.boundaries), "report boundary")
         unique(
             tuple(item.artifact_id for item in self.lineage), "report lineage artifact"
@@ -987,6 +1154,7 @@ class ExternalValidationReport(ValidationRecord):
         artifacts = {
             self.campaign.artifact_id,
             *(item.artifact_id for item in self.bundles),
+            *(item.artifact_id for item in self.artifacts),
         }
         if any(item.artifact_id not in artifacts for item in self.lineage):
             raise ValueError("report lineage describes an unknown artifact")

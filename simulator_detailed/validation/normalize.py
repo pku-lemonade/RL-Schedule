@@ -331,7 +331,7 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     elapsed = number(raw.get("elapsed_aci_cycles", 0))
     window = MeasurementWindow(boundary="simulation_start_to_snapshot", start=point(0), end=point(elapsed),
                                excluded_warmups=(), repetitions=1, aggregation="none")
-    metrics: list[MetricObservation] = list(derived_metrics)
+    metrics: list[MetricObservation] = []
 
     def metric(name: str, value: float, unit: str, numerator: str, denominator: str = "one run") -> None:
         metrics.append(MetricObservation(metric_id=name, value=value, unit=unit, clock_domain="aci" if "cycle" in unit else None,
@@ -356,6 +356,7 @@ def normalize(admission: Admission, raw: Data) -> NormalizedObservations:
     payload = raw.get("received_payload_bytes")
     if state == "complete" and elapsed > 0 and payload is not None:
         metric("payload_throughput", integer(payload) / elapsed, "bytes_per_cycle", "received payload bytes", "elapsed ACI cycles")
+    metrics.extend(derived_metrics)
     pending = tuple(text(p) if isinstance(p, str) else key(p) for p in array(raw.get("pending", [])))
     if state == "incomplete" and not pending:
         pending = ("runtime reports unfinished work; inspect raw result",)

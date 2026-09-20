@@ -91,7 +91,17 @@
             "repetition_ids": ["0", "1"],
             "warmup_repetition_ids": ["0"],
             "aggregation": "none"
-          }
+          },
+          "comparison": {
+            "metric_id": "operation_submission_to_acknowledged_completion:\"noc-64b\"",
+            "unit": "cycles",
+            "boundary": "operation_submission_to_acknowledged_completion",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "exact arithmetic in the synthetic contract fixture"
+          },
+          "clock_mappings": [{"reference": "tensix", "simulator": "aci"}],
+          "entity_mappings": [{"reference": "profiler_zone", "simulator": "transfer:\"noc-64b\""}]
         }
       ],
       "producers": [
@@ -159,7 +169,20 @@
             "repetition_ids": ["0", "1"],
             "warmup_repetition_ids": ["0"],
             "aggregation": "none"
-          }
+          },
+          "comparison": {
+            "metric_id": "memory_service_begin_to_end:dram-read-256b",
+            "unit": "cycles",
+            "boundary": "memory_service_begin_to_end",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "exact arithmetic in the synthetic contract fixture"
+          },
+          "clock_mappings": [{"reference": "tensix", "simulator": "aci"}],
+          "entity_mappings": [
+            {"reference": "profiler_zone", "simulator": "transfer:\"dram-read-256b\""},
+            {"reference": "profiler_resource", "simulator": "resource:\"dram-0\""}
+          ]
         }
       ],
       "producers": [
@@ -227,7 +250,20 @@
             "repetition_ids": ["0", "1"],
             "warmup_repetition_ids": ["0"],
             "aggregation": "none"
-          }
+          },
+          "comparison": {
+            "metric_id": "compute_resource_acquire_to_release:compute-bf16-32",
+            "unit": "cycles",
+            "boundary": "compute_resource_acquire_to_release",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 0,
+            "rationale": "exact arithmetic in the synthetic contract fixture"
+          },
+          "clock_mappings": [{"reference": "tensix", "simulator": "aci"}],
+          "entity_mappings": [
+            {"reference": "profiler_zone", "simulator": "job:\"compute-bf16-32\""},
+            {"reference": "profiler_resource", "simulator": "resource:[\"worker-0\",\"compute\",0]"}
+          ]
         }
       ],
       "producers": [

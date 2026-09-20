@@ -139,6 +139,8 @@ class IntervalCampaignAndComparisonTests(unittest.TestCase):
             mapping = case.boundary_maps[0]
             self.assertEqual(mapping.simulator_interval.boundary, mapping.simulator_boundary)
             self.assertEqual(mapping.simulator_interval.semantic_scope, mapping.completion_scope)
+            self.assertEqual(mapping.comparison.metric_id, mapping.simulator_interval.metric_id)
+            self.assertEqual(mapping.comparison.boundary, mapping.simulator_boundary)
             self.assertEqual(len(mapping.samples.repetition_ids), case.budget.repetitions)
             self.assertEqual(len(mapping.samples.warmup_repetition_ids), case.budget.warmup_repetitions)
         document = campaign.model_dump(mode="json")
