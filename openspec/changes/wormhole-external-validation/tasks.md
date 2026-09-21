@@ -1,3 +1,13 @@
+## Hardware disposition for this host
+
+Tasks 4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1 and 7.5 are intentionally deferred on
+this host. They require a named physical Wormhole B0 device, live profiler
+CSV, board/software/firmware inventory and fresh hardware captures. The
+absence of `/dev/tenstorrent`, `tt-smi` and a physical board is recorded as a
+host limitation, not as implementation or silicon evidence. These boxes stay
+unchecked and must be resumed on a compatible hardware worker if 35/35 silicon
+delivery is required.
+
 ## 1. Campaign contracts and fail-closed admission
 
 - [x] 1.1 Add strict version-1 `external_validation_campaign`, `external_capture_bundle` and `external_validation_report` schemas with finite producer/case/budget, artifact-lineage, condition, boundary-map and outcome records; verify JSON round trips preserve integer counters, unknown metadata reasons and exact typed identities.

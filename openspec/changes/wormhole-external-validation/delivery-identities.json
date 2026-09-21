@@ -8,6 +8,29 @@
     "total": 35,
     "final_delivery": false
   },
+  "hardware_disposition": {
+    "status": "deferred_for_current_host",
+    "tasks": [
+      "4.3",
+      "4.4",
+      "4.5",
+      "5.4",
+      "5.5",
+      "6.3",
+      "6.4",
+      "6.5",
+      "7.1",
+      "7.5"
+    ],
+    "reason": "No physical Wormhole B0 device, /dev/tenstorrent, tt-smi, live profiler CSV or board inventory is available on this host.",
+    "evidence_policy": "Tasks remain unchecked; unavailable-host preflight and ttsim runs are not silicon evidence.",
+    "resume_prerequisites": [
+      "named physical Wormhole B0 worker",
+      "pinned build artifacts materialized on that worker",
+      "inventory, software, firmware and clock capture",
+      "functional records and live profiler CSV for all three cases"
+    ]
+  },
   "incremental_commits": [
     "c4884ca772fc7eb9edd89283f0a77d81b993590f",
     "db13ecb3f8892afe4ef271104deeb352c9edcdc0",
@@ -19,7 +42,8 @@
     "3f1b86feca42e188ae5ac8b1832804f02b1ebee4",
     "668cf3e672b1b9e151960b0ca074e214dff0cba2",
     "886c0d050442b7c4ad6e0a8f5e2011d52d1735c1",
-    "ae4bedf2dc96771d6730e6276657693e0c0bd818"
+    "ae4bedf2dc96771d6730e6276657693e0c0bd818",
+    "9bbc4a0806dfb864886c2f9c572a0d7e7447ab52"
   ],
   "source_files": [
     {

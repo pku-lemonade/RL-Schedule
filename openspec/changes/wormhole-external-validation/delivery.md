@@ -2,12 +2,18 @@
 
 ## Status
 
-This is an external-evidence checkpoint updated on 2026-09-21. The change is
-25/35 complete. The pinned ttsim/TT-Metal worker has executed all three
-functional cases and the evidence is committed. It is not final delivery: no
-named Wormhole device is available, so silicon timing, paired comparison,
-measured calibration and held-out evidence have not been collected. The 10
-hardware-dependent task boxes stay open and the change is not archived.
+This is the host-limited delivery checkpoint updated on 2026-09-21. The change
+is 25/35 complete. The pinned ttsim/TT-Metal worker has executed all three
+functional cases and the evidence is committed. The ten hardware-dependent
+task boxes are explicitly deferred for this host because no named Wormhole
+device, live profiler CSV or board inventory is available. This checkpoint is
+complete for the available environment but is not silicon delivery: hardware
+timing, paired comparison, measured calibration, held-out evaluation and the
+final clean hardware matrix remain open and the change is not archived.
+
+The next step is an external execution on a compatible Wormhole worker using
+the existing sealed plan and pinned artifacts. No implementation or parameter
+changes are needed before that run.
 
 The implementation and evidence are split into validated local commits plus
 the current profiler-enabled correction checkpoint. Nothing in this change has

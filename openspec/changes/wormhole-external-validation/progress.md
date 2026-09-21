@@ -1,5 +1,21 @@
 # Wormhole external validation progress
 
+## Host-limited disposition
+
+The current host does not expose a physical Wormhole B0 device. By explicit
+scope decision, the ten hardware-only tasks (4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1
+and 7.5) are skipped for this checkout and remain unchecked. This is a
+deferred hardware validation boundary, not a task completion claim. The
+committed 25/35 implementation and ttsim functional evidence remain valid;
+silicon CSV, paired timing, measured fitting, held-out evaluation and final
+hardware delivery are unavailable until a compatible worker supplies
+`/dev/tenstorrent`, `tt-smi`, inventory/firmware/clock data and fresh captures.
+
+Next execution on that worker is to materialize the pinned campaign artifacts,
+run the existing `collect_wormhole_capture` path for all three cases, admit the
+functional records and profiler CSV, then continue the paired report,
+calibration and final clean-matrix tasks without changing hardware parameters.
+
 ## Profiler-enabled worker correction and clean rerun
 
 Status: validated on 2026-09-21. Progress remains 25/35. The hardware
