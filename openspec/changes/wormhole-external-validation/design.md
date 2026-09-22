@@ -13,6 +13,12 @@ or ttsim checkout. External execution therefore has to be portable and resumable
 tooling can be implemented and verified here, while functional and silicon gates
 remain blocked until a compatible worker supplies exact artifacts.
 
+Update 2026-09-22: the silicon path is abandoned. No compatible Wormhole
+worker is available or planned, so the hardware-gated tasks (4.3-4.5, 5.4-5.5,
+6.3-6.5, 7.1, 7.5) will never be executed. The portable/resumable design below
+is retained as delivered, offline-verified tooling, but it has no planned
+silicon execution and must not be cited as silicon evidence.
+
 Official sources inspected on 2026-09-20 establish the producer boundaries:
 
 - [ttsim](https://github.com/tenstorrent/ttsim) commit

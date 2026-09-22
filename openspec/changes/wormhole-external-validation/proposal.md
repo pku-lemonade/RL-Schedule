@@ -68,7 +68,10 @@ its evidence tiers or rewriting its version-1 document meanings.
   and firmware, and the TT-Metal device profiler are required for silicon timing.
   The current host has neither environment, so implementation can complete capture
   tooling and blocked-path checks here but cannot honestly complete measured cases
-  until those prerequisites are supplied.
+  until those prerequisites are supplied. Update 2026-09-22: no Wormhole device
+  is available or planned, so the silicon-timing tasks (4.3-4.5, 5.4-5.5,
+  6.3-6.5, 7.1, 7.5) are abandoned and the measured cases remain permanently
+  incomplete; the change closes at 25/35 without silicon delivery.
 - **Detector and RL:** Predictor features/checkpoints, hardware embeddings,
   observations, actions, rewards and the existing root 4x4 mesh + Darknet19 +
   fail-dataset workflow do not change. New document kinds are rejected at legacy

@@ -2,18 +2,22 @@
 
 ## Status
 
-This is the host-limited delivery checkpoint updated on 2026-09-21. The change
-is 25/35 complete. The pinned ttsim/TT-Metal worker has executed all three
-functional cases and the evidence is committed. The ten hardware-dependent
-task boxes are explicitly deferred for this host because no named Wormhole
-device, live profiler CSV or board inventory is available. This checkpoint is
+This is the final host-limited delivery checkpoint, updated on 2026-09-22.
+The change is 25/35 complete. The pinned ttsim/TT-Metal worker has executed
+all three functional cases and the evidence is committed. The ten
+hardware-dependent task boxes (4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1, 7.5) are
+abandoned: no named Wormhole device, live profiler CSV or board inventory is
+available, and no compatible hardware will be procured. This checkpoint is
 complete for the available environment but is not silicon delivery: hardware
 timing, paired comparison, measured calibration, held-out evaluation and the
-final clean hardware matrix remain open and the change is not archived.
+final clean hardware matrix are permanently out of scope, and the change is
+not archived.
 
-The next step is an external execution on a compatible Wormhole worker using
-the existing sealed plan and pinned artifacts. No implementation or parameter
-changes are needed before that run.
+There is no next execution step. The silicon-dependent tasks were abandoned
+on 2026-09-22 because no compatible Wormhole worker exists or is planned. The
+sealed plan, pinned artifacts and collector remain in the tree as
+implemented, offline-verified tooling only; they must not be relabeled as
+silicon evidence.
 
 The implementation and evidence are split into validated local commits plus
 the current profiler-enabled correction checkpoint. Nothing in this change has
@@ -39,12 +43,12 @@ been pushed.
 | Requirement | Implemented and offline-tested scope | Actual external evidence |
 | --- | --- | --- |
 | EV-01 | Strict bounded campaign and capture contracts; pure preflight admission; deterministic portable kits | Not required to validate the contract |
-| EV-02 | Hash-addressed bundles, environment/source/build identities, raw preservation and mutation rejection | Three committed ttsim bundles; Wormhole bundles pending |
-| EV-03 | Canonical workload equivalence over source, build, operation, layout, fidelity, mapping, fabric and clocks | Pending paired live executions |
-| EV-04 | Functional conversion, effect/order/status gates and timing exclusion after functional failure | Three passing ttsim functional captures; silicon functional captures pending |
-| EV-05 | Three typed interval mappings, repetition/aggregation admission and strict clock/entity boundaries | Pending same-RISC Wormhole profiler captures |
-| EV-06 | Typed target planning, sealed fit/evaluation splits, bounded existing calibration engine and result publication | Pending disjoint hardware fit and held-out captures |
-| EV-07 | Portable report package, full outcome separation and independent rooted-lineage audit | Pending final report from actual captures |
+| EV-02 | Hash-addressed bundles, environment/source/build identities, raw preservation and mutation rejection | Three committed ttsim bundles; Wormhole bundles abandoned (no hardware available or planned) |
+| EV-03 | Canonical workload equivalence over source, build, operation, layout, fidelity, mapping, fabric and clocks | Abandoned: paired live executions will not run (no hardware) |
+| EV-04 | Functional conversion, effect/order/status gates and timing exclusion after functional failure | Three passing ttsim functional captures; silicon functional captures abandoned (no hardware) |
+| EV-05 | Three typed interval mappings, repetition/aggregation admission and strict clock/entity boundaries | Abandoned: same-RISC Wormhole profiler captures will not be collected |
+| EV-06 | Typed target planning, sealed fit/evaluation splits, bounded existing calibration engine and result publication | Abandoned: disjoint hardware fit and held-out captures will not be collected |
+| EV-07 | Portable report package, full outcome separation and independent rooted-lineage audit | Abandoned: no final report from actual hardware captures will be produced |
 | EV-08 | Legacy guards, full offline suite, compatibility selection, root Darknet19 smoke and optional-ML blocked behavior | Verified offline; no vendor dependency required |
 
 Exact source, fixture, commit and requirement mappings are recorded in
@@ -66,14 +70,16 @@ Darknet19 gate completed 37,888 nodes on 16 cores and 48 links with 11
 JSON-round-tripped windows. The optional ML gate was blocked because `torch`
 and `torch_geometric` are absent; it was not relabeled as a pass.
 
-## Remaining work
+## Abandoned work
 
-The open tasks are 4.3-4.5, 5.4, 5.5, 6.3-6.5, 7.1 and 7.5. They require a
-named Wormhole device with inventory, firmware, clocks and live profiler CSV.
-The fixed collector now validates a sealed plan and reaches device discovery;
-on this host it stops at `No chips detected in the cluster`. Fresh hardware
-capture bundles must be returned to this repository and admitted before the
-existing comparison, calibration, audit and delivery paths can complete.
+The abandoned tasks are 4.3-4.5, 5.4, 5.5, 6.3-6.5, 7.1 and 7.5. They require
+a named Wormhole device with inventory, firmware, clocks and live profiler
+CSV. The fixed collector validates a sealed plan and reaches device
+discovery; on the last attempted host it stops at `No chips detected in the
+cluster`. As of 2026-09-22 no physical Wormhole hardware is available or
+planned, so these tasks will not be executed and their boxes remain
+permanently unchecked. No comparison, calibration, audit-completion or
+delivery path that depends on fresh hardware captures will run.
 
 No claim in this checkpoint establishes tensor-level correctness, universal
 ttsim timing, full-kernel timing, unique physical parameter identification or

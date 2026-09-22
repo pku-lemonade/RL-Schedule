@@ -1,7 +1,7 @@
 {
   "kind": "wormhole_external_validation_delivery_checkpoint",
   "schema_version": 1,
-  "recorded_at": "2026-09-21",
+  "recorded_at": "2026-09-22",
   "base_revision": "ae4bedf2dc96771d6730e6276657693e0c0bd818",
   "progress": {
     "complete": 25,
@@ -9,7 +9,8 @@
     "final_delivery": false
   },
   "hardware_disposition": {
-    "status": "deferred_for_current_host",
+    "status": "abandoned_no_hardware",
+    "abandoned_on": "2026-09-22",
     "tasks": [
       "4.3",
       "4.4",

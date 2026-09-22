@@ -1,12 +1,19 @@
-## Hardware disposition for this host
+## Hardware disposition: silicon tasks abandoned
 
-Tasks 4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1 and 7.5 are intentionally deferred on
-this host. They require a named physical Wormhole B0 device, live profiler
-CSV, board/software/firmware inventory and fresh hardware captures. The
-absence of `/dev/tenstorrent`, `tt-smi` and a physical board is recorded as a
-host limitation, not as implementation or silicon evidence. These boxes stay
-unchecked and must be resumed on a compatible hardware worker if 35/35 silicon
-delivery is required.
+Tasks 4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1 and 7.5 are **abandoned**, not deferred
+(disposition changed on 2026-09-22). They require a named physical Wormhole B0
+device, live profiler CSV, board/software/firmware inventory and fresh
+hardware captures. No such device is available and none will be procured:
+there is no `/dev/tenstorrent`, no `tt-smi` and no physical board on any
+current or planned worker, and no compatible hardware worker will be
+supplied. The missing silicon evidence is therefore a permanent scope
+decision, not a host limitation and not an implementation result. These boxes
+stay permanently unchecked: they were never executed and will not be
+executed. The change closes at 25/35 with no silicon timing, no paired
+hardware comparison, no measured calibration, no held-out hardware evaluation
+and no final hardware matrix, and it is not archived or pushed. Do not resume
+these tasks, and do not mark them complete from unavailable-host preflight
+results, synthetic fixtures or ttsim-only evidence.
 
 ## 1. Campaign contracts and fail-closed admission
 
@@ -36,30 +43,30 @@ delivery is required.
 
 - [x] 4.1 Implement the named `wormhole_tt_metal_profiler_v1` collector with explicit device selection, inventory/software/firmware/clock capture, finite repetitions/warm-ups and safe unavailable-device diagnostics; verify ordinary hosts return a blocked bundle without probing unrelated devices or fabricating metadata.
 - [x] 4.2 Instrument the same pinned producer artifacts with sparse same-RISC zones around the three supported boundaries, retaining functional outputs alongside profiling; verify source/line/zone identities are unique and the ttsim/silicon binary and effective workload manifests match.
-- [ ] 4.3 Extend profiler conversion only as needed for live pinned Wormhole CSV while retaining raw integer counters, samples and metadata; verify unsupported headers/phases, ambiguous/nested pairs, wrong architecture/frequency and multi-core/device subtraction are rejected.
-- [ ] 4.4 On a compatible named Wormhole worker, execute the three finite case families and return functional records, profiler CSV and complete capture manifests; verify functional gates pass before each capture is admitted as `hardware_capture`. Leave this task unchecked with exact blocked prerequisites if no device environment is supplied.
-- [ ] 4.5 Run collector/importer tests and actual hardware import checks, strict Pyright, scoped Ruff and strict OpenSpec validation; record board/software/firmware/clocks, raw hashes, sample statistics and outcomes in `progress.md`, then commit Part 4 only when its required silicon captures are complete.
+- [ ] **(ABANDONED)** 4.3 Extend profiler conversion only as needed for live pinned Wormhole CSV while retaining raw integer counters, samples and metadata; verify unsupported headers/phases, ambiguous/nested pairs, wrong architecture/frequency and multi-core/device subtraction are rejected.
+- [ ] **(ABANDONED)** 4.4 On a compatible named Wormhole worker, execute the three finite case families and return functional records, profiler CSV and complete capture manifests; verify functional gates pass before each capture is admitted as `hardware_capture`. Leave this task unchecked with exact blocked prerequisites if no device environment is supplied.
+- [ ] **(ABANDONED)** 4.5 Run collector/importer tests and actual hardware import checks, strict Pyright, scoped Ruff and strict OpenSpec validation; record board/software/firmware/clocks, raw hashes, sample statistics and outcomes in `progress.md`, then commit Part 4 only when its required silicon captures are complete.
 
 ## 5. Paired campaign execution and scoped reports
 
 - [x] 5.1 Implement a resumable campaign state machine for planned, collected, imported, functionally checked and timing-checked cases using only hash-addressed intermediate artifacts; verify interruption/restart does not rerun completed producers or accept stale/changed outputs.
 - [x] 5.2 Implement canonical equivalence checks across simulator, ttsim and silicon source/binary, operation, byte/work count, address/shape/fidelity, mapping, fabric, clock and completion fields; verify every material mismatch blocks the paired claim with a field-level reason.
 - [x] 5.3 Gate silicon timing on required ttsim and silicon functional effects/order/status checks, keeping deterministic external sentinel digests separate from abstract model values; verify a plausible duration with a corrupted effect contributes no timing evidence.
-- [ ] 5.4 Run matched comparisons for the three case families with predeclared boundaries, repetitions, units, domain maps and tolerances, and emit a lineage-complete report with errors/sample dispersion and scoped claims; verify mixed pass/fail/blocked cases remain distinct.
-- [ ] 5.5 Run campaign integration tests and the actual paired external matrix, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with exact report/capture identities and commit Part 5 before continuing.
+- [ ] **(ABANDONED)** 5.4 Run matched comparisons for the three case families with predeclared boundaries, repetitions, units, domain maps and tolerances, and emit a lineage-complete report with errors/sample dispersion and scoped claims; verify mixed pass/fail/blocked cases remain distinct.
+- [ ] **(ABANDONED)** 5.5 Run campaign integration tests and the actual paired external matrix, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with exact report/capture identities and commit Part 5 before continuing.
 
 ## 6. Measured fitting and sealed held-out evaluation
 
 - [x] 6.1 Generate bounded existing-format calibration plans from admitted campaign cases for only memory bandwidth/fixed latency and compute work rate/setup; verify topology, clocks, widths, capacities, harvesting, fidelity and protocol structure cannot become fit targets.
 - [x] 6.2 Seal candidate order, metric scales/weights, tolerances, fit captures, held-out capture identities and semantic/capture-group splits before selection; verify renamed workloads, reused raw captures, changed thresholds and post-seal evidence mutation are rejected.
-- [ ] 6.3 Execute measured fitting on the admitted fit captures, freeze the selected vector/configuration digest, and evaluate disjoint hardware captures without refitting; verify candidate failures, ties, all-invalid searches and held-out failures remain visible and source inputs are unchanged.
-- [ ] 6.4 Publish candidate history, fit/evaluation errors, sample statistics, ambiguity and exact device/workload/window scope in the external report; verify no result claims unique physical identification, untested workloads or full-device timing accuracy.
-- [ ] 6.5 Run calibration/lineage regression tests and the actual measured fit/held-out campaign, strict Pyright, scoped Ruff and strict OpenSpec validation; record exact outcomes in `progress.md` and commit Part 6 before continuing.
+- [ ] **(ABANDONED)** 6.3 Execute measured fitting on the admitted fit captures, freeze the selected vector/configuration digest, and evaluate disjoint hardware captures without refitting; verify candidate failures, ties, all-invalid searches and held-out failures remain visible and source inputs are unchanged.
+- [ ] **(ABANDONED)** 6.4 Publish candidate history, fit/evaluation errors, sample statistics, ambiguity and exact device/workload/window scope in the external report; verify no result claims unique physical identification, untested workloads or full-device timing accuracy.
+- [ ] **(ABANDONED)** 6.5 Run calibration/lineage regression tests and the actual measured fit/held-out campaign, strict Pyright, scoped Ruff and strict OpenSpec validation; record exact outcomes in `progress.md` and commit Part 6 before continuing.
 
 ## 7. Consolidated external evidence and delivery
 
-- [ ] 7.1 Re-run the final pinned ttsim and Wormhole capture matrix from clean kits, import every raw artifact and reproduce the paired reports/calibration results; verify all published hashes and required functional/timing/evaluation outcomes from fresh temporary output directories.
+- [ ] **(ABANDONED)** 7.1 Re-run the final pinned ttsim and Wormhole capture matrix from clean kits, import every raw artifact and reproduce the paired reports/calibration results; verify all published hashes and required functional/timing/evaluation outcomes from fresh temporary output directories.
 - [x] 7.2 Independently audit campaign-to-raw-to-reference-to-model-to-report lineage, case coverage, source/build identities, hardware configuration and fidelity labels; inject changed/missing evidence and verify the audit detects it without relying on producer summary fields.
 - [x] 7.3 Re-run existing offline validation and replay compatibility suites plus the separate root 4x4 Darknet19 smoke and optional ML gate; verify external tooling remains opt-in, unavailable optional dependencies remain visible and predictor/RL shapes are unchanged.
 - [x] 7.4 Run the complete relevant unittest suite, strict Pyright, the explicit affected/predecessor Ruff scope, `git diff --check` and strict OpenSpec validation; record exact discovered/pass/fail/skip counts and do not relabel prior executions as fresh.
-- [ ] 7.5 Write delivery and identity manifests linking EV-01..08 to code, tests and actual external evidence, update the handoff with remaining fidelity limits, mark tasks complete only for executed evidence, and commit the final validated part locally without pushing or archiving.
+- [ ] **(ABANDONED)** 7.5 Write delivery and identity manifests linking EV-01..08 to code, tests and actual external evidence, update the handoff with remaining fidelity limits, mark tasks complete only for executed evidence, and commit the final validated part locally without pushing or archiving.

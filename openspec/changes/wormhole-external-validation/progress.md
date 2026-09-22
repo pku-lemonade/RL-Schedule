@@ -882,3 +882,14 @@ Change 'wormhole-external-validation' is valid.
 git diff --check
 Passed with no output.
 ```
+
+## Final hardware disposition (2026-09-22)
+
+The ten silicon-dependent tasks (4.3-4.5, 5.4-5.5, 6.3-6.5, 7.1, 7.5) are
+**abandoned**, not deferred. No physical Wormhole device, `/dev/tenstorrent`,
+`tt-smi`, live profiler CSV or board inventory is available on any current or
+planned worker, and no compatible hardware will be procured. No measured
+fit/held-out campaign, paired hardware comparison or final clean capture
+matrix will run. This documentation-only disposition change relabels no
+evidence and executes no code; every result recorded above remains as
+measured at its original date.
