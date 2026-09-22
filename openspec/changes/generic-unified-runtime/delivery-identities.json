@@ -16,43 +16,77 @@
   ],
   "verification": {
     "full_suite": {
-      "discovered": 692,
-      "passed": 691,
+      "discovered": 694,
+      "passed": 693,
       "failed_or_errored": 0,
       "skipped_optional": 1,
-      "elapsed_seconds": 218.3
+      "elapsed_seconds": 218.4
     },
     "pyright": "0 errors, 0 warnings, 0 informations (92-entry phase-2 scope)",
     "openspec": "Change 'generic-unified-runtime' is valid (strict)"
   },
   "requirements": {
     "UR-C01": {
-      "code": ["simulator_detailed/configs/schemas/system_spec.py", "simulator_detailed/system_compile.py"],
-      "tests": ["simulator_detailed/tests/test_unified_compile.py"]
+      "code": [
+        "simulator_detailed/configs/schemas/system_spec.py",
+        "simulator_detailed/system_compile.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_compile.py"
+      ]
     },
     "UR-C02": {
-      "code": ["simulator_detailed/configs/schemas/system_spec.py"],
-      "tests": ["simulator_detailed/tests/test_unified_compile.py"]
+      "code": [
+        "simulator_detailed/configs/schemas/system_spec.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_compile.py"
+      ]
     },
     "UR-R01": {
-      "code": ["simulator_detailed/runtime_context.py"],
-      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_runtime.py"
+      ]
     },
     "UR-R02": {
-      "code": ["simulator_detailed/runtime_context.py"],
-      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_runtime.py"
+      ]
     },
     "UR-R03": {
-      "code": ["simulator_detailed/runtime_context.py"],
-      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_runtime.py"
+      ]
     },
     "UR-R04": {
-      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/runtime_context.py"],
-      "tests": ["simulator_detailed/tests/test_unified_runtime.py", "simulator_detailed/tests/test_generic_results.py"]
+      "code": [
+        "simulator_detailed/configs/schemas/generic_transactions.py",
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_unified_runtime.py",
+        "simulator_detailed/tests/test_generic_results.py"
+      ]
     },
     "UR-X01": {
-      "code": ["simulator_detailed/generic_runtime.py", "simulator_detailed/topology_compatibility.py"],
-      "tests": ["simulator_detailed/tests/test_generic_runtime.py", "simulator_detailed/tests/test_generic_results.py", "simulator_detailed/tests/test_generic_adapter.py"]
+      "code": [
+        "simulator_detailed/generic_runtime.py",
+        "simulator_detailed/topology_compatibility.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_generic_runtime.py",
+        "simulator_detailed/tests/test_generic_results.py",
+        "simulator_detailed/tests/test_generic_adapter.py"
+      ]
     }
   },
   "files": {
@@ -63,7 +97,7 @@
     "simulator_detailed/topology_compatibility.py": "059c1d964647c63521df34f698e7e74844ca51aee8cc9a9c368721e13d25a6f5",
     "simulator_detailed/configs/schemas/generic_transactions.py": "9ab1273522065e72331253e5afa74107e92ecbb228d359431f4be456a0469c0a",
     "simulator_detailed/tests/test_unified_compile.py": "6c5d006052710e31b9980a9c2bf529bad9887720ed183d1a8301b04c3639eb88",
-    "simulator_detailed/tests/test_unified_runtime.py": "59876723718f2315048a562f21b97775e8fd9083442affa1f569facaa320d02c",
+    "simulator_detailed/tests/test_unified_runtime.py": "46a03c756ec2afb5f29adada521337abbeda8343e762d7e0db5e3a1f71f211a1",
     "simulator_detailed/tests/test_generic_adapter.py": "44f46f691eea22244a3dcd104dceb2e9dae444ef2dc3f7e5ad9a3299bc600182",
     "simulator_detailed/docs/generic_simulation.md": "cddaa36256c8430ebc80243d6e9e836c60988aea64113d91785cf3b7bb8e398d",
     "simulator_detailed/pyrightconfig.phase2.json": "f3046851b188cae574d7ad946378a0ffd866031234325137c2dc658e7242330e"

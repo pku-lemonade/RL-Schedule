@@ -68,3 +68,8 @@ identities. The public acceptance suite of `test_unified_runtime.py` (10
 cases) plus the unchanged phase-1 suite constitute the published acceptance
 evidence; final counts are recorded in Part 2 above and in the delivery
 manifest (692 discovered, 691 passed, 1 optional skip).
+
+Post-delivery addendum (2026-09-22): two EventBus tests added for the named
+event API (publish/wait semantics, publish consumption) and same-time publish
+ordering via the global sequence, closing the last coverage gap against the
+UR-R03 requirement. Final suite: 694 discovered, 693 passed, 1 optional skip.

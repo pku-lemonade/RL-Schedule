@@ -33,8 +33,8 @@ outcomes are in `progress.md`. User documentation is
 
 ## Verification
 
-The complete detailed suite discovered 692 tests: 691 passed, zero failed or
-errored, one optional dependency test skipped (218.3 s). Strict Pyright
+The complete detailed suite discovered 694 tests: 693 passed, zero failed or
+errored, one optional dependency test skipped (218.4 s). Strict Pyright
 reports 0 errors and 0 warnings over the 92-entry phase-2 scope. The recorded
 Ruff scope over all new and changed modules passes. Strict OpenSpec
 validation passes and `git diff --check` is clean. Phase-1 numeric anchors

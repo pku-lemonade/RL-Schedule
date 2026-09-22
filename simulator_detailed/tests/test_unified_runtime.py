@@ -304,3 +304,41 @@ class TestByteIdenticalRepeats(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEventBusNamedEvents(unittest.TestCase):
+    def test_named_event_publish_and_wait_deterministic(self):
+        ctx = make_context([transfer("t_idle", "eu0", "eu2", start_cycles=500.0)])
+        seen: list[tuple[str, float]] = []
+
+        def waiter(name, event_name):
+            yield ctx.bus.event(event_name)
+            seen.append((name, float(ctx.env.now)))
+
+        ctx.env.process(waiter("w_a", "gate_open"))
+        ctx.env.process(waiter("w_b", "gate_open"))
+        ctx.env.run(until=5.0)
+        ctx.bus.publish("gate_open")
+        ctx.env.run()
+        self.assertEqual(seen, [("w_a", 5.0), ("w_b", 5.0)])
+        # A later waiter blocks again: publish is consumed, not latched.
+        ctx.env.process(waiter("w_c", "gate_open"))
+        ctx.env.run(until=10.0)
+        self.assertEqual(len(seen), 2)
+
+    def test_same_time_publishes_follow_global_sequence(self):
+        ctx = make_context([
+            {
+                "transaction_id": "s_a", "kind": "signal", "counter_id": "gate",
+                "delta": 1, "depends_on": [], "start_cycles": 4.0,
+            },
+            {
+                "transaction_id": "s_b", "kind": "signal", "counter_id": "gate",
+                "delta": 1, "depends_on": [], "start_cycles": 4.0,
+            },
+        ], counters=[{"counter_id": "gate", "initial_value": 0}])
+        result = ctx.run()
+        publishes = [e for e in result.trace if e.action == "counter_publish"]
+        self.assertEqual([e.transaction_id for e in publishes], ["s_a", "s_b"])
+        sequences = [e.sequence for e in publishes]
+        self.assertEqual(sequences, sorted(sequences))
