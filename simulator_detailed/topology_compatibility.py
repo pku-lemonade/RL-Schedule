@@ -21,7 +21,7 @@ NONLEGACY_KINDS = frozenset({"multicast_sync_workload", "multicast_sync_result",
 GENERIC_KINDS = frozenset({
     "generic_system_graph", "generic_system_inspection",
     "generic_transaction_batch", "generic_simulation_result",
-    "synthetic_grid_world",
+    "synthetic_grid_world", "system_spec", "immutable_plan",
 })
 
 

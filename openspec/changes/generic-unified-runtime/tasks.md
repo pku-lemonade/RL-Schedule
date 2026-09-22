@@ -1,17 +1,17 @@
 ## 1. SystemSpec and pure compilation
 
-- [ ] 1.1 Add strict version-1 `system_spec` schemas composing the existing graph and batch documents plus `immutable_plan` records (resources, resolved transfers with hop timings and terminal reasons, computes, waits with reachability bounds, signals, counters); verify unknown fields, unknown kinds and malformed references fail validation.
-- [ ] 1.2 Implement pure `compile_system(spec) -> ImmutablePlan`: reference/entity/port/attachment/fabric/transaction validation, non-negative capacity checks, route and timing resolution, terminal classification, counter bounds and deterministic digests; verify identical inputs yield identical plans and digests, reordered graph records yield the same digest, and no SimPy object or global state is touched.
-- [ ] 1.3 Verify compile-time failures: unknown endpoints, execution units, timing networks and override links raise before any runtime object exists.
-- [ ] 1.4 Run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md`, then commit Part 1.
+- [x] 1.1 Add strict version-1 `system_spec` schemas composing the existing graph and batch documents plus `immutable_plan` records (resources, resolved transfers with hop timings and terminal reasons, computes, waits with reachability bounds, signals, counters); verify unknown fields, unknown kinds and malformed references fail validation.
+- [x] 1.2 Implement pure `compile_system(spec) -> ImmutablePlan`: reference/entity/port/attachment/fabric/transaction validation, non-negative capacity checks, route and timing resolution, terminal classification, counter bounds and deterministic digests; verify identical inputs yield identical plans and digests, reordered graph records yield the same digest, and no SimPy object or global state is touched.
+- [x] 1.3 Verify compile-time failures: unknown endpoints, execution units, timing networks and override links raise before any runtime object exists.
+- [x] 1.4 Run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md`, then commit Part 1.
 
 ## 2. RuntimeContext, ResourceRegistry and EventBus
 
-- [ ] 2.1 Implement `ResourceRegistry` with stable IDs, single construction per physical resource, acquire/wait/release with queue accounting, sorted multi-resource acquisition and full release on completion, failure or cancellation.
-- [ ] 2.2 Implement `EventBus` with named events, counted events, wait conditions, deterministic global publish ordering and declared-bound unsatisfiable-wait reporting.
-- [ ] 2.3 Implement `RuntimeContext` executing all four transaction kinds with phase-1-identical mechanics, deterministic trace collection, per-transaction wait times, per-resource queue waits, error listing, cancellation of survivors at the cycle bound and result assembly including the plan digest.
-- [ ] 2.4 Convert `run_generic_batch`/`GenericRuntime` into shims through the pipeline; extend legacy consumer guards to the new document kinds; verify every phase-1 test passes unchanged.
-- [ ] 2.5 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
+- [x] 2.1 Implement `ResourceRegistry` with stable IDs, single construction per physical resource, acquire/wait/release with queue accounting, sorted multi-resource acquisition and full release on completion, failure or cancellation.
+- [x] 2.2 Implement `EventBus` with named events, counted events, wait conditions, deterministic global publish ordering and declared-bound unsatisfiable-wait reporting.
+- [x] 2.3 Implement `RuntimeContext` executing all four transaction kinds with phase-1-identical mechanics, deterministic trace collection, per-transaction wait times, per-resource queue waits, error listing, cancellation of survivors at the cycle bound and result assembly including the plan digest.
+- [x] 2.4 Convert `run_generic_batch`/`GenericRuntime` into shims through the pipeline; extend legacy consumer guards to the new document kinds; verify every phase-1 test passes unchanged.
+- [x] 2.5 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
 
 ## 3. Public acceptance, documentation and delivery
 

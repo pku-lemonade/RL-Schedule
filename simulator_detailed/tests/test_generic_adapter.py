@@ -63,7 +63,7 @@ class TestSyntheticAdapter(unittest.TestCase):
         left = via_adapter.model_dump(mode="json")
         right = via_files.model_dump(mode="json")
         # batch identity differs by declaration; every behavior must agree.
-        for key in ("batch_id", "batch_sha256"):
+        for key in ("batch_id", "batch_sha256", "plan_sha256"):
             left.pop(key)
             right.pop(key)
         self.assertEqual(left, right)
@@ -152,6 +152,8 @@ class TestLegacyConsumerGuards(unittest.TestCase):
             "generic_transaction_batch",
             "generic_simulation_result",
             "synthetic_grid_world",
+            "system_spec",
+            "immutable_plan",
         ):
             for value in ({"kind": kind}, json.dumps({"kind": kind})):
                 if isinstance(value, str):

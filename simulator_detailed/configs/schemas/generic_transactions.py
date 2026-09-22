@@ -193,6 +193,7 @@ class GenericTransactionSpan(GraphRecord):
     ]
     start_cycles: Cycles | None
     end_cycles: Cycles | None
+    wait_cycles: Cycles | None = None
     hops: tuple[GenericHopSpan, ...] = ()
 
     @model_validator(mode="after")
@@ -207,6 +208,8 @@ class GenericTransactionSpan(GraphRecord):
                 raise ValueError("an incomplete span cannot claim completion")
             if self.start_cycles is not None or self.end_cycles is not None:
                 raise ValueError("an incomplete span cannot carry start or end cycles")
+            if self.wait_cycles is not None:
+                raise ValueError("an incomplete span cannot carry wait cycles")
         if self.hops and self.kind != "transfer":
             raise ValueError("only transfer spans record hops")
         return self
@@ -217,6 +220,7 @@ class GenericResourceUsage(GraphRecord):
     kind: Literal["link", "execution_unit"]
     service_count: Index
     busy_cycles: Cycles
+    queue_wait_cycles: Cycles = 0.0
     utilization: Cycles
 
 
@@ -224,6 +228,36 @@ class GenericCounterState(GraphRecord):
     counter_id: NeutralId
     value: Index
     updates: Index
+
+
+class GenericErrorRecord(GraphRecord):
+    """One machine-readable error or incomplete-transaction explanation."""
+
+    transaction_id: NeutralId
+    code: NeutralId
+    message: Annotated[str, Field(min_length=1)]
+
+
+class GenericTraceEvent(GraphRecord):
+    """One deterministic trace row; sequence orders same-time events."""
+
+    sequence: Index
+    time_cycles: Cycles
+    action: Literal[
+        "credit_acquire",
+        "credit_release",
+        "serialize_start",
+        "serialize_end",
+        "hop_arrive",
+        "unit_acquire",
+        "unit_release",
+        "counter_publish",
+        "wait_resume",
+        "cancel",
+    ]
+    transaction_id: NeutralId | None = None
+    resource_id: NeutralId | None = None
+    detail: NeutralId | None = None
 
 
 class GenericSimulationResult(GraphRecord):
@@ -241,6 +275,9 @@ class GenericSimulationResult(GraphRecord):
     transactions: tuple[GenericTransactionSpan, ...]
     resources: tuple[GenericResourceUsage, ...]
     counters: tuple[GenericCounterState, ...]
+    errors: tuple[GenericErrorRecord, ...] = ()
+    trace: tuple[GenericTraceEvent, ...] = ()
+    plan_sha256: Digest | None = None
     execution: Literal["generic_packet_transport"] = "generic_packet_transport"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
 
@@ -264,4 +301,7 @@ class GenericSimulationResult(GraphRecord):
         expected = max(ends) if ends else None
         if self.completion_cycles != expected:
             raise ValueError("completion_cycles disagrees with the transaction spans")
+        sequences = [event.sequence for event in self.trace]
+        if sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
+            raise ValueError("trace sequences must be unique and ordered")
         return self
