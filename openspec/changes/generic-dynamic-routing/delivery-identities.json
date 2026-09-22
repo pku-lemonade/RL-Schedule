@@ -1,0 +1,58 @@
+{
+  "kind": "generic_dynamic_routing_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-22",
+  "progress": {
+    "complete": 9,
+    "total": 9,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "eb310ac",
+    "e08846a"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 718,
+      "passed": 717,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 232.2
+    },
+    "pyright": "0 errors, 0 warnings, 0 informations (92-entry phase-2 scope)",
+    "openspec": "Change 'generic-dynamic-routing' is valid (strict)"
+  },
+  "requirements": {
+    "DR-01": {
+      "code": ["simulator_detailed/configs/schemas/generic_graph.py"],
+      "tests": ["simulator_detailed/tests/test_dynamic_routing.py"]
+    },
+    "DR-02": {
+      "code": ["simulator_detailed/configs/schemas/system_spec.py", "simulator_detailed/system_compile.py"],
+      "tests": ["simulator_detailed/tests/test_dynamic_routing.py"]
+    },
+    "DR-03": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_dynamic_routing.py"]
+    },
+    "DR-04": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_dynamic_routing.py"]
+    },
+    "DR-05": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_dynamic_routing.py", "simulator_detailed/tests/test_generic_runtime.py"]
+    }
+  },
+  "files": {
+    "simulator_detailed/configs/schemas/generic_graph.py": "09fbc65b95881dc17d9973dba5fda929dcb9aec34f8f85120eeb01d317d39e7c",
+    "simulator_detailed/configs/schemas/system_spec.py": "a09b01e9669b0e25cbb337208a97c95369e8be6c60489d9552b630cfc2a6db57",
+    "simulator_detailed/configs/schemas/generic_transactions.py": "fd62607dfb7dba85d43d3c80278e4d21ee17e991d3c5af8446a1f51876857215",
+    "simulator_detailed/system_compile.py": "fec03a0a1236b668aecbe7b40534b7e2ac96c18f925514645b4c7bcb029a6a8d",
+    "simulator_detailed/runtime_context.py": "0c0a11578ba35baf1540c6adb578e8c518ba05c9789d615bdfe23b7667c43c8d",
+    "simulator_detailed/tests/test_dynamic_routing.py": "9e238e57932099bd529d5eeedec5c3ee1e16655b92814a16a1f4a1d4f20251b0",
+    "simulator_detailed/docs/generic_simulation.md": "e0f06978497b938a82374ac3f85ccb2eaaa0e3606bdbc32a632f39a90edf9db5"
+  }
+}

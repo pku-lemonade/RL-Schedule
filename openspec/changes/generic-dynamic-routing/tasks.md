@@ -12,6 +12,6 @@
 
 ## 3. Public acceptance, documentation and delivery
 
-- [ ] 3.1 Add the independent public suite: deterministic shortest path, adaptive branch avoidance, multi-transfer livelock freedom, unreachable classification, static-route-on-dynamic rejection, untouched phase-1/2/3 behavior and byte-identical repeats.
-- [ ] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
-- [ ] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking DR requirements to code/tests, and commit the final validated part locally without pushing or archiving.
+- [x] 3.1 Add the independent public suite: deterministic shortest path, adaptive branch avoidance, multi-transfer livelock freedom, unreachable classification, static-route-on-dynamic rejection, untouched phase-1/2/3 behavior and byte-identical repeats.
+- [x] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
+- [x] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking DR requirements to code/tests, and commit the final validated part locally without pushing or archiving.

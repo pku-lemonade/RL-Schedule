@@ -178,3 +178,26 @@ serializes, different banks overlap, one port serializes commands, and one
 channel bounds aggregate data rate. Spans record the service window
 (`span.service`) and memory resources report busy/queue-wait/utilization
 under the `memory_bank`/`memory_port`/`memory_channel` usage kinds.
+
+## Dynamic routing
+
+A network may declare a routing policy; absence means `static_table` (the
+declared per-pair routes, unchanged). Dynamic networks must not declare
+static routes.
+
+| Policy | Behavior |
+| --- | --- |
+| `static_table` | Transfers follow the declared static route (default) |
+| `shortest_path` | Hop-by-hop among distance-reducing links, link-identity first |
+| `adaptive` | Same candidates, least current credit pressure, link-identity tie-break |
+
+Compilation runs directed BFS per needed destination and stores distance
+tables in the plan; unreachable pairs classify as `route_unreachable`
+exactly like missing static routes. At runtime, each hop selects only among
+out-links that strictly decrease the BFS distance, so progress is guaranteed
+and livelock is impossible. `adaptive` pressure counts granted credit users
+plus pending requests; all choices are deterministic, and repeated runs are
+byte-identical. Each decision emits a `route_select` trace event, and chosen
+hops appear in spans exactly like static hops. Dynamic paths compose with
+addressed memory accesses: a write services after the dynamically routed
+arrival, a read services before departure.

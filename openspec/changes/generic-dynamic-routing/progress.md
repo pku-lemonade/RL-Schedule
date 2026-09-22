@@ -49,3 +49,12 @@ Change 'generic-dynamic-routing' is valid.
 git diff --check
 Passed with no output.
 ```
+
+## Part 3: public acceptance, documentation and delivery (tasks 3.1-3.3, completed 2026-09-22)
+
+`docs/generic_simulation.md` gained the dynamic-routing section (policies,
+BFS tables, distance-reducing selection, determinism). `delivery.md` and
+`delivery-identities.json` record the DR requirement mapping with exact file
+identities. Final verification: 718 discovered, 717 passed, 1 optional skip;
+strict Pyright 0/0; scoped Ruff clean; strict OpenSpec valid; `git diff
+--check` clean.
