@@ -24,10 +24,10 @@
 
 ## 4. External adapter boundary
 
-- [ ] 4.1 Define the public `GenericInputAdapter` abstract interface returning validated `generic_system_graph` and `generic_transaction_batch` documents; verify no dynamic discovery, no shell strings and no network access are introduced.
-- [ ] 4.2 Implement the independently designed synthetic example adapter plus a launch example driving the Part 1 acceptance system end to end; verify its format shares no vocabulary with any private source.
-- [ ] 4.3 Add the privacy guard test scanning the new public modules, fixtures and documentation for forbidden device/vendor/private tokens; verify seeded violations are detected.
-- [ ] 4.4 Run the focused adapter/guard tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 4 before continuing.
+- [x] 4.1 Define the public `GenericInputAdapter` abstract interface returning validated `generic_system_graph` and `generic_transaction_batch` documents; verify no dynamic discovery, no shell strings and no network access are introduced.
+- [x] 4.2 Implement the independently designed synthetic example adapter plus a launch example driving the Part 1 acceptance system end to end; verify its format shares no vocabulary with any private source.
+- [x] 4.3 Add the privacy guard test scanning the new public modules, fixtures and documentation for forbidden device/vendor/private tokens; verify seeded violations are detected.
+- [x] 4.4 Run the focused adapter/guard tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 4 before continuing.
 
 ## 5. Consolidated verification and delivery
 

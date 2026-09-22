@@ -1,0 +1,124 @@
+{
+  "kind": "synthetic_grid_world",
+  "schema_version": 1,
+  "world_id": "synthetic-grid-2d",
+  "sites": [
+    {"site": "n00", "col": 0, "row": 0, "nature": "logic"},
+    {"site": "n10", "col": 1, "row": 0, "nature": "logic"},
+    {"site": "n20", "col": 2, "row": 0, "nature": "storehouse"},
+    {"site": "n01", "col": 0, "row": 1, "nature": "relay"},
+    {"site": "n11", "col": 1, "row": 1, "nature": "logic"},
+    {"site": "n21", "col": 2, "row": 1, "nature": "storehouse"}
+  ],
+  "planes": [
+    {"plane": "net_alpha"},
+    {"plane": "net_beta"}
+  ],
+  "sockets": [
+    {"socket": "ea", "site": "n00", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n00", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n00", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n00", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "ea", "site": "n10", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n10", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n10", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n10", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "ea", "site": "n20", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n20", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n20", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n20", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "ea", "site": "n01", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n01", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n01", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n01", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "ea", "site": "n11", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n11", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n11", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n11", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "ea", "site": "n21", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "we", "site": "n21", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "so", "site": "n21", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "no", "site": "n21", "plane": "net_alpha", "facing": "wire"},
+    {"socket": "dma0", "site": "n00", "plane": "net_alpha", "facing": "house"},
+    {"socket": "eu0", "site": "n00", "plane": "net_alpha", "facing": "house"},
+    {"socket": "eu0", "site": "n10", "plane": "net_alpha", "facing": "house"},
+    {"socket": "eu0", "site": "n11", "plane": "net_alpha", "facing": "house"},
+    {"socket": "mem0", "site": "n21", "plane": "net_alpha", "facing": "house"},
+    {"socket": "b_ea", "site": "n00", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_we", "site": "n00", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_ea", "site": "n10", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_we", "site": "n10", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_we", "site": "n20", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_so", "site": "n20", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_no", "site": "n20", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_no", "site": "n21", "plane": "net_beta", "facing": "wire"},
+    {"socket": "b_so", "site": "n21", "plane": "net_beta", "facing": "wire"},
+    {"socket": "dma0", "site": "n21", "plane": "net_beta", "facing": "house"},
+    {"socket": "mem0", "site": "n20", "plane": "net_beta", "facing": "house"}
+  ],
+  "wires": [
+    {"wire": "al_00e10", "plane": "net_alpha", "from_site": "n00", "from_socket": "ea", "to_site": "n10", "to_socket": "we"},
+    {"wire": "al_10w00", "plane": "net_alpha", "from_site": "n10", "from_socket": "we", "to_site": "n00", "to_socket": "ea"},
+    {"wire": "al_10e20", "plane": "net_alpha", "from_site": "n10", "from_socket": "ea", "to_site": "n20", "to_socket": "we"},
+    {"wire": "al_20w10", "plane": "net_alpha", "from_site": "n20", "from_socket": "we", "to_site": "n10", "to_socket": "ea"},
+    {"wire": "al_01e11", "plane": "net_alpha", "from_site": "n01", "from_socket": "ea", "to_site": "n11", "to_socket": "we"},
+    {"wire": "al_11w01", "plane": "net_alpha", "from_site": "n11", "from_socket": "we", "to_site": "n01", "to_socket": "ea"},
+    {"wire": "al_11e21", "plane": "net_alpha", "from_site": "n11", "from_socket": "ea", "to_site": "n21", "to_socket": "we"},
+    {"wire": "al_21w11", "plane": "net_alpha", "from_site": "n21", "from_socket": "we", "to_site": "n11", "to_socket": "ea"},
+    {"wire": "al_00s01", "plane": "net_alpha", "from_site": "n00", "from_socket": "so", "to_site": "n01", "to_socket": "no"},
+    {"wire": "al_01n00", "plane": "net_alpha", "from_site": "n01", "from_socket": "no", "to_site": "n00", "to_socket": "so"},
+    {"wire": "al_10s11", "plane": "net_alpha", "from_site": "n10", "from_socket": "so", "to_site": "n11", "to_socket": "no"},
+    {"wire": "al_11n10", "plane": "net_alpha", "from_site": "n11", "from_socket": "no", "to_site": "n10", "to_socket": "so"},
+    {"wire": "al_20s21", "plane": "net_alpha", "from_site": "n20", "from_socket": "so", "to_site": "n21", "to_socket": "no"},
+    {"wire": "al_21n20", "plane": "net_alpha", "from_site": "n21", "from_socket": "no", "to_site": "n20", "to_socket": "so"},
+    {"wire": "be_00e10", "plane": "net_beta", "from_site": "n00", "from_socket": "b_ea", "to_site": "n10", "to_socket": "b_we"},
+    {"wire": "be_10w00", "plane": "net_beta", "from_site": "n10", "from_socket": "b_we", "to_site": "n00", "to_socket": "b_ea"},
+    {"wire": "be_10e20", "plane": "net_beta", "from_site": "n10", "from_socket": "b_ea", "to_site": "n20", "to_socket": "b_we"},
+    {"wire": "be_20w10", "plane": "net_beta", "from_site": "n20", "from_socket": "b_we", "to_site": "n10", "to_socket": "b_ea"},
+    {"wire": "be_20s21", "plane": "net_beta", "from_site": "n20", "from_socket": "b_so", "to_site": "n21", "to_socket": "b_no"},
+    {"wire": "be_21n20", "plane": "net_beta", "from_site": "n21", "from_socket": "b_no", "to_site": "n20", "to_socket": "b_so"}
+  ],
+  "movers": [
+    {"mover": "dma_a", "site": "n00", "plane": "net_alpha", "socket": "dma0"},
+    {"mover": "dma_b", "site": "n21", "plane": "net_beta", "socket": "dma0"}
+  ],
+  "workers": [
+    {"worker": "eu_00", "site": "n00", "plane": "net_alpha", "socket": "eu0"},
+    {"worker": "eu_10", "site": "n10", "plane": "net_alpha", "socket": "eu0"},
+    {"worker": "eu_11", "site": "n11", "plane": "net_alpha", "socket": "eu0"}
+  ],
+  "stores": [
+    {"store": "mem_a", "site": "n20", "room_bytes": 1048576, "service": "mem_a_ep", "plane": "net_beta", "socket": "mem0"},
+    {"store": "mem_b", "site": "n21", "room_bytes": 2097152, "service": "mem_b_ep", "plane": "net_alpha", "socket": "mem0"}
+  ],
+  "paths": [
+    {"plane": "net_alpha", "from_agent": "eu_00", "to_agent": "mem_b_ep", "wires": ["al_00e10", "al_10s11", "al_11e21"]},
+    {"plane": "net_alpha", "from_agent": "eu_11", "to_agent": "eu_00", "wires": ["al_11n10", "al_10w00"]},
+    {"plane": "net_alpha", "from_agent": "dma_a", "to_agent": "mem_b_ep", "wires": ["al_00e10", "al_10s11", "al_11e21"]},
+    {"plane": "net_beta", "from_agent": "dma_b", "to_agent": "mem_a_ep", "wires": ["be_21n20"]}
+  ],
+  "gauges": [
+    {"gauge": "barrier", "start": 0}
+  ],
+  "rates": [
+    {
+      "plane": "net_alpha",
+      "rate": {"bytes_per_cycle": 10, "hop_cycles": 1.0, "credit_return_cycles": 1.0, "buffer_slots": 4},
+      "tweaks": []
+    },
+    {
+      "plane": "net_beta",
+      "rate": {"bytes_per_cycle": 5, "hop_cycles": 2.0, "credit_return_cycles": 1.0, "buffer_slots": 2},
+      "tweaks": []
+    }
+  ],
+  "jobs": [
+    {"job": "t_a", "act": "move", "plane": "net_alpha", "from_agent": "eu_00", "to_agent": "mem_b_ep", "load_bytes": 100, "after": [], "at_cycle": 0.0},
+    {"job": "t_b", "act": "move", "plane": "net_alpha", "from_agent": "dma_a", "to_agent": "mem_b_ep", "load_bytes": 100, "after": [], "at_cycle": 0.0},
+    {"job": "c_00", "act": "work", "worker": "eu_10", "span_cycles": 25.0, "after": [], "at_cycle": 0.0},
+    {"job": "s_1", "act": "raise", "gauge": "barrier", "by": 1, "after": [], "at_cycle": 5.0},
+    {"job": "s_2", "act": "raise", "gauge": "barrier", "by": 1, "after": [], "at_cycle": 10.0},
+    {"job": "w_1", "act": "await", "gauge": "barrier", "until": 2, "after": [], "at_cycle": 0.0}
+  ],
+  "limit_cycles": 1000.0
+}

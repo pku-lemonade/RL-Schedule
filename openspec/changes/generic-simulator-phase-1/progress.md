@@ -201,3 +201,65 @@ Source identities (SHA-256):
 | `configs/generic_transactions/acceptance_batch.json` | `25235b04ff286913efe8b9fa6fb236949c172b471590a0438fb884bf3b6c069f` |
 | `tests/test_generic_results.py` | `99abceea1ea513b5f50a235e72ab5062ea05e250a6e5bbaa69d5563e3b1e92eb` |
 | `tests/test_generic_runtime.py` | `9bb8606ab25d0abd80965bfc9760e00e049f671b96b34704395a9484be35b201` |
+
+## Part 4: external adapter boundary (tasks 4.1-4.4, completed 2026-09-22)
+
+Delivered:
+
+- `simulator_detailed/generic_adapter.py`: the public `GenericInputAdapter`
+  ABC returning `generic_system_graph`/`generic_transaction_batch` documents,
+  `run_generic_adapter()` which revalidates both documents through a
+  dump/parse round trip before compile/execute (blocking
+  validation-bypassing constructors), and `scan_forbidden_tokens()`, the
+  case-insensitive guard helper private CI can reuse. No dynamic discovery,
+  dynamic imports, shell evaluation or network access.
+- `simulator_detailed/configs/schemas/synthetic_world.py`: the independently
+  designed example input format (`synthetic_grid_world` v1) with a
+  deliberately different vocabulary (sites/planes/sockets/wires/movers/
+  workers/stores/paths/gauges/jobs). Local consistency checks only; deep
+  semantics are re-checked by the generic schemas on conversion.
+- `simulator_detailed/synthetic_adapter.py`: `SyntheticGridWorldAdapter`, a
+  pure total conversion into generic documents.
+- `simulator_detailed/configs/generic_adapters/synthetic_world_2d.json`: the
+  synthetic encoding of the acceptance 2D system and batch.
+- `simulator_detailed/tests/test_generic_adapter.py`: 7 tests — converted
+  graph is byte-identical (same canonical digest) to the file fixture, the
+  adapter-driven run matches the file-loaded run except declared batch
+  identity, boundary revalidation rejects `model_copy`-smuggled invalid
+  documents, the guard scan is clean on the public surface and detects a
+  seeded violation, and the public modules contain no dynamic-discovery or
+  network references.
+
+Executed verification (this host, 2026-09-22):
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_generic_adapter -v
+7 tests passed; 0 failures; 0 errors.
+
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+Ran 670 tests in 217.865s — OK (skipped=1, optional torch/PyG check).
+663 before this part; +7 new, every pre-existing test unchanged.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/synthetic_world.py simulator_detailed/generic_adapter.py simulator_detailed/synthetic_adapter.py simulator_detailed/tests/test_generic_adapter.py
+All checks passed (one forward-reference quote auto-fixed and re-verified).
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate generic-simulator-phase-1 --strict --no-interactive
+Change 'generic-simulator-phase-1' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Source identities (SHA-256):
+
+| File | SHA-256 |
+| --- | --- |
+| `configs/schemas/synthetic_world.py` | `3167592fff6513ddc8da2597106821b60aabf5788e6396aab30287ed4a4a07d4` |
+| `generic_adapter.py` | `41ac87d9e7b526406ab330718a710ef91624348f0f3877c3d9205558e2015426` |
+| `synthetic_adapter.py` | `0b8bb64247ce9997bb56d4e222e964724f6837371b38a23e857449487134182d` |
+| `configs/generic_adapters/synthetic_world_2d.json` | `1ec78e0135d1a3d9f7a22cfb51f679cd390385e46d87658dbac3dce5f6256e98` |
+| `tests/test_generic_adapter.py` | `7e223a7984586148068bc204818d756f2f2e310bc164bc6da435cac8fad57402` |
+| `pyrightconfig.phase2.json` | `29ee33e4c586fbf042d9d3b7eea8ed22786b8c026263438a87f10205a73a305b` |
