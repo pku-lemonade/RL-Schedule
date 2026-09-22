@@ -63,13 +63,18 @@ class GenericTransactionBase(GraphRecord):
 
 
 class GenericTransfer(GenericTransactionBase):
-    """Endpoint-to-endpoint byte transfer along a declared static route."""
+    """Endpoint-to-endpoint byte transfer along a declared static route.
+
+    An optional `address` turns the memory-side endpoint into an addressed
+    access: memory destination is a write, memory source is a read.
+    """
 
     kind: Literal["transfer"]
     network_id: NeutralId
     source: NeutralId
     destination: NeutralId
     payload_bytes: PositiveInt
+    address: Index | None = None
 
 
 class GenericCompute(GenericTransactionBase):
@@ -180,6 +185,20 @@ class GenericHopSpan(GraphRecord):
     arrival_cycles: Cycles
 
 
+class GenericMemoryServiceSpan(GraphRecord):
+    """The memory subsystem service window of one addressed transfer."""
+
+    resource_id: NeutralId
+    direction: Literal["read", "write"]
+    bank_id: NeutralId
+    port_id: NeutralId
+    channel_id: NeutralId
+    command_start_cycles: Cycles
+    command_end_cycles: Cycles
+    service_start_cycles: Cycles
+    service_end_cycles: Cycles
+
+
 class GenericTransactionSpan(GraphRecord):
     transaction_id: NeutralId
     kind: Literal["transfer", "compute", "wait", "signal"]
@@ -195,6 +214,7 @@ class GenericTransactionSpan(GraphRecord):
     end_cycles: Cycles | None
     wait_cycles: Cycles | None = None
     hops: tuple[GenericHopSpan, ...] = ()
+    service: GenericMemoryServiceSpan | None = None
 
     @model_validator(mode="after")
     def consistency(self) -> Self:
@@ -210,14 +230,24 @@ class GenericTransactionSpan(GraphRecord):
                 raise ValueError("an incomplete span cannot carry start or end cycles")
             if self.wait_cycles is not None:
                 raise ValueError("an incomplete span cannot carry wait cycles")
+            if self.service is not None:
+                raise ValueError("an incomplete span cannot carry a memory service")
         if self.hops and self.kind != "transfer":
             raise ValueError("only transfer spans record hops")
+        if self.service is not None and self.kind != "transfer":
+            raise ValueError("only transfer spans record memory service")
         return self
 
 
 class GenericResourceUsage(GraphRecord):
     resource_id: NeutralId
-    kind: Literal["link", "execution_unit"]
+    kind: Literal[
+        "link",
+        "execution_unit",
+        "memory_bank",
+        "memory_port",
+        "memory_channel",
+    ]
     service_count: Index
     busy_cycles: Cycles
     queue_wait_cycles: Cycles = 0.0
@@ -254,6 +284,9 @@ class GenericTraceEvent(GraphRecord):
         "counter_publish",
         "wait_resume",
         "cancel",
+        "memory_command",
+        "memory_service_start",
+        "memory_service_end",
     ]
     transaction_id: NeutralId | None = None
     resource_id: NeutralId | None = None

@@ -11,7 +11,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, Field, model_validator
 
-from .topology import GraphRecord, Index, PositiveInt, unique
+from .topology import Cycles, GraphRecord, Index, PositiveInt, PositiveTime, unique
 
 # Real device/vendor vocabulary observed in this repository's history. Generic
 # documents must never mention them; the check is a case-insensitive substring
@@ -101,6 +101,43 @@ class GenericExecutionUnit(GraphRecord):
     port_id: NeutralId
 
 
+class GenericMemoryChannel(GraphRecord):
+    """One independent data path with its own byte rate."""
+
+    channel_id: NeutralId
+    bytes_per_cycle: PositiveInt
+
+
+class GenericMemoryPort(GraphRecord):
+    """One command issue point bound to a declared channel."""
+
+    port_id: NeutralId
+    channel_id: NeutralId
+    command_cycles: PositiveTime
+
+
+class GenericMemoryHierarchy(GraphRecord):
+    """Optional internal structure of one memory resource."""
+
+    banks: PositiveInt
+    stripe_bytes: PositiveInt
+    latency_cycles: Cycles
+    ports: tuple[GenericMemoryPort, ...] = Field(min_length=1)
+    channels: tuple[GenericMemoryChannel, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def references(self) -> Self:
+        unique(tuple(p.port_id for p in self.ports), "memory port identity")
+        unique(tuple(c.channel_id for c in self.channels), "memory channel identity")
+        channel_ids = {c.channel_id for c in self.channels}
+        for port in self.ports:
+            if port.channel_id not in channel_ids:
+                raise ValueError(
+                    f"memory port {port.port_id}: unknown channel {port.channel_id}"
+                )
+        return self
+
+
 class GenericMemoryResource(GraphRecord):
     """One memory resource; an optional service endpoint makes it reachable."""
 
@@ -110,6 +147,7 @@ class GenericMemoryResource(GraphRecord):
     endpoint_id: NeutralId | None = None
     network_id: NeutralId | None = None
     port_id: NeutralId | None = None
+    hierarchy: GenericMemoryHierarchy | None = None
 
 
 class GenericStaticRoute(GraphRecord):

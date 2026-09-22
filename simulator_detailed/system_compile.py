@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from .configs.schemas.generic_graph import GenericMemoryResource
 from .configs.schemas.generic_transactions import (
     GenericCompute,
     GenericLinkTiming,
@@ -24,6 +25,7 @@ from .configs.schemas.system_spec import (
     PlanContent,
     PlanCounter,
     PlanHop,
+    PlanMemoryService,
     PlanResource,
     PlanSignal,
     PlanTransaction,
@@ -45,10 +47,12 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
     endpoints: dict[str, str] = {e.endpoint_id: e.node_id for e in graph.dma_endpoints}
     endpoints.update({u.unit_id: u.node_id for u in graph.execution_units})
     capacities: dict[str, int] = {}
+    memories: dict[str, GenericMemoryResource] = {}
     for resource in graph.memory_resources:
         if resource.endpoint_id is not None and resource.owner_node is not None:
             endpoints[resource.endpoint_id] = resource.owner_node
             capacities[resource.endpoint_id] = resource.capacity_bytes
+            memories[resource.endpoint_id] = resource
     units = {u.unit_id for u in graph.execution_units}
     networks = {n.network_id for n in graph.networks}
 
@@ -91,6 +95,48 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                     raise ValueError(
                         f"transfer {transaction.transaction_id}: unknown endpoint {endpoint_id}"
                     )
+            memory_service: PlanMemoryService | None = None
+            if transaction.address is not None:
+                source_memory = transaction.source in memories
+                destination_memory = transaction.destination in memories
+                if source_memory == destination_memory:
+                    raise ValueError(
+                        f"transfer {transaction.transaction_id}: an addressed access "
+                        "must name exactly one memory service endpoint"
+                    )
+                memory_endpoint = (
+                    transaction.destination if destination_memory else transaction.source
+                )
+                resource = memories[memory_endpoint]
+                if resource.hierarchy is None:
+                    raise ValueError(
+                        f"transfer {transaction.transaction_id}: addressed access on "
+                        f"flat memory {resource.resource_id}"
+                    )
+                if transaction.address + transaction.payload_bytes > resource.capacity_bytes:
+                    raise ValueError(
+                        f"transfer {transaction.transaction_id}: address range "
+                        f"[{transaction.address}, {transaction.address + transaction.payload_bytes}) "
+                        f"exceeds capacity {resource.capacity_bytes} of {resource.resource_id}"
+                    )
+                hierarchy = resource.hierarchy
+                stripe = transaction.address // hierarchy.stripe_bytes
+                bank_index = stripe % hierarchy.banks
+                port = hierarchy.ports[stripe % len(hierarchy.ports)]
+                memory_service = PlanMemoryService(
+                    resource_id=resource.resource_id,
+                    direction="write" if destination_memory else "read",
+                    bank_id=f"{resource.resource_id}/bank_{bank_index}",
+                    port_id=f"{resource.resource_id}/port_{port.port_id}",
+                    channel_id=f"{resource.resource_id}/channel_{port.channel_id}",
+                    command_cycles=port.command_cycles,
+                    latency_cycles=hierarchy.latency_cycles,
+                    channel_bytes_per_cycle=next(
+                        channel.bytes_per_cycle
+                        for channel in hierarchy.channels
+                        if channel.channel_id == port.channel_id
+                    ),
+                )
             route = next(
                 (
                     route
@@ -105,10 +151,12 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
             hops: tuple[PlanHop, ...] = ()
             if route is None:
                 terminal = "route_unreachable"
+                memory_service = None
             else:
                 capacity = capacities.get(transaction.destination)
                 if capacity is not None and transaction.payload_bytes > capacity:
                     terminal = "capacity_exceeded"
+                    memory_service = None
                 else:
                     hops = tuple(
                         PlanHop(
@@ -125,10 +173,12 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                 source=transaction.source,
                 destination=transaction.destination,
                 payload_bytes=transaction.payload_bytes,
+                address=transaction.address,
                 depends_on=depends_on,
                 start_cycles=start_cycles,
                 hops=hops,
                 terminal=terminal,
+                memory_service=memory_service,
             ))
         elif isinstance(transaction, GenericCompute):
             if transaction.unit_id not in units:
@@ -181,6 +231,28 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
             kind="execution_unit",
             capacity=1,
         ))
+    for resource in sorted(graph.memory_resources, key=lambda r: r.resource_id):
+        if resource.hierarchy is None:
+            continue
+        hierarchy = resource.hierarchy
+        for bank_index in range(hierarchy.banks):
+            resources.append(PlanResource(
+                resource_id=f"{resource.resource_id}/bank_{bank_index}",
+                kind="memory_bank",
+                capacity=1,
+            ))
+        for port in sorted(hierarchy.ports, key=lambda p: p.port_id):
+            resources.append(PlanResource(
+                resource_id=f"{resource.resource_id}/port_{port.port_id}",
+                kind="memory_port",
+                capacity=1,
+            ))
+        for channel in sorted(hierarchy.channels, key=lambda c: c.channel_id):
+            resources.append(PlanResource(
+                resource_id=f"{resource.resource_id}/channel_{channel.channel_id}",
+                kind="memory_channel",
+                capacity=1,
+            ))
 
     content = PlanContent(
         spec_id=normalized_spec.spec_id,

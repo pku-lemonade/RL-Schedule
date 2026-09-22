@@ -46,6 +46,19 @@ class PlanHop(GraphRecord):
     timing: GenericLinkTiming
 
 
+class PlanMemoryService(GraphRecord):
+    """Resolved memory subsystem engagement for one addressed transfer."""
+
+    resource_id: NeutralId
+    direction: Literal["read", "write"]
+    bank_id: NeutralId
+    port_id: NeutralId
+    channel_id: NeutralId
+    command_cycles: PositiveTime
+    latency_cycles: Cycles
+    channel_bytes_per_cycle: PositiveInt
+
+
 class PlanTransfer(GraphRecord):
     transaction_id: NeutralId
     kind: Literal["transfer"]
@@ -53,10 +66,12 @@ class PlanTransfer(GraphRecord):
     source: NeutralId
     destination: NeutralId
     payload_bytes: PositiveInt
+    address: Index | None = None
     depends_on: tuple[NeutralId, ...]
     start_cycles: Cycles
     hops: tuple[PlanHop, ...] = ()
     terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
+    memory_service: PlanMemoryService | None = None
 
 
 class PlanCompute(GraphRecord):
@@ -97,7 +112,13 @@ class PlanResource(GraphRecord):
     """One physical resource constructible at most once per plan."""
 
     resource_id: NeutralId
-    kind: Literal["link", "execution_unit"]
+    kind: Literal[
+        "link",
+        "execution_unit",
+        "memory_bank",
+        "memory_port",
+        "memory_channel",
+    ]
     capacity: PositiveInt
 
 

@@ -22,6 +22,7 @@ from .configs.schemas.generic_transactions import (
     GenericCounterState,
     GenericErrorRecord,
     GenericHopSpan,
+    GenericMemoryServiceSpan,
     GenericResourceUsage,
     GenericSimulationResult,
     GenericTraceEvent,
@@ -30,6 +31,7 @@ from .configs.schemas.generic_transactions import (
 from .configs.schemas.system_spec import (
     ImmutablePlan,
     PlanCompute,
+    PlanMemoryService,
     PlanSignal,
     PlanTransfer,
     PlanWait,
@@ -38,7 +40,8 @@ from .configs.schemas.system_spec import (
 TraceAction = Literal[
     "credit_acquire", "credit_release", "serialize_start", "serialize_end",
     "hop_arrive", "unit_acquire", "unit_release", "counter_publish",
-    "wait_resume", "cancel",
+    "wait_resume", "cancel", "memory_command", "memory_service_start",
+    "memory_service_end",
 ]
 
 
@@ -57,7 +60,9 @@ class _ResourceEntry:
     """One physical resource: stable ID, built once, fully accounted."""
 
     resource_id: str
-    kind: Literal["link", "execution_unit"]
+    kind: Literal[
+        "link", "execution_unit", "memory_bank", "memory_port", "memory_channel"
+    ]
     credits: Resource | None = None
     serializer: Resource | None = None
     service_count: int = 0
@@ -83,7 +88,7 @@ class ResourceRegistry:
             else:
                 self._entries[resource.resource_id] = _ResourceEntry(
                     resource_id=resource.resource_id,
-                    kind="execution_unit",
+                    kind=resource.kind,
                     serializer=Resource(env, capacity=1),
                 )
 
@@ -237,6 +242,7 @@ class RuntimeContext:
         start: float,
         wait_cycles: float,
         hops: tuple[GenericHopSpan, ...] = (),
+        service: GenericMemoryServiceSpan | None = None,
     ) -> None:
         self._spans[transaction_id] = GenericTransactionSpan(
             transaction_id=transaction_id,
@@ -247,16 +253,105 @@ class RuntimeContext:
             end_cycles=float(self.env.now),
             wait_cycles=wait_cycles,
             hops=hops,
+            service=service,
         )
         self._done[transaction_id].succeed()
+
+    def _acquire(
+        self, entry: _ResourceEntry, transaction_id: str
+    ) -> ProcessGenerator:
+        """Grant one serializer with queue accounting; (resource, request, wait)."""
+        resource = entry.serializer
+        if resource is None:
+            raise ValueError(f"resource {entry.resource_id} is not acquirable")
+        requested = float(self.env.now)
+        grant = resource.request()
+        yield grant
+        wait = float(self.env.now) - requested
+        entry.queue_wait_cycles += wait
+        return resource, grant, wait
+
+    def _memory_service(
+        self, transaction: PlanTransfer, service: PlanMemoryService
+    ) -> ProcessGenerator:
+        """Command issue on the mapped port, then bank+channel data service."""
+        granted: list[tuple[Resource, Request]] = []
+        try:
+            port_resource, port_grant, port_wait = yield from self._acquire(
+                self.registry.get(service.port_id), transaction.transaction_id
+            )
+            granted.append((port_resource, port_grant))
+            self._emit("memory_command", transaction.transaction_id, service.port_id)
+            command_start = float(self.env.now)
+            yield self.env.timeout(service.command_cycles)
+            command_end = float(self.env.now)
+            port = self.registry.get(service.port_id)
+            port.busy_cycles += command_end - command_start
+            port.service_count += 1
+            port_resource.release(port_grant)
+            granted.remove((port_resource, port_grant))
+
+            bank = self.registry.get(service.bank_id)
+            channel = self.registry.get(service.channel_id)
+            data_wait = 0.0
+            holds: dict[str, tuple[Resource, Request]] = {}
+            for entry in sorted((bank, channel), key=lambda e: e.resource_id):
+                resource, entry_grant, entry_wait = yield from self._acquire(
+                    entry, transaction.transaction_id
+                )
+                granted.append((resource, entry_grant))
+                holds[entry.resource_id] = (resource, entry_grant)
+                data_wait += entry_wait
+            self._emit("memory_service_start", transaction.transaction_id, service.bank_id)
+            service_start = float(self.env.now)
+            data_cycles = service.latency_cycles + float(
+                math.ceil(transaction.payload_bytes / service.channel_bytes_per_cycle)
+            )
+            yield self.env.timeout(data_cycles)
+            service_end = float(self.env.now)
+            for entry in (bank, channel):
+                entry.busy_cycles += service_end - service_start
+                entry.service_count += 1
+                resource, entry_grant = holds[entry.resource_id]
+                resource.release(entry_grant)
+                granted.remove((resource, entry_grant))
+            self._emit("memory_service_end", transaction.transaction_id, service.bank_id)
+            return (
+                GenericMemoryServiceSpan(
+                    resource_id=service.resource_id,
+                    direction=service.direction,
+                    bank_id=service.bank_id,
+                    port_id=service.port_id,
+                    channel_id=service.channel_id,
+                    command_start_cycles=command_start,
+                    command_end_cycles=command_end,
+                    service_start_cycles=service_start,
+                    service_end_cycles=service_end,
+                ),
+                port_wait + data_wait,
+            )
+        except simpy.Interrupt:
+            pass
+        finally:
+            _release_held(granted)
 
     def _transfer(self, transaction: PlanTransfer) -> ProcessGenerator:
         granted: list[tuple[Resource, Request]] = []
         try:
             yield from self._start(transaction.depends_on, transaction.start_cycles)
-            queued = float(self.env.now)
+            start = float(self.env.now)
             wait_cycles = 0.0
             hops: list[GenericHopSpan] = []
+            service_span: GenericMemoryServiceSpan | None = None
+            if transaction.memory_service is not None and (
+                transaction.memory_service.direction == "read"
+            ):
+                service_result = yield from self._memory_service(
+                    transaction, transaction.memory_service
+                )
+                if service_result is not None:
+                    service_span, service_wait = service_result
+                    wait_cycles += service_wait
             for hop in transaction.hops:
                 entry = self.registry.get(f"{hop.network_id}/{hop.link_id}")
                 if entry.credits is None or entry.serializer is None:
@@ -266,6 +361,7 @@ class RuntimeContext:
                 granted.append((entry.credits, credit))
                 yield credit
                 credit_wait = float(self.env.now) - requested
+                hop_queued = float(self.env.now)
                 requested = float(self.env.now)
                 grant = entry.serializer.request()
                 granted.append((entry.serializer, grant))
@@ -294,12 +390,28 @@ class RuntimeContext:
                 hops.append(GenericHopSpan(
                     network_id=hop.network_id,
                     link_id=hop.link_id,
-                    queued_cycles=queued,
+                    queued_cycles=hop_queued,
                     serialization_start_cycles=serialization_start,
                     serialization_end_cycles=serialization_end,
                     arrival_cycles=arrival,
                 ))
-            self._finish(transaction.transaction_id, "transfer", queued, wait_cycles, tuple(hops))
+            if transaction.memory_service is not None and (
+                transaction.memory_service.direction == "write"
+            ):
+                service_result = yield from self._memory_service(
+                    transaction, transaction.memory_service
+                )
+                if service_result is not None:
+                    service_span, service_wait = service_result
+                    wait_cycles += service_wait
+            self._finish(
+                transaction.transaction_id,
+                "transfer",
+                start,
+                wait_cycles,
+                tuple(hops),
+                service_span,
+            )
         except simpy.Interrupt:
             pass
         finally:
