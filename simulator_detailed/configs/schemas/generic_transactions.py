@@ -184,10 +184,32 @@ class GenericTransactionSpan(GraphRecord):
     transaction_id: NeutralId
     kind: Literal["transfer", "compute", "wait", "signal"]
     status: Literal["complete", "incomplete"]
-    reason: Literal["completed", "cycle_limit", "dependency_unsatisfied"]
+    reason: Literal[
+        "completed",
+        "cycle_limit",
+        "dependency_unsatisfied",
+        "route_unreachable",
+        "capacity_exceeded",
+    ]
     start_cycles: Cycles | None
     end_cycles: Cycles | None
     hops: tuple[GenericHopSpan, ...] = ()
+
+    @model_validator(mode="after")
+    def consistency(self) -> Self:
+        if self.status == "complete":
+            if self.reason != "completed":
+                raise ValueError("a complete span must carry reason completed")
+            if self.start_cycles is None or self.end_cycles is None:
+                raise ValueError("a complete span requires start and end cycles")
+        else:
+            if self.reason == "completed":
+                raise ValueError("an incomplete span cannot claim completion")
+            if self.start_cycles is not None or self.end_cycles is not None:
+                raise ValueError("an incomplete span cannot carry start or end cycles")
+        if self.hops and self.kind != "transfer":
+            raise ValueError("only transfer spans record hops")
+        return self
 
 
 class GenericResourceUsage(GraphRecord):
@@ -221,3 +243,25 @@ class GenericSimulationResult(GraphRecord):
     counters: tuple[GenericCounterState, ...]
     execution: Literal["generic_packet_transport"] = "generic_packet_transport"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
+
+    @model_validator(mode="after")
+    def consistency(self) -> Self:
+        """Corrupted or partial outputs must fail revalidation."""
+        if not self.transactions:
+            raise ValueError("an empty transaction set cannot report a result")
+        complete = tuple(s.status == "complete" for s in self.transactions)
+        if self.status == "complete":
+            if not all(complete):
+                raise ValueError("status complete requires every span complete")
+            if self.reason != "drained":
+                raise ValueError("a drained run carries reason drained")
+        else:
+            if all(complete):
+                raise ValueError("status incomplete requires an incomplete span")
+            if self.reason != "transactions_incomplete":
+                raise ValueError("an incomplete run carries reason transactions_incomplete")
+        ends = [s.end_cycles for s in self.transactions if s.end_cycles is not None]
+        expected = max(ends) if ends else None
+        if self.completion_cycles != expected:
+            raise ValueError("completion_cycles disagrees with the transaction spans")
+        return self

@@ -136,3 +136,68 @@ Source identities (SHA-256):
 | `generic_runtime.py` | `337452b15e47b45e2e4a7198e012596a0ee458d61af0a030afb2fcc14c02aa96` |
 | `tests/test_generic_runtime.py` | `635cf60b81b9621ed98d34d615140ac0e655ee898e299f841cd35f2840cc5abc` |
 | `pyrightconfig.phase2.json` | `438d5610b45e3db5f0aa62e25f789d4de294b521690c0cf3e3fc3b88cb1f4c80` |
+
+## Part 3: versioned simulation results (tasks 3.1-3.4, completed 2026-09-22)
+
+Delivered:
+
+- Result contract hardening in `configs/schemas/generic_transactions.py`:
+  span reasons extended with `route_unreachable` and `capacity_exceeded`;
+  per-span consistency rules (complete spans require times and reason
+  completed; incomplete spans carry no times and never claim completion;
+  hops only on transfers) and result-level consistency rules (status/reason
+  must match span outcomes, `completion_cycles` must equal the latest span
+  end, an empty transaction set cannot report anything). Corrupted or
+  partial outputs fail revalidation.
+- `generic_runtime.py`: two-tier honesty. Malformed input (unknown
+  endpoints/units, bad timing references) raises before simulation; viability
+  failures become incomplete result spans — missing static routes classify as
+  `route_unreachable`, oversized memory payloads as `capacity_exceeded`, and
+  their dependents as `dependency_unsatisfied`. Terminal transactions are
+  excluded from the drain condition so runs stop promptly.
+- `simulator_detailed/replay_generic.py`: public CLI
+  `python -m simulator_detailed.replay_generic --batch <doc>` with compute
+  replay exit conventions (0 complete / 1 incomplete / 2 invalid); file
+  batches resolve `graph_path` relative to the batch document.
+- `configs/generic_transactions/acceptance_batch.json`: shared-link queueing,
+  compute overlap and wait/signal acceptance batch over the 2D fixture.
+- `tests/test_generic_results.py`: 15 negative-path, integrity and CLI tests.
+
+Executed verification (this host, 2026-09-22):
+
+```text
+.venv/bin/python -m unittest simulator_detailed.tests.test_generic_runtime simulator_detailed.tests.test_generic_results simulator_detailed.tests.test_generic_graph
+50 tests passed; 0 failures; 0 errors.
+
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+Ran 663 tests in 218.720s — OK (skipped=1, optional torch/PyG check).
+648 before this part; +15 new, every pre-existing test unchanged.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check simulator_detailed/configs/schemas/generic_transactions.py simulator_detailed/generic_runtime.py simulator_detailed/replay_generic.py simulator_detailed/tests/test_generic_runtime.py simulator_detailed/tests/test_generic_results.py
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate generic-simulator-phase-1 --strict --no-interactive
+Change 'generic-simulator-phase-1' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+CLI observations: the acceptance batch exits 0 with t_a ending at 33 cycles
+and w_1 at 10; an unsatisfiable-wait batch exits 1; wrong-kind, malformed and
+missing inputs exit 2. Existing v1/v2 replay loaders and exit codes are
+untouched (full suite green).
+
+Source identities (SHA-256):
+
+| File | SHA-256 |
+| --- | --- |
+| `configs/schemas/generic_transactions.py` | `243dee2bac4b1584da14bdf8b8364d0ce8409165f46cf5590d1680447cbf0f3e` |
+| `generic_runtime.py` | `a11b874d5ec4272dae74b00074410bae061d08515339c80e851df714f1c001da` |
+| `replay_generic.py` | `75539bc1333814ec6f4fa8df3fcf43e9edf10ad7bf9aeef3accc353df2455e44` |
+| `configs/generic_transactions/acceptance_batch.json` | `25235b04ff286913efe8b9fa6fb236949c172b471590a0438fb884bf3b6c069f` |
+| `tests/test_generic_results.py` | `99abceea1ea513b5f50a235e72ab5062ea05e250a6e5bbaa69d5563e3b1e92eb` |
+| `tests/test_generic_runtime.py` | `9bb8606ab25d0abd80965bfc9760e00e049f671b96b34704395a9484be35b201` |

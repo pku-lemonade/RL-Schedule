@@ -17,10 +17,10 @@
 
 ## 3. Versioned simulation results
 
-- [ ] 3.1 Add strict version-1 `generic_simulation_result` records: makespan completion, per-transaction start/end, per-resource busy/utilization aggregates and incomplete/rejected transactions with machine-readable reason codes; verify an empty transaction set cannot report success.
-- [ ] 3.2 Add the public replay entry point dispatching the new kinds alongside existing v1/v2 loaders; verify existing replay results, exit codes and fixture hashes remain byte-identical.
-- [ ] 3.3 Add negative-path tests: unsatisfiable waits, unreachable routes and exhausted capacities appear as incomplete transactions with correct reasons, never as passes; verify corrupted or partial outputs cannot be relabeled.
-- [ ] 3.4 Run the focused result/CLI tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 3 before continuing.
+- [x] 3.1 Add strict version-1 `generic_simulation_result` records: makespan completion, per-transaction start/end, per-resource busy/utilization aggregates and incomplete/rejected transactions with machine-readable reason codes; verify an empty transaction set cannot report success.
+- [x] 3.2 Add the public replay entry point dispatching the new kinds alongside existing v1/v2 loaders; verify existing replay results, exit codes and fixture hashes remain byte-identical.
+- [x] 3.3 Add negative-path tests: unsatisfiable waits, unreachable routes and exhausted capacities appear as incomplete transactions with correct reasons, never as passes; verify corrupted or partial outputs cannot be relabeled.
+- [x] 3.4 Run the focused result/CLI tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 3 before continuing.
 
 ## 4. External adapter boundary
 

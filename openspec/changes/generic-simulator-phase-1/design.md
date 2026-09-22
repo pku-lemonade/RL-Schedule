@@ -69,11 +69,16 @@ private formats.
    package and call the adapter/driver directly. The public repository ships
    exactly one example: an independently designed synthetic adapter whose
    input format was invented for this change and matches no private format.
-7. **Honest results.** The result document separates completed, incomplete
-   and rejected transactions with machine-readable reason codes (dependency
-   unsatisfied, route unreachable, capacity exceeded, deadline exhausted).
-   Utilization is reported per declared resource as busy cycles over the
-   simulated interval; an empty transaction set cannot report success.
+7. **Honest results.** Malformed input (unknown kinds, unknown endpoints or
+   units, undeclared counters, dependency cycles) is rejected before
+   simulation resources exist. Viability failures surface inside the result
+   as incomplete transactions with machine-readable reason codes:
+   `route_unreachable`, `capacity_exceeded`, `dependency_unsatisfied` and
+   `cycle_limit`. The result document revalidates its own consistency:
+   status, per-span reasons, timing fields and makespan must agree, so a
+   corrupted or partial output cannot be relabeled as complete. Utilization
+   is reported per declared resource as busy cycles over the makespan; an
+   empty transaction set cannot report success.
 
 ## Acceptance plan
 

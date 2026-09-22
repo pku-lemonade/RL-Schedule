@@ -1,0 +1,60 @@
+{
+  "kind": "generic_transaction_batch",
+  "schema_version": 1,
+  "batch_id": "acceptance-2d",
+  "graph_path": "../generic_graphs/synthetic_grid_2d.json",
+  "timing": [
+    {
+      "network_id": "net_alpha",
+      "link": {
+        "bytes_per_cycle": 10,
+        "hop_cycles": 1.0,
+        "credit_return_cycles": 1.0,
+        "buffer_slots": 4
+      },
+      "overrides": []
+    },
+    {
+      "network_id": "net_beta",
+      "link": {
+        "bytes_per_cycle": 5,
+        "hop_cycles": 2.0,
+        "credit_return_cycles": 1.0,
+        "buffer_slots": 2
+      },
+      "overrides": []
+    }
+  ],
+  "counters": [
+    {"counter_id": "barrier", "initial_value": 0}
+  ],
+  "transactions": [
+    {
+      "transaction_id": "t_a", "kind": "transfer", "network_id": "net_alpha",
+      "source": "eu_00", "destination": "mem_b_ep", "payload_bytes": 100,
+      "depends_on": [], "start_cycles": 0.0
+    },
+    {
+      "transaction_id": "t_b", "kind": "transfer", "network_id": "net_alpha",
+      "source": "dma_a", "destination": "mem_b_ep", "payload_bytes": 100,
+      "depends_on": [], "start_cycles": 0.0
+    },
+    {
+      "transaction_id": "c_00", "kind": "compute", "unit_id": "eu_10",
+      "duration_cycles": 25.0, "depends_on": [], "start_cycles": 0.0
+    },
+    {
+      "transaction_id": "s_1", "kind": "signal", "counter_id": "barrier",
+      "delta": 1, "depends_on": [], "start_cycles": 5.0
+    },
+    {
+      "transaction_id": "s_2", "kind": "signal", "counter_id": "barrier",
+      "delta": 1, "depends_on": [], "start_cycles": 10.0
+    },
+    {
+      "transaction_id": "w_1", "kind": "wait", "counter_id": "barrier",
+      "threshold": 2, "depends_on": [], "start_cycles": 0.0
+    }
+  ],
+  "max_cycles": 1000.0
+}

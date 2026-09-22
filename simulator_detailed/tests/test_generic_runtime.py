@@ -324,10 +324,7 @@ class TestGenericBatchAdmission(unittest.TestCase):
             {"vendor_clock_mhz": 1000}))
 
     def test_runtime_rejections(self):
-        # No route exists from eu_00 to dma_b in net_alpha.
-        with self.assertRaises(ValueError):
-            run([transfer("t_bad", "eu_00", "dma_b")])
-        # Unknown execution unit.
+        # Unknown execution unit is structural and fails before simulation.
         with self.assertRaises(ValueError):
             run([{
                 "transaction_id": "c_bad", "kind": "compute", "unit_id": "eu_99",

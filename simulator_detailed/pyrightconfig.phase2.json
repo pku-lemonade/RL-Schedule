@@ -60,6 +60,7 @@
     "pe_channel.py",
     "predictor/topology.py",
     "replay_compute.py",
+    "replay_generic.py",
     "replay_memory.py",
     "replay_multicast_sync.py",
     "replay_topology.py",

@@ -132,10 +132,12 @@ class GenericRuntime:
         self._counters: dict[str, _CounterRuntime] = {}
         self._spans: dict[str, GenericTransactionSpan] = {}
         self._done: dict[str, Event] = {}
+        self._terminal: dict[str, Literal["route_unreachable", "capacity_exceeded"]] = {}
         self.env = simpy.Environment()
         self._timing = self._resolve_timing()
         self._routes = self._resolve_routes()
         self._validate_references()
+        self._precheck_transfers()
 
     def _resolve_timing(self) -> dict[tuple[str, str], GenericLinkTiming]:
         timing: dict[tuple[str, str], GenericLinkTiming] = {}
@@ -170,14 +172,38 @@ class GenericRuntime:
                 ),
                 None,
             )
-            if route is None:
-                raise ValueError(
-                    f"transfer {transaction.transaction_id}: no static route in network "
-                    f"{transaction.network_id} from {transaction.source} to "
-                    f"{transaction.destination}"
-                )
-            routes[transaction.transaction_id] = tuple(route.link_ids)
+            if route is not None:
+                routes[transaction.transaction_id] = tuple(route.link_ids)
         return routes
+
+    def _precheck_transfers(self) -> None:
+        """Structural reference errors raise; viability failures become results.
+
+        Unknown endpoints are malformed input and fail before simulation. A
+        missing static route or an oversized memory payload leaves the
+        transaction terminally incomplete with an explicit reason code.
+        """
+        endpoints = self.system.endpoint_nodes
+        capacities = {
+            resource.endpoint_id: resource.capacity_bytes
+            for resource in self.system.document.memory_resources
+            if resource.endpoint_id is not None
+        }
+        for transaction in self.batch.transactions:
+            if not isinstance(transaction, GenericTransfer):
+                continue
+            for endpoint_id in (transaction.source, transaction.destination):
+                if endpoint_id not in endpoints:
+                    raise ValueError(
+                        f"transfer {transaction.transaction_id}: "
+                        f"unknown endpoint {endpoint_id}"
+                    )
+            if transaction.transaction_id not in self._routes:
+                self._terminal[transaction.transaction_id] = "route_unreachable"
+                continue
+            capacity = capacities.get(transaction.destination)
+            if capacity is not None and transaction.payload_bytes > capacity:
+                self._terminal[transaction.transaction_id] = "capacity_exceeded"
 
     def _validate_references(self) -> None:
         units = {unit.unit_id for unit in self.system.document.execution_units}
@@ -262,6 +288,8 @@ class GenericRuntime:
     def run(self) -> GenericSimulationResult:
         for transaction in self.batch.transactions:
             self._done[transaction.transaction_id] = self.env.event()
+            if transaction.transaction_id in self._terminal:
+                continue
             if isinstance(transaction, GenericTransfer):
                 self.env.process(self._transfer(transaction))
             elif isinstance(transaction, GenericCompute):
@@ -270,19 +298,35 @@ class GenericRuntime:
                 self.env.process(self._wait(transaction))
             else:
                 self.env.process(self._signal(transaction))
-        drained = self.env.all_of(tuple(self._done.values()))
+        pending = tuple(
+            event
+            for transaction_id, event in self._done.items()
+            if transaction_id not in self._terminal
+        )
+        drained = self.env.all_of(pending)
         self.env.run(
             until=simpy.AnyOf(self.env, (drained, self.env.timeout(self.batch.max_cycles)))
         )
 
         spans: list[GenericTransactionSpan] = []
         for transaction in self.batch.transactions:
+            terminal_reason = self._terminal.get(transaction.transaction_id)
+            if terminal_reason is not None:
+                spans.append(GenericTransactionSpan(
+                    transaction_id=transaction.transaction_id,
+                    kind=transaction.kind,
+                    status="incomplete",
+                    reason=terminal_reason,
+                    start_cycles=None,
+                    end_cycles=None,
+                ))
+                continue
             span = self._spans.get(transaction.transaction_id)
             if span is not None:
                 spans.append(span)
                 continue
             unsatisfied = any(
-                self._spans.get(dependency) is None
+                dependency in self._terminal or self._spans.get(dependency) is None
                 for dependency in transaction.depends_on
             )
             spans.append(GenericTransactionSpan(
