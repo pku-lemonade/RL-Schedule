@@ -29,7 +29,7 @@ private formats.
 
 1. **Subclass and select via configuration; never fork.** The generic graph
    document compiles through a new `topology_from_generic()` adapter into the
-   existing canonical topology, exposed as a `GenericSystemGraph(Topology)`
+   existing canonical topology, exposed as a `GenericSystem(Topology)`
    subclass only for added neutral views (networks, DMA endpoints, execution
    units, memory resources, static route tables). The transaction runtime
    composes existing kernels (`ExplicitRouting`, lane/credit, link

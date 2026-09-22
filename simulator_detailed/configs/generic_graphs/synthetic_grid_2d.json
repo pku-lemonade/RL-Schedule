@@ -1,0 +1,100 @@
+{
+  "kind": "generic_system_graph",
+  "schema_version": 1,
+  "system_id": "synthetic-grid-2d",
+  "nodes": [
+    {"node_id": "n00", "x": 0, "y": 0, "role": "compute"},
+    {"node_id": "n10", "x": 1, "y": 0, "role": "compute"},
+    {"node_id": "n20", "x": 2, "y": 0, "role": "memory"},
+    {"node_id": "n01", "x": 0, "y": 1, "role": "transit"},
+    {"node_id": "n11", "x": 1, "y": 1, "role": "compute"},
+    {"node_id": "n21", "x": 2, "y": 1, "role": "memory"}
+  ],
+  "networks": [
+    {"network_id": "net_alpha"},
+    {"network_id": "net_beta"}
+  ],
+  "ports": [
+    {"port_id": "ea", "node_id": "n00", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n00", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n00", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n00", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "ea", "node_id": "n10", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n10", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n10", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n10", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "ea", "node_id": "n20", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n20", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n20", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n20", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "ea", "node_id": "n01", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n01", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n01", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n01", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "ea", "node_id": "n11", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n11", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n11", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n11", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "ea", "node_id": "n21", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "we", "node_id": "n21", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "so", "node_id": "n21", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "no", "node_id": "n21", "network_id": "net_alpha", "kind": "network"},
+    {"port_id": "dma0", "node_id": "n00", "network_id": "net_alpha", "kind": "local"},
+    {"port_id": "eu0", "node_id": "n00", "network_id": "net_alpha", "kind": "local"},
+    {"port_id": "eu0", "node_id": "n10", "network_id": "net_alpha", "kind": "local"},
+    {"port_id": "eu0", "node_id": "n11", "network_id": "net_alpha", "kind": "local"},
+    {"port_id": "mem0", "node_id": "n21", "network_id": "net_alpha", "kind": "local"},
+    {"port_id": "b_ea", "node_id": "n00", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_we", "node_id": "n00", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_ea", "node_id": "n10", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_we", "node_id": "n10", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_we", "node_id": "n20", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_so", "node_id": "n20", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_no", "node_id": "n20", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_no", "node_id": "n21", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "b_so", "node_id": "n21", "network_id": "net_beta", "kind": "network"},
+    {"port_id": "dma0", "node_id": "n21", "network_id": "net_beta", "kind": "local"},
+    {"port_id": "mem0", "node_id": "n20", "network_id": "net_beta", "kind": "local"}
+  ],
+  "links": [
+    {"link_id": "al_00e10", "network_id": "net_alpha", "src_node": "n00", "src_port": "ea", "dst_node": "n10", "dst_port": "we"},
+    {"link_id": "al_10w00", "network_id": "net_alpha", "src_node": "n10", "src_port": "we", "dst_node": "n00", "dst_port": "ea"},
+    {"link_id": "al_10e20", "network_id": "net_alpha", "src_node": "n10", "src_port": "ea", "dst_node": "n20", "dst_port": "we"},
+    {"link_id": "al_20w10", "network_id": "net_alpha", "src_node": "n20", "src_port": "we", "dst_node": "n10", "dst_port": "ea"},
+    {"link_id": "al_01e11", "network_id": "net_alpha", "src_node": "n01", "src_port": "ea", "dst_node": "n11", "dst_port": "we"},
+    {"link_id": "al_11w01", "network_id": "net_alpha", "src_node": "n11", "src_port": "we", "dst_node": "n01", "dst_port": "ea"},
+    {"link_id": "al_11e21", "network_id": "net_alpha", "src_node": "n11", "src_port": "ea", "dst_node": "n21", "dst_port": "we"},
+    {"link_id": "al_21w11", "network_id": "net_alpha", "src_node": "n21", "src_port": "we", "dst_node": "n11", "dst_port": "ea"},
+    {"link_id": "al_00s01", "network_id": "net_alpha", "src_node": "n00", "src_port": "so", "dst_node": "n01", "dst_port": "no"},
+    {"link_id": "al_01n00", "network_id": "net_alpha", "src_node": "n01", "src_port": "no", "dst_node": "n00", "dst_port": "so"},
+    {"link_id": "al_10s11", "network_id": "net_alpha", "src_node": "n10", "src_port": "so", "dst_node": "n11", "dst_port": "no"},
+    {"link_id": "al_11n10", "network_id": "net_alpha", "src_node": "n11", "src_port": "no", "dst_node": "n10", "dst_port": "so"},
+    {"link_id": "al_20s21", "network_id": "net_alpha", "src_node": "n20", "src_port": "so", "dst_node": "n21", "dst_port": "no"},
+    {"link_id": "al_21n20", "network_id": "net_alpha", "src_node": "n21", "src_port": "no", "dst_node": "n20", "dst_port": "so"},
+    {"link_id": "be_00e10", "network_id": "net_beta", "src_node": "n00", "src_port": "b_ea", "dst_node": "n10", "dst_port": "b_we"},
+    {"link_id": "be_10w00", "network_id": "net_beta", "src_node": "n10", "src_port": "b_we", "dst_node": "n00", "dst_port": "b_ea"},
+    {"link_id": "be_10e20", "network_id": "net_beta", "src_node": "n10", "src_port": "b_ea", "dst_node": "n20", "dst_port": "b_we"},
+    {"link_id": "be_20w10", "network_id": "net_beta", "src_node": "n20", "src_port": "b_we", "dst_node": "n10", "dst_port": "b_ea"},
+    {"link_id": "be_20s21", "network_id": "net_beta", "src_node": "n20", "src_port": "b_so", "dst_node": "n21", "dst_port": "b_no"},
+    {"link_id": "be_21n20", "network_id": "net_beta", "src_node": "n21", "src_port": "b_no", "dst_node": "n20", "dst_port": "b_so"}
+  ],
+  "dma_endpoints": [
+    {"endpoint_id": "dma_a", "node_id": "n00", "network_id": "net_alpha", "port_id": "dma0"},
+    {"endpoint_id": "dma_b", "node_id": "n21", "network_id": "net_beta", "port_id": "dma0"}
+  ],
+  "execution_units": [
+    {"unit_id": "eu_00", "node_id": "n00", "network_id": "net_alpha", "port_id": "eu0"},
+    {"unit_id": "eu_10", "node_id": "n10", "network_id": "net_alpha", "port_id": "eu0"},
+    {"unit_id": "eu_11", "node_id": "n11", "network_id": "net_alpha", "port_id": "eu0"}
+  ],
+  "memory_resources": [
+    {"resource_id": "mem_a", "owner_node": "n20", "capacity_bytes": 1048576, "endpoint_id": "mem_a_ep", "network_id": "net_beta", "port_id": "mem0"},
+    {"resource_id": "mem_b", "owner_node": "n21", "capacity_bytes": 2097152, "endpoint_id": "mem_b_ep", "network_id": "net_alpha", "port_id": "mem0"}
+  ],
+  "static_routes": [
+    {"network_id": "net_alpha", "source": "eu_00", "destination": "mem_b_ep", "link_ids": ["al_00e10", "al_10s11", "al_11e21"]},
+    {"network_id": "net_alpha", "source": "eu_11", "destination": "eu_00", "link_ids": ["al_11n10", "al_10w00"]},
+    {"network_id": "net_alpha", "source": "dma_a", "destination": "mem_b_ep", "link_ids": ["al_00e10", "al_10s11", "al_11e21"]},
+    {"network_id": "net_beta", "source": "dma_b", "destination": "mem_a_ep", "link_ids": ["be_21n20"]}
+  ]
+}

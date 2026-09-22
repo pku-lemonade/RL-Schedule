@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from .configs.schemas.generic_graph import GenericSystemGraph
 from .configs.schemas.hardware_profile import HardwareProfileConfig
 from .configs.schemas.topology import CanonicalTopology, ReplayResult
 from .configs.schemas.torus_replay import ProfileSource, TorusReplay
+from .generic_graph import topology_from_generic
 from .hardware_profile import load_architecture_document
 from .topology import Topology, topology_from_legacy, topology_from_profile
 from .torus import TorusPlan
@@ -21,6 +23,8 @@ def inspect_topology(path: str | Path) -> Topology:
     document: object = json.loads(Path(path).read_text())
     if isinstance(document, dict) and cast(dict[str, object], document).get("kind") == "canonical_topology":
         return Topology.compile(CanonicalTopology.model_validate(document))
+    if isinstance(document, dict) and cast(dict[str, object], document).get("kind") == "generic_system_graph":
+        return topology_from_generic(GenericSystemGraph.model_validate(document))
     architecture = load_architecture_document(path)
     if isinstance(architecture, HardwareProfileConfig):
         return topology_from_profile(architecture)

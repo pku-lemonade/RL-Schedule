@@ -1,10 +1,10 @@
 ## 1. Generic system graph configuration
 
-- [ ] 1.1 Add strict version-1 `generic_system_graph` schemas for nodes, ports, links, networks, DMA endpoints, execution units, memory resources and static routing tables under neutral names; verify unknown fields, duplicate identities, dangling references, empty networks and device-derived vocabulary fail validation, and JSON round trips preserve exact typed identities and digests.
-- [ ] 1.2 Implement `topology_from_generic()` plus a `GenericSystemGraph(Topology)` subclass compiling the generic document into the existing canonical topology machinery; verify legacy/profile adapters, existing digests and unresolved-connectivity behavior remain unchanged.
-- [ ] 1.3 Expose one unified system-graph object from loading: network membership, endpoint/DMA/execution-unit/memory-resource inventories, per-network static route tables and content digests; verify deterministic export independent of input record order.
-- [ ] 1.4 Add a fully synthetic two-dimensional acceptance fixture with nodes, links, two networks, DMA endpoints and memory resources; verify the graph loads and every declared adjacency and both networks' member links check out.
-- [ ] 1.5 Run the focused graph/adapter tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record actual results and source/fixture identities in `progress.md`, then commit Part 1 before continuing.
+- [x] 1.1 Add strict version-1 `generic_system_graph` schemas for nodes, ports, links, networks, DMA endpoints, execution units, memory resources and static routing tables under neutral names; verify unknown fields, duplicate identities, dangling references, empty networks and device-derived vocabulary fail validation, and JSON round trips preserve exact typed identities and digests.
+- [x] 1.2 Implement `topology_from_generic()` plus a `GenericSystemGraph(Topology)` subclass compiling the generic document into the existing canonical topology machinery; verify legacy/profile adapters, existing digests and unresolved-connectivity behavior remain unchanged.
+- [x] 1.3 Expose one unified system-graph object from loading: network membership, endpoint/DMA/execution-unit/memory-resource inventories, per-network static route tables and content digests; verify deterministic export independent of input record order.
+- [x] 1.4 Add a fully synthetic two-dimensional acceptance fixture with nodes, links, two networks, DMA endpoints and memory resources; verify the graph loads and every declared adjacency and both networks' member links check out.
+- [x] 1.5 Run the focused graph/adapter tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record actual results and source/fixture identities in `progress.md`, then commit Part 1 before continuing.
 
 ## 2. Four-kind unified transaction runtime
 
