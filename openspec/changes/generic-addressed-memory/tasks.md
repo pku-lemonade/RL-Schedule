@@ -12,6 +12,6 @@
 
 ## 3. Public acceptance, documentation and delivery
 
-- [ ] 3.1 Add the independent public suite: different-bank overlap, same-bank serialization, single-port command serialization, channel-rate service bounds, read/write completion order, compile rejection of illegal addresses, untouched flat behavior and byte-identical repeats.
-- [ ] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
-- [ ] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking AM requirements to code/tests, and commit the final validated part locally without pushing or archiving.
+- [x] 3.1 Add the independent public suite: different-bank overlap, same-bank serialization, single-port command serialization, channel-rate service bounds, read/write completion order, compile rejection of illegal addresses, untouched flat behavior and byte-identical repeats.
+- [x] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
+- [x] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking AM requirements to code/tests, and commit the final validated part locally without pushing or archiving.

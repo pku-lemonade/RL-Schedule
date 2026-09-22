@@ -1,0 +1,58 @@
+{
+  "kind": "generic_addressed_memory_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-22",
+  "progress": {
+    "complete": 9,
+    "total": 9,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "bc3fd0c",
+    "3ae4705"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 709,
+      "passed": 708,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 220.2
+    },
+    "pyright": "0 errors, 0 warnings, 0 informations (92-entry phase-2 scope)",
+    "openspec": "Change 'generic-addressed-memory' is valid (strict)"
+  },
+  "requirements": {
+    "AM-01": {
+      "code": ["simulator_detailed/configs/schemas/generic_graph.py"],
+      "tests": ["simulator_detailed/tests/test_addressed_memory.py"]
+    },
+    "AM-02": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/system_compile.py"],
+      "tests": ["simulator_detailed/tests/test_addressed_memory.py"]
+    },
+    "AM-03": {
+      "code": ["simulator_detailed/configs/schemas/system_spec.py", "simulator_detailed/system_compile.py"],
+      "tests": ["simulator_detailed/tests/test_addressed_memory.py"]
+    },
+    "AM-04": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_addressed_memory.py"]
+    },
+    "AM-05": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_addressed_memory.py", "simulator_detailed/tests/test_generic_results.py"]
+    }
+  },
+  "files": {
+    "simulator_detailed/configs/schemas/generic_graph.py": "a38d96ed5d123a2d9029062a1c92d3664171f474370eec5a6c9ab61ae6ead890",
+    "simulator_detailed/configs/schemas/generic_transactions.py": "12c2c86142f4b8fd889db6e8dd9312ced7bc95fa0341e064bffbb2a19f1cf156",
+    "simulator_detailed/configs/schemas/system_spec.py": "d993a47362f9da2da6038ba933f270864dceaf848600957e9a78531a4639e10c",
+    "simulator_detailed/system_compile.py": "2d2b04d2adfdec4b20792b08f24b308574998bf86fefd13fd197044a96b11cab",
+    "simulator_detailed/runtime_context.py": "8c8312098e41a589ec3fea78bfdbd282283fd4c6f7eac7ea39a6ae8a81d3641c",
+    "simulator_detailed/tests/test_addressed_memory.py": "b508b4fc928fd35f42953adf6986bf3f1a91cde389fde84edbfe64af40647293",
+    "simulator_detailed/docs/generic_simulation.md": "43aee5b4c68b3b92d7ab1f0d5b4c0c58e4ced5a53b216bcb2795c312b513e979"
+  }
+}

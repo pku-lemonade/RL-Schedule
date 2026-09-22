@@ -148,3 +148,33 @@ SystemSpec --compile_system()--> ImmutablePlan --RuntimeContext--> SimulationRes
 
 The phase-1 entry points (`run_generic_batch`, `GenericRuntime`, the CLI)
 are compatibility shims over this pipeline; their behavior is unchanged.
+
+## Addressed memory
+
+A memory resource may declare an optional `hierarchy`; without one it keeps
+flat streaming behavior. A hierarchy is fully explicit:
+
+| Field | Meaning |
+| --- | --- |
+| `banks` | Number of independently serviceable banks |
+| `stripe_bytes` | Address stripe used for bank/port mapping |
+| `latency_cycles` | Fixed data-service latency per access |
+| `ports` | Named command ports, each with `command_cycles` and a bound channel |
+| `channels` | Named data channels, each with `bytes_per_cycle` |
+
+A transfer with an optional `address` becomes an addressed access: memory
+destination is a write, memory source is a read. The address must name
+exactly one memory service endpoint, the memory must declare a hierarchy,
+and `address + payload_bytes` must fit the capacity — violations fail at
+compile time.
+
+Mapping is deterministic: `stripe = address // stripe_bytes`, bank =
+`stripe % banks`, port = `ports[stripe % len(ports)]`, channel = the port's
+bound channel. A write services after the network traversal arrives; a read
+services before departure. Command issue occupies the mapped port for
+`command_cycles`; data service then holds the mapped bank and channel for
+`latency_cycles + ceil(bytes / channel_bytes_per_cycle)`. Same bank
+serializes, different banks overlap, one port serializes commands, and one
+channel bounds aggregate data rate. Spans record the service window
+(`span.service`) and memory resources report busy/queue-wait/utilization
+under the `memory_bank`/`memory_port`/`memory_channel` usage kinds.

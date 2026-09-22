@@ -53,3 +53,12 @@ Change 'generic-addressed-memory' is valid.
 git diff --check
 Passed with no output.
 ```
+
+## Part 3: public acceptance, documentation and delivery (tasks 3.1-3.3, completed 2026-09-22)
+
+`docs/generic_simulation.md` gained the addressed-memory section (hierarchy
+fields, address rules, deterministic mapping, service stages, usage kinds).
+`delivery.md` and `delivery-identities.json` record the AM requirement
+mapping with exact file identities. Final verification: 709 discovered, 708
+passed, 1 optional skip; strict Pyright 0/0; scoped Ruff clean; strict
+OpenSpec valid; `git diff --check` clean.
