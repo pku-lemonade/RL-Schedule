@@ -15,6 +15,6 @@
 
 ## 3. Public acceptance, documentation and delivery
 
-- [ ] 3.1 Add the independent public suite: parallel transfer/compute, deterministic queueing, wait-after-signal, ring transfers without deadlock, release-after-cancellation, compile rejection of illegal references, explicit never-satisfiable-wait reporting, byte-identical repeated runs, and the unchanged phase-1 suite.
-- [ ] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts without relabeling prior runs.
-- [ ] 3.3 Update `docs/generic_simulation.md` with the unified pipeline, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking UR requirements to code/tests, and commit the final validated part locally without pushing or archiving.
+- [x] 3.1 Add the independent public suite: parallel transfer/compute, deterministic queueing, wait-after-signal, ring transfers without deadlock, release-after-cancellation, compile rejection of illegal references, explicit never-satisfiable-wait reporting, byte-identical repeated runs, and the unchanged phase-1 suite.
+- [x] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts without relabeling prior runs.
+- [x] 3.3 Update `docs/generic_simulation.md` with the unified pipeline, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking UR requirements to code/tests, and commit the final validated part locally without pushing or archiving.

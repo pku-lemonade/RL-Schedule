@@ -117,3 +117,34 @@ for private CI to check that no private identifier leaks into shared files.
   before simulation; only viability failures appear inside results.
 - Model cycles come entirely from configured rates; no hardware timing claim
   is made or implied.
+
+## Unified compile and runtime pipeline
+
+New code should go through one pipeline instead of driving the runtime
+pieces directly:
+
+```
+SystemSpec --compile_system()--> ImmutablePlan --RuntimeContext--> SimulationResult
+```
+
+- `SystemSpec` (`kind: system_spec`, v1) composes one graph document with one
+  transaction batch. `compile_system(spec)` in `simulator_detailed.system_compile`
+  is pure: it validates every entity, resource, port, attachment, fabric and
+  transaction reference, resolves routes and effective timings, classifies
+  terminal transfers, computes counter reachability bounds and returns an
+  immutable, content-addressed plan. Identical input yields identical plans
+  and digests; compilation creates no simulation objects.
+- `RuntimeContext` (`simulator_detailed.runtime_context`) holds the
+  environment and time, one `ResourceRegistry`, one `EventBus`, transaction
+  states, the deterministic trace and the error accounting, and executes all
+  four transaction kinds in a single run. The registry builds each physical
+  resource at most once per plan, acquires multiple resources in sorted ID
+  order and releases everything on completion, failure or cancellation. The
+  bus owns named events and counted events; waits whose threshold exceeds the
+  declared reachable bound are reported explicitly in the result error list.
+- The result additionally carries per-transaction `wait_cycles`,
+  per-resource `queue_wait_cycles`, an `errors` list, a deterministic `trace`
+  and the `plan_sha256`, all defaulting so phase-1 documents stay valid.
+
+The phase-1 entry points (`run_generic_batch`, `GenericRuntime`, the CLI)
+are compatibility shims over this pipeline; their behavior is unchanged.

@@ -1,0 +1,71 @@
+{
+  "kind": "generic_unified_runtime_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-22",
+  "progress": {
+    "complete": 12,
+    "total": 12,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "c6d51e3",
+    "2f746dc",
+    "67908b0"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 692,
+      "passed": 691,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 218.3
+    },
+    "pyright": "0 errors, 0 warnings, 0 informations (92-entry phase-2 scope)",
+    "openspec": "Change 'generic-unified-runtime' is valid (strict)"
+  },
+  "requirements": {
+    "UR-C01": {
+      "code": ["simulator_detailed/configs/schemas/system_spec.py", "simulator_detailed/system_compile.py"],
+      "tests": ["simulator_detailed/tests/test_unified_compile.py"]
+    },
+    "UR-C02": {
+      "code": ["simulator_detailed/configs/schemas/system_spec.py"],
+      "tests": ["simulator_detailed/tests/test_unified_compile.py"]
+    },
+    "UR-R01": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+    },
+    "UR-R02": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+    },
+    "UR-R03": {
+      "code": ["simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_unified_runtime.py"]
+    },
+    "UR-R04": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/runtime_context.py"],
+      "tests": ["simulator_detailed/tests/test_unified_runtime.py", "simulator_detailed/tests/test_generic_results.py"]
+    },
+    "UR-X01": {
+      "code": ["simulator_detailed/generic_runtime.py", "simulator_detailed/topology_compatibility.py"],
+      "tests": ["simulator_detailed/tests/test_generic_runtime.py", "simulator_detailed/tests/test_generic_results.py", "simulator_detailed/tests/test_generic_adapter.py"]
+    }
+  },
+  "files": {
+    "simulator_detailed/configs/schemas/system_spec.py": "c188df4ca7eb93dc927941e53458fb86756a52ea6f4b9a67bc56d8c6ab4dd803",
+    "simulator_detailed/system_compile.py": "31c56e4575ab9cab49eeeb5f15ea88449bd232dbbfe9e7c5e4c7d01d66065892",
+    "simulator_detailed/runtime_context.py": "2ef16fa7fb9b804913274f0cbc6e1b3f44e0f5c9f9b3169256997cbc432bb74d",
+    "simulator_detailed/generic_runtime.py": "16621cacb4ff5dbca4868227cc4101ae10707687d8c8d831be6b83cc4e289f3a",
+    "simulator_detailed/topology_compatibility.py": "059c1d964647c63521df34f698e7e74844ca51aee8cc9a9c368721e13d25a6f5",
+    "simulator_detailed/configs/schemas/generic_transactions.py": "9ab1273522065e72331253e5afa74107e92ecbb228d359431f4be456a0469c0a",
+    "simulator_detailed/tests/test_unified_compile.py": "6c5d006052710e31b9980a9c2bf529bad9887720ed183d1a8301b04c3639eb88",
+    "simulator_detailed/tests/test_unified_runtime.py": "59876723718f2315048a562f21b97775e8fd9083442affa1f569facaa320d02c",
+    "simulator_detailed/tests/test_generic_adapter.py": "44f46f691eea22244a3dcd104dceb2e9dae444ef2dc3f7e5ad9a3299bc600182",
+    "simulator_detailed/docs/generic_simulation.md": "cddaa36256c8430ebc80243d6e9e836c60988aea64113d91785cf3b7bb8e398d",
+    "simulator_detailed/pyrightconfig.phase2.json": "f3046851b188cae574d7ad946378a0ffd866031234325137c2dc658e7242330e"
+  }
+}

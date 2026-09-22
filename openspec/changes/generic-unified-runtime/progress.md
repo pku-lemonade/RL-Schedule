@@ -58,3 +58,13 @@ Change 'generic-unified-runtime' is valid.
 git diff --check
 Passed with no output.
 ```
+
+## Part 3: public acceptance, documentation and delivery (tasks 3.1-3.3, completed 2026-09-22)
+
+`docs/generic_simulation.md` gained the unified-pipeline section (spec,
+compile, context, result, shim note). `delivery.md` and
+`delivery-identities.json` record the UR requirement mapping with exact file
+identities. The public acceptance suite of `test_unified_runtime.py` (10
+cases) plus the unchanged phase-1 suite constitute the published acceptance
+evidence; final counts are recorded in Part 2 above and in the delivery
+manifest (692 discovered, 691 passed, 1 optional skip).
