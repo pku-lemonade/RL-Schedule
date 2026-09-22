@@ -69,6 +69,9 @@ class PlanTransfer(GraphRecord):
     address: Index | None = None
     depends_on: tuple[NeutralId, ...]
     start_cycles: Cycles
+    routing: Literal["static", "shortest_path", "adaptive"] = "static"
+    source_node: NeutralId | None = None
+    destination_node: NeutralId | None = None
     hops: tuple[PlanHop, ...] = ()
     terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
     memory_service: PlanMemoryService | None = None
@@ -134,6 +137,36 @@ class PlanCounter(GraphRecord):
         return self
 
 
+class PlanDynamicLink(GraphRecord):
+    """One directed link of a dynamic network with its effective timing."""
+
+    link_id: NeutralId
+    src_node: NeutralId
+    dst_node: NeutralId
+    timing: GenericLinkTiming
+
+
+class PlanNodeDistance(GraphRecord):
+    node: NeutralId
+    distance: Index
+
+
+class PlanDestinationDistances(GraphRecord):
+    """BFS hop distances from every reachable node to one destination."""
+
+    destination_node: NeutralId
+    distances: tuple[PlanNodeDistance, ...]
+
+
+class PlanDynamicNetwork(GraphRecord):
+    """Compiled routing tables for one dynamic-policy network."""
+
+    network_id: NeutralId
+    routing: Literal["shortest_path", "adaptive"]
+    links: tuple[PlanDynamicLink, ...]
+    distances: tuple[PlanDestinationDistances, ...]
+
+
 class PlanContent(GraphRecord):
     """Everything the runtime needs, in deterministic order."""
 
@@ -144,6 +177,7 @@ class PlanContent(GraphRecord):
     resources: tuple[PlanResource, ...]
     counters: tuple[PlanCounter, ...]
     transactions: tuple[PlanTransaction, ...]
+    dynamic_networks: tuple[PlanDynamicNetwork, ...] = ()
     max_cycles: PositiveTime
 
     @model_validator(mode="after")
@@ -151,6 +185,7 @@ class PlanContent(GraphRecord):
         unique(tuple(r.resource_id for r in self.resources), "plan resource")
         unique(tuple(c.counter_id for c in self.counters), "plan counter")
         unique(tuple(t.transaction_id for t in self.transactions), "plan transaction")
+        unique(tuple(n.network_id for n in self.dynamic_networks), "dynamic network")
         return self
 
 

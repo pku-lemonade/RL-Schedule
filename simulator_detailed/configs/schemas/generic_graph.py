@@ -58,9 +58,15 @@ class GenericNode(GraphRecord):
 
 
 class GenericNetwork(GraphRecord):
-    """One independent network; membership is derived from ports and links."""
+    """One independent network; membership is derived from ports and links.
+
+    `routing` selects the path model: `static_table` (default) requires
+    declared per-pair routes; `shortest_path` and `adaptive` compute paths
+    dynamically and must not declare static routes.
+    """
 
     network_id: NeutralId
+    routing: Literal["static_table", "shortest_path", "adaptive"] = "static_table"
 
 
 class GenericPort(GraphRecord):
@@ -204,6 +210,9 @@ class GenericSystemGraph(GraphRecord):
 
         nodes = {n.node_id: n for n in self.nodes}
         networks = {n.network_id for n in self.networks}
+        dynamic_networks = {
+            n.network_id for n in self.networks if n.routing != "static_table"
+        }
         ports = {(p.node_id, p.network_id, p.port_id): p for p in self.ports}
         for port in self.ports:
             if port.node_id not in nodes:
@@ -304,6 +313,12 @@ class GenericSystemGraph(GraphRecord):
         for route in self.static_routes:
             if route.network_id not in networks:
                 raise ValueError(f"route {route.source}->{route.destination}: unknown network")
+            if route.network_id in dynamic_networks:
+                raise ValueError(
+                    f"route {route.source}->{route.destination}: network "
+                    f"{route.network_id} uses a dynamic routing policy and "
+                    "cannot declare static routes"
+                )
             source_node = endpoint_nodes.get(route.source)
             destination_node = endpoint_nodes.get(route.destination)
             if source_node is None:

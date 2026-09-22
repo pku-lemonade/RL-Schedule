@@ -1,14 +1,14 @@
 ## 1. Routing policy schemas and pure compilation
 
-- [ ] 1.1 Add optional `routing` (`static_table`/`shortest_path`/`adaptive`) to networks; verify dynamic networks declaring static routes fail validation and unknown policy values are rejected.
-- [ ] 1.2 Add dynamic plan records (per-network links with timings, per-destination BFS distance tables, per-transfer effective policy and endpoint nodes) and compile them purely: reachability classification, deterministic tables and digests, no SimPy object or global state.
-- [ ] 1.3 Verify static networks compile to byte-identical plans; run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md` and commit Part 1.
+- [x] 1.1 Add optional `routing` (`static_table`/`shortest_path`/`adaptive`) to networks; verify dynamic networks declaring static routes fail validation and unknown policy values are rejected.
+- [x] 1.2 Add dynamic plan records (per-network links with timings, per-destination BFS distance tables, per-transfer effective policy and endpoint nodes) and compile them purely: reachability classification, deterministic tables and digests, no SimPy object or global state.
+- [x] 1.3 Verify static networks compile to byte-identical plans; run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md` and commit Part 1.
 
 ## 2. Hop-by-hop selection in the unified runtime
 
-- [ ] 2.1 Implement distance-reducing next-hop selection for both policies with deterministic tie-breaks, shared link-crossing mechanics with static routes, `route_select` trace events and span hop recording.
-- [ ] 2.2 Implement adaptive pressure sampling (credit users plus pending) with deterministic ordering; verify byte-identical repeated adaptive runs.
-- [ ] 2.3 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
+- [x] 2.1 Implement distance-reducing next-hop selection for both policies with deterministic tie-breaks, shared link-crossing mechanics with static routes, `route_select` trace events and span hop recording.
+- [x] 2.2 Implement adaptive pressure sampling (credit users plus pending) with deterministic ordering; verify byte-identical repeated adaptive runs.
+- [x] 2.3 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
 
 ## 3. Public acceptance, documentation and delivery
 

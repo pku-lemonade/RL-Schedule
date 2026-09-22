@@ -9,9 +9,10 @@ and mutates no global state.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections import deque
+from typing import Literal, cast
 
-from .configs.schemas.generic_graph import GenericMemoryResource
+from .configs.schemas.generic_graph import GenericLink, GenericMemoryResource
 from .configs.schemas.generic_transactions import (
     GenericCompute,
     GenericLinkTiming,
@@ -24,8 +25,12 @@ from .configs.schemas.system_spec import (
     PlanCompute,
     PlanContent,
     PlanCounter,
+    PlanDestinationDistances,
+    PlanDynamicLink,
+    PlanDynamicNetwork,
     PlanHop,
     PlanMemoryService,
+    PlanNodeDistance,
     PlanResource,
     PlanSignal,
     PlanTransaction,
@@ -35,6 +40,22 @@ from .configs.schemas.system_spec import (
 )
 from .generic_graph import generic_digest, normalize_generic
 from .topology import content_digest
+
+
+def _bfs_distances(links: list[GenericLink], destination: str) -> dict[str, int]:
+    """Directed hop distances to `destination` via reversed edges."""
+    reverse: dict[str, list[str]] = {}
+    for link in links:
+        reverse.setdefault(link.dst_node, []).append(link.src_node)
+    distances = {destination: 0}
+    queue = deque([destination])
+    while queue:
+        node = queue.popleft()
+        for previous in sorted(reverse.get(node, ())):
+            if previous not in distances:
+                distances[previous] = distances[node] + 1
+                queue.append(previous)
+    return distances
 
 
 def compile_system(spec: SystemSpec) -> ImmutablePlan:
@@ -55,6 +76,9 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
             memories[resource.endpoint_id] = resource
     units = {u.unit_id for u in graph.execution_units}
     networks = {n.network_id for n in graph.networks}
+    policies: dict[str, Literal["static_table", "shortest_path", "adaptive"]] = {
+        n.network_id: n.routing for n in graph.networks
+    }
 
     timing: dict[tuple[str, str], GenericLinkTiming] = {}
     for network in batch.timing:
@@ -86,6 +110,7 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
     bounds = {counter.counter_id: counter.upper_bound for counter in counters}
 
     transactions: list[PlanTransaction] = []
+    dynamic_usage: dict[str, set[str]] = {}
     for transaction in batch.transactions:
         depends_on = tuple(transaction.depends_on)
         start_cycles = transaction.start_cycles
@@ -137,19 +162,42 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                         if channel.channel_id == port.channel_id
                     ),
                 )
-            route = next(
-                (
-                    route
-                    for route in graph.static_routes
-                    if route.network_id == transaction.network_id
-                    and route.source == transaction.source
-                    and route.destination == transaction.destination
-                ),
-                None,
-            )
+            if transaction.network_id not in policies:
+                raise ValueError(
+                    f"transfer {transaction.transaction_id}: unknown network "
+                    f"{transaction.network_id}"
+                )
+            policy = policies[transaction.network_id]
+            routing: Literal["static", "shortest_path", "adaptive"] = "static"
+            source_node: str | None = None
+            destination_node: str | None = None
+            route_link_ids: tuple[str, ...] | None = None
+            if policy == "static_table":
+                route = next(
+                    (
+                        route
+                        for route in graph.static_routes
+                        if route.network_id == transaction.network_id
+                        and route.source == transaction.source
+                        and route.destination == transaction.destination
+                    ),
+                    None,
+                )
+                if route is not None:
+                    route_link_ids = tuple(route.link_ids)
+            else:
+                routing = policy
+                source_node = endpoints[transaction.source]
+                destination_node = endpoints[transaction.destination]
+                dynamic_usage.setdefault(transaction.network_id, set()).add(destination_node)
+                member_links = [
+                    link for link in graph.links if link.network_id == transaction.network_id
+                ]
+                if source_node in _bfs_distances(member_links, destination_node):
+                    route_link_ids = ()
             terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
             hops: tuple[PlanHop, ...] = ()
-            if route is None:
+            if route_link_ids is None:
                 terminal = "route_unreachable"
                 memory_service = None
             else:
@@ -164,7 +212,7 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                             link_id=link_id,
                             timing=timing[(transaction.network_id, link_id)],
                         )
-                        for link_id in route.link_ids
+                        for link_id in route_link_ids
                     )
             transactions.append(PlanTransfer(
                 transaction_id=transaction.transaction_id,
@@ -176,6 +224,9 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                 address=transaction.address,
                 depends_on=depends_on,
                 start_cycles=start_cycles,
+                routing=routing,
+                source_node=source_node,
+                destination_node=destination_node,
                 hops=hops,
                 terminal=terminal,
                 memory_service=memory_service,
@@ -254,6 +305,38 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                 capacity=1,
             ))
 
+    dynamic_tables: list[PlanDynamicNetwork] = []
+    for network_id in sorted(dynamic_usage):
+        member_links = sorted(
+            (link for link in graph.links if link.network_id == network_id),
+            key=lambda link: link.link_id,
+        )
+        dynamic_tables.append(PlanDynamicNetwork(
+            network_id=network_id,
+            routing=cast(Literal["shortest_path", "adaptive"], policies[network_id]),
+            links=tuple(
+                PlanDynamicLink(
+                    link_id=link.link_id,
+                    src_node=link.src_node,
+                    dst_node=link.dst_node,
+                    timing=timing[(network_id, link.link_id)],
+                )
+                for link in member_links
+            ),
+            distances=tuple(
+                PlanDestinationDistances(
+                    destination_node=destination,
+                    distances=tuple(
+                        PlanNodeDistance(node=node, distance=distance)
+                        for node, distance in sorted(
+                            _bfs_distances(member_links, destination).items()
+                        )
+                    ),
+                )
+                for destination in sorted(dynamic_usage[network_id])
+            ),
+        ))
+
     content = PlanContent(
         spec_id=normalized_spec.spec_id,
         system_id=graph.system_id,
@@ -262,6 +345,7 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
         resources=tuple(resources),
         counters=counters,
         transactions=tuple(transactions),
+        dynamic_networks=tuple(dynamic_tables),
         max_cycles=batch.max_cycles,
     )
     return ImmutablePlan(

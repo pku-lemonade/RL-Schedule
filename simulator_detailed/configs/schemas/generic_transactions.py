@@ -287,6 +287,7 @@ class GenericTraceEvent(GraphRecord):
         "memory_command",
         "memory_service_start",
         "memory_service_end",
+        "route_select",
     ]
     transaction_id: NeutralId | None = None
     resource_id: NeutralId | None = None

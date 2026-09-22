@@ -11,6 +11,7 @@ never from dict iteration order or object addresses.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, cast
 
@@ -22,6 +23,7 @@ from .configs.schemas.generic_transactions import (
     GenericCounterState,
     GenericErrorRecord,
     GenericHopSpan,
+    GenericLinkTiming,
     GenericMemoryServiceSpan,
     GenericResourceUsage,
     GenericSimulationResult,
@@ -41,7 +43,7 @@ TraceAction = Literal[
     "credit_acquire", "credit_release", "serialize_start", "serialize_end",
     "hop_arrive", "unit_acquire", "unit_release", "counter_publish",
     "wait_resume", "cancel", "memory_command", "memory_service_start",
-    "memory_service_end",
+    "memory_service_end", "route_select",
 ]
 
 
@@ -68,6 +70,16 @@ class _ResourceEntry:
     service_count: int = 0
     busy_cycles: float = 0.0
     queue_wait_cycles: float = 0.0
+    waiting: int = 0
+
+
+@dataclass(frozen=True)
+class _DynamicRuntime:
+    """Compiled routing view of one dynamic network."""
+
+    routing: Literal["shortest_path", "adaptive"]
+    adjacency: Mapping[str, tuple[tuple[str, str, GenericLinkTiming], ...]]
+    distances: Mapping[str, Mapping[str, int]]
 
 
 class ResourceRegistry:
@@ -211,6 +223,25 @@ class RuntimeContext:
             for tx in self.plan.content.transactions
             if isinstance(tx, PlanTransfer) and tx.terminal is not None
         }
+        self._dynamic: dict[str, _DynamicRuntime] = {}
+        for network in self.plan.content.dynamic_networks:
+            adjacency: dict[str, list[tuple[str, str, GenericLinkTiming]]] = {}
+            for link in network.links:
+                adjacency.setdefault(link.src_node, []).append(
+                    (link.link_id, link.dst_node, link.timing)
+                )
+            self._dynamic[network.network_id] = _DynamicRuntime(
+                routing=network.routing,
+                adjacency={
+                    node: tuple(out_links) for node, out_links in adjacency.items()
+                },
+                distances={
+                    table.destination_node: {
+                        entry.node: entry.distance for entry in table.distances
+                    }
+                    for table in network.distances
+                },
+            )
 
     def _emit(
         self,
@@ -335,6 +366,111 @@ class RuntimeContext:
         finally:
             _release_held(granted)
 
+    def _pressure(self, network_id: str, link_id: str) -> int:
+        """Granted credit users plus pending requests on one link."""
+        entry = self.registry.get(f"{network_id}/{link_id}")
+        users = len(entry.credits.users) if entry.credits is not None else 0
+        return users + entry.waiting
+
+    def _cross_link(
+        self,
+        transaction: PlanTransfer,
+        network_id: str,
+        link_id: str,
+        timing: GenericLinkTiming,
+        granted: list[tuple[Resource, Request]],
+    ) -> ProcessGenerator:
+        """Cross one link with credit, serialization and hop accounting."""
+        entry = self.registry.get(f"{network_id}/{link_id}")
+        if entry.credits is None or entry.serializer is None:
+            raise ValueError("link resource is not acquirable")
+        requested = float(self.env.now)
+        credit = entry.credits.request()
+        granted.append((entry.credits, credit))
+        entry.waiting += 1
+        try:
+            yield credit
+        finally:
+            entry.waiting -= 1
+        credit_wait = float(self.env.now) - requested
+        hop_queued = float(self.env.now)
+        requested = float(self.env.now)
+        grant = entry.serializer.request()
+        granted.append((entry.serializer, grant))
+        entry.waiting += 1
+        try:
+            yield grant
+        finally:
+            entry.waiting -= 1
+        serialize_wait = float(self.env.now) - requested
+        entry.queue_wait_cycles += credit_wait + serialize_wait
+        self._emit("credit_acquire", transaction.transaction_id, entry.resource_id)
+        serialization_start = float(self.env.now)
+        serialization_cycles = float(
+            math.ceil(transaction.payload_bytes / timing.bytes_per_cycle)
+        )
+        self._emit("serialize_start", transaction.transaction_id, entry.resource_id)
+        yield self.env.timeout(serialization_cycles)
+        serialization_end = float(self.env.now)
+        entry.busy_cycles += serialization_end - serialization_start
+        entry.service_count += 1
+        self._emit("serialize_end", transaction.transaction_id, entry.resource_id)
+        entry.serializer.release(grant)
+        granted.remove((entry.serializer, grant))
+        yield self.env.timeout(timing.hop_cycles)
+        arrival = float(self.env.now)
+        self._emit("hop_arrive", transaction.transaction_id, entry.resource_id)
+        granted.remove((entry.credits, credit))
+        self.env.process(self._return_credit(entry, credit, timing.credit_return_cycles))
+        return (
+            GenericHopSpan(
+                network_id=network_id,
+                link_id=link_id,
+                queued_cycles=hop_queued,
+                serialization_start_cycles=serialization_start,
+                serialization_end_cycles=serialization_end,
+                arrival_cycles=arrival,
+            ),
+            credit_wait + serialize_wait,
+        )
+
+    def _select_next_link(
+        self, transaction: PlanTransfer, current: str
+    ) -> tuple[str, str, GenericLinkTiming]:
+        """Distance-reducing next hop; deterministic for both policies."""
+        table = self._dynamic[transaction.network_id]
+        destination = transaction.destination_node
+        if destination is None:
+            raise ValueError("dynamic transfer lacks a destination node")
+        distances = table.distances[destination]
+        here = distances[current]
+        candidates = [
+            (link_id, dst, timing)
+            for (link_id, dst, timing) in table.adjacency.get(current, ())
+            if distances.get(dst) == here - 1
+        ]
+        if not candidates:
+            raise ValueError(
+                f"no distance-reducing link at node {current} toward {destination}"
+            )
+        if table.routing == "shortest_path":
+            link_id, dst, timing = min(candidates, key=lambda candidate: candidate[0])
+        else:
+            link_id, dst, timing = min(
+                candidates,
+                key=lambda candidate: (
+                    self._pressure(transaction.network_id, candidate[0]),
+                    candidate[0],
+                ),
+            )
+        self._emit(
+            "route_select",
+            transaction.transaction_id,
+            f"{transaction.network_id}/{link_id}",
+            current,
+        )
+        return link_id, dst, timing
+
     def _transfer(self, transaction: PlanTransfer) -> ProcessGenerator:
         granted: list[tuple[Resource, Request]] = []
         try:
@@ -352,49 +488,27 @@ class RuntimeContext:
                 if service_result is not None:
                     service_span, service_wait = service_result
                     wait_cycles += service_wait
-            for hop in transaction.hops:
-                entry = self.registry.get(f"{hop.network_id}/{hop.link_id}")
-                if entry.credits is None or entry.serializer is None:
-                    raise ValueError("link resource is not acquirable")
-                requested = float(self.env.now)
-                credit = entry.credits.request()
-                granted.append((entry.credits, credit))
-                yield credit
-                credit_wait = float(self.env.now) - requested
-                hop_queued = float(self.env.now)
-                requested = float(self.env.now)
-                grant = entry.serializer.request()
-                granted.append((entry.serializer, grant))
-                yield grant
-                serialize_wait = float(self.env.now) - requested
-                entry.queue_wait_cycles += credit_wait + serialize_wait
-                wait_cycles += credit_wait + serialize_wait
-                self._emit("credit_acquire", transaction.transaction_id, entry.resource_id)
-                serialization_start = float(self.env.now)
-                serialization_cycles = float(
-                    math.ceil(transaction.payload_bytes / hop.timing.bytes_per_cycle)
-                )
-                self._emit("serialize_start", transaction.transaction_id, entry.resource_id)
-                yield self.env.timeout(serialization_cycles)
-                serialization_end = float(self.env.now)
-                entry.busy_cycles += serialization_end - serialization_start
-                entry.service_count += 1
-                self._emit("serialize_end", transaction.transaction_id, entry.resource_id)
-                entry.serializer.release(grant)
-                granted.remove((entry.serializer, grant))
-                yield self.env.timeout(hop.timing.hop_cycles)
-                arrival = float(self.env.now)
-                self._emit("hop_arrive", transaction.transaction_id, entry.resource_id)
-                granted.remove((entry.credits, credit))
-                self.env.process(self._return_credit(entry, credit, hop.timing.credit_return_cycles))
-                hops.append(GenericHopSpan(
-                    network_id=hop.network_id,
-                    link_id=hop.link_id,
-                    queued_cycles=hop_queued,
-                    serialization_start_cycles=serialization_start,
-                    serialization_end_cycles=serialization_end,
-                    arrival_cycles=arrival,
-                ))
+            if transaction.routing == "static":
+                for hop in transaction.hops:
+                    crossed = yield from self._cross_link(
+                        transaction, hop.network_id, hop.link_id, hop.timing, granted
+                    )
+                    if crossed is not None:
+                        hop_span, hop_wait = crossed
+                        hops.append(hop_span)
+                        wait_cycles += hop_wait
+            else:
+                current = transaction.source_node
+                while current is not None and current != transaction.destination_node:
+                    link_id, dst_node, timing = self._select_next_link(transaction, current)
+                    crossed = yield from self._cross_link(
+                        transaction, transaction.network_id, link_id, timing, granted
+                    )
+                    if crossed is not None:
+                        hop_span, hop_wait = crossed
+                        hops.append(hop_span)
+                        wait_cycles += hop_wait
+                    current = dst_node
             if transaction.memory_service is not None and (
                 transaction.memory_service.direction == "write"
             ):
