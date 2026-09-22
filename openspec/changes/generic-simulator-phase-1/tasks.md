@@ -8,12 +8,12 @@
 
 ## 2. Four-kind unified transaction runtime
 
-- [ ] 2.1 Add strict version-1 `generic_transaction_batch` schemas admitting exactly `transfer`, `compute`, `wait` and `signal` records with explicit dependencies; verify unknown kinds, unbounded work, undeclared counters and device-era unit names are rejected before simulation.
-- [ ] 2.2 Implement `transfer` execution composing static next-hop routing, link serialization and the bounded lane/credit kernel, including DMA-initiated transfers between arbitrary endpoints and memory resources; verify queueing order and byte-exact accounting on contested links.
-- [ ] 2.3 Implement `compute` execution occupying a declared execution unit for a configured duration; verify compute overlaps unrelated transfers and contends correctly for shared execution resources.
-- [ ] 2.4 Implement counter-based `wait`/`signal`: signals add declared deltas, waits complete at threshold with deterministic signal-first ordering; verify a wait never completes before its enabling signal and unreachably-thresholded waits fail with explicit reasons.
-- [ ] 2.5 Add the synthetic acceptance suite: two transfers on one shared link queue with non-overlapping occupancy, two transfers on disjoint links overlap, a compute and a transfer overlap, and a wait completes only after its required signals.
-- [ ] 2.6 Run the focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with measured outcomes and commit Part 2 before continuing.
+- [x] 2.1 Add strict version-1 `generic_transaction_batch` schemas admitting exactly `transfer`, `compute`, `wait` and `signal` records with explicit dependencies; verify unknown kinds, unbounded work, undeclared counters and device-era unit names are rejected before simulation.
+- [x] 2.2 Implement `transfer` execution composing static next-hop routing, link serialization and the bounded lane/credit kernel, including DMA-initiated transfers between arbitrary endpoints and memory resources; verify queueing order and byte-exact accounting on contested links.
+- [x] 2.3 Implement `compute` execution occupying a declared execution unit for a configured duration; verify compute overlaps unrelated transfers and contends correctly for shared execution resources.
+- [x] 2.4 Implement counter-based `wait`/`signal`: signals add declared deltas, waits complete at threshold with deterministic signal-first ordering; verify a wait never completes before its enabling signal and unreachably-thresholded waits fail with explicit reasons.
+- [x] 2.5 Add the synthetic acceptance suite: two transfers on one shared link queue with non-overlapping occupancy, two transfers on disjoint links overlap, a compute and a transfer overlap, and a wait completes only after its required signals.
+- [x] 2.6 Run the focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` with measured outcomes and commit Part 2 before continuing.
 
 ## 3. Versioned simulation results
 

@@ -32,8 +32,13 @@ private formats.
    existing canonical topology, exposed as a `GenericSystem(Topology)`
    subclass only for added neutral views (networks, DMA endpoints, execution
    units, memory resources, static route tables). The transaction runtime
-   composes existing kernels (`ExplicitRouting`, lane/credit, link
-   serializer, counters) behind a new driver. New behavior is reachable only
+   builds on the same graph substrate and SimPy discipline
+   (charged storage, bounded credits, explicit release). Its link/credit
+   kernel is a neutral reimplementation at that discipline level: the
+   existing `VirtualChannelLink` kernel's identity types
+   (`TransportEnvelope`/`LaneIdentity`/`PacketIdentity`) are torus-bound
+   record families that cannot appear in generic documents or traces.
+   New behavior is reachable only
    through the new document kinds; every previously admitted input produces
    unchanged results, hashes and exit codes.
 2. **Neutral vocabulary is a hard contract, not a style choice.** New schema
