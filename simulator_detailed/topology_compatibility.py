@@ -18,6 +18,11 @@ VALIDATION_KINDS = frozenset({
 NONLEGACY_KINDS = frozenset({"multicast_sync_workload", "multicast_sync_result", "multicast_sync_plan",
                             "multicast_sync_execution_result", "multicast_pipeline_workload", "multicast_pipeline_result",
                             "multicast_memory_result", "multicast_scalar_result"})
+GENERIC_KINDS = frozenset({
+    "generic_system_graph", "generic_system_inspection",
+    "generic_transaction_batch", "generic_simulation_result",
+    "synthetic_grid_world",
+})
 
 
 def reject_validation_document(value: object) -> None:
@@ -26,6 +31,8 @@ def reject_validation_document(value: object) -> None:
         raise TypeError(f"{kind} is validation evidence, not a legacy topology or event stream")
     if isinstance(kind, str) and kind in NONLEGACY_KINDS:
         raise TypeError(f"{kind} is a finite replay document, not a legacy topology or event stream")
+    if isinstance(kind, str) and kind in GENERIC_KINDS:
+        raise TypeError(f"{kind} is a generic simulation document, not a legacy topology or event stream")
 
 
 def require_legacy_topology(topology: object, consumer: str,

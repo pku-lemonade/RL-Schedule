@@ -18,6 +18,10 @@ from simulator_detailed.generic_graph import load_generic_system, topology_from_
 from simulator_detailed.generic_runtime import run_generic_batch
 from simulator_detailed.replay_generic import load_batch
 from simulator_detailed.synthetic_adapter import SyntheticGridWorldAdapter
+from simulator_detailed.topology_compatibility import (
+    legacy_event_rows,
+    require_legacy_topology,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 GRAPH = ROOT / "configs" / "generic_graphs" / "synthetic_grid_2d.json"
@@ -37,6 +41,7 @@ PUBLIC_GENERIC_FILES = (
     ROOT / "configs" / "generic_graphs" / "synthetic_grid_2d.json",
     ROOT / "configs" / "generic_transactions" / "acceptance_batch.json",
     ROOT / "configs" / "generic_adapters" / "synthetic_world_2d.json",
+    ROOT / "docs" / "generic_simulation.md",
 )
 
 
@@ -137,3 +142,25 @@ class TestPrivacyGuard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLegacyConsumerGuards(unittest.TestCase):
+    def test_generic_kinds_rejected_by_legacy_consumers(self):
+        for kind in (
+            "generic_system_graph",
+            "generic_system_inspection",
+            "generic_transaction_batch",
+            "generic_simulation_result",
+            "synthetic_grid_world",
+        ):
+            for value in ({"kind": kind}, json.dumps({"kind": kind})):
+                if isinstance(value, str):
+                    value = json.loads(value)
+                with self.assertRaises(TypeError, msg=kind):
+                    legacy_event_rows(value, "communication")
+
+    def test_generic_system_is_not_a_legacy_topology(self):
+        system = load_generic_system(GRAPH)
+        for consumer in ("detailed_predictor", "detailed_encoder"):
+            with self.assertRaises(ValueError):
+                require_legacy_topology(system, consumer)

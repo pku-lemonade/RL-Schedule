@@ -263,3 +263,47 @@ Source identities (SHA-256):
 | `configs/generic_adapters/synthetic_world_2d.json` | `1ec78e0135d1a3d9f7a22cfb51f679cd390385e46d87658dbac3dce5f6256e98` |
 | `tests/test_generic_adapter.py` | `7e223a7984586148068bc204818d756f2f2e310bc164bc6da435cac8fad57402` |
 | `pyrightconfig.phase2.json` | `29ee33e4c586fbf042d9d3b7eea8ed22786b8c026263438a87f10205a73a305b` |
+
+## Part 5: consolidated verification and delivery (tasks 5.1-5.3, completed 2026-09-22)
+
+Delivered:
+
+- `topology_compatibility.py`: new `GENERIC_KINDS` guard set — the five
+  generic-layer document kinds (`generic_system_graph`,
+  `generic_system_inspection`, `generic_transaction_batch`,
+  `generic_simulation_result`, `synthetic_grid_world`) are rejected by legacy
+  replay/predictor/embedding consumers with TypeError. A compiled
+  `GenericSystem` is also rejected by `require_legacy_topology` because its
+  origin is not a legacy mesh.
+- `docs/generic_simulation.md`: user documentation for the graph document,
+  the four transaction kinds, the CLI, the adapter boundary and the stated
+  limitations; linked from `docs/README.md`.
+- `delivery.md` and `delivery-identities.json`: requirement-to-code/test
+  mapping for GS-G01..GS-A03 with exact file identities.
+- `tests/test_generic_adapter.py`: two legacy-consumer guard tests added (the
+  doc file is also now inside the privacy guard scan).
+
+Executed verification (this host, 2026-09-22):
+
+```text
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+Ran 672 tests in 218.617s — OK (skipped=1, optional torch/PyG check).
+Baseline before this change was 613; +59 new tests across Parts 1-5, every
+pre-existing test unchanged.
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations.
+
+.venv/bin/ruff check <all fourteen new/changed modules and tests>
+All checks passed.
+
+npm exec --yes --package=@fission-ai/openspec@1.11.0 -- openspec validate generic-simulator-phase-1 --strict --no-interactive
+Change 'generic-simulator-phase-1' is valid.
+
+git diff --check
+Passed with no output.
+```
+
+Existing-fixture regression: the four documented compute CLI examples
+re-ran with unchanged model cycles — generic_matmul 91.75,
+streaming_depth1 45, streaming_depth2 33, wormhole_bf16_matmul 105.

@@ -26,6 +26,7 @@ calibration demonstrations.
 - [Finite compute workloads, examples and compatibility](compute_dataflow.md)
 - [Finite multicast, synchronization, shared runtime and validation](multicast_sync.md)
 - [Validation, evidence tiers, reference import and calibration](validation.md)
+- [Generic system graphs, four-kind transactions and adapters](generic_simulation.md)
 - [Transport data and supported modes](datatypes.md)
 - [Link timing](link.md)
 - [Router arbitration](router.md)

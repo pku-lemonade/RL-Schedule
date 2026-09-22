@@ -31,6 +31,6 @@
 
 ## 5. Consolidated verification and delivery
 
-- [ ] 5.1 Re-run the complete detailed unittest suite and the existing replay fixtures; verify legacy/profile/Wormhole inputs retain byte-identical results and legacy consumer guards reject the new document kinds.
-- [ ] 5.2 Run strict Pyright, the explicit affected/predecessor Ruff scope, `git diff --check` and strict OpenSpec validation; record exact discovered/pass/fail/skip counts without relabeling prior runs.
-- [ ] 5.3 Write the user documentation under `simulator_detailed/docs/`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking GS-G01..GS-A03 to code, tests and fixtures, and commit the final validated part locally without pushing or archiving.
+- [x] 5.1 Re-run the complete detailed unittest suite and the existing replay fixtures; verify legacy/profile/Wormhole inputs retain byte-identical results and legacy consumer guards reject the new document kinds.
+- [x] 5.2 Run strict Pyright, the explicit affected/predecessor Ruff scope, `git diff --check` and strict OpenSpec validation; record exact discovered/pass/fail/skip counts without relabeling prior runs.
+- [x] 5.3 Write the user documentation under `simulator_detailed/docs/`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking GS-G01..GS-A03 to code, tests and fixtures, and commit the final validated part locally without pushing or archiving.

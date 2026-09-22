@@ -1,0 +1,99 @@
+{
+  "kind": "generic_simulator_phase_1_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-22",
+  "progress": {
+    "complete": 22,
+    "total": 22,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "4f20164",
+    "4c2a8b7",
+    "e4df7a9",
+    "41d2368"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 672,
+      "passed": 671,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 218.6
+    },
+    "pyright": "0 errors, 0 warnings, 0 informations (89-entry phase-2 scope)",
+    "openspec": "Change 'generic-simulator-phase-1' is valid (strict)",
+    "regression_examples_cycles": [91.75, 45.0, 33.0, 105.0]
+  },
+  "requirements": {
+    "GS-G01": {
+      "code": ["simulator_detailed/configs/schemas/generic_graph.py"],
+      "tests": ["simulator_detailed/tests/test_generic_graph.py"]
+    },
+    "GS-G02": {
+      "code": ["simulator_detailed/generic_graph.py", "simulator_detailed/replay_topology.py"],
+      "tests": ["simulator_detailed/tests/test_generic_graph.py"]
+    },
+    "GS-G03": {
+      "code": ["simulator_detailed/configs/schemas/generic_graph.py", "simulator_detailed/generic_runtime.py"],
+      "tests": ["simulator_detailed/tests/test_generic_graph.py", "simulator_detailed/tests/test_generic_results.py"]
+    },
+    "GS-T01": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py"],
+      "tests": ["simulator_detailed/tests/test_generic_runtime.py"]
+    },
+    "GS-T02": {
+      "code": ["simulator_detailed/generic_runtime.py"],
+      "tests": ["simulator_detailed/tests/test_generic_runtime.py"]
+    },
+    "GS-T03": {
+      "code": ["simulator_detailed/generic_runtime.py"],
+      "tests": ["simulator_detailed/tests/test_generic_runtime.py"]
+    },
+    "GS-T04": {
+      "code": ["simulator_detailed/generic_runtime.py"],
+      "tests": ["simulator_detailed/tests/test_generic_runtime.py"]
+    },
+    "GS-T05": {
+      "code": ["simulator_detailed/configs/schemas/generic_transactions.py", "simulator_detailed/replay_generic.py"],
+      "tests": ["simulator_detailed/tests/test_generic_results.py"]
+    },
+    "GS-A01": {
+      "code": ["simulator_detailed/generic_adapter.py"],
+      "tests": ["simulator_detailed/tests/test_generic_adapter.py"]
+    },
+    "GS-A02": {
+      "code": ["simulator_detailed/generic_adapter.py"],
+      "tests": ["simulator_detailed/tests/test_generic_adapter.py"]
+    },
+    "GS-A03": {
+      "code": ["simulator_detailed/synthetic_adapter.py", "simulator_detailed/configs/schemas/synthetic_world.py"],
+      "tests": ["simulator_detailed/tests/test_generic_adapter.py"],
+      "fixtures": ["simulator_detailed/configs/generic_adapters/synthetic_world_2d.json"]
+    }
+  },
+  "files": {
+    "simulator_detailed/configs/schemas/generic_graph.py": "755acdc5ec4aa2d094c664d81f6f6670f1d6954a72a876d1c091ff184f8e0d75",
+    "simulator_detailed/configs/schemas/generic_transactions.py": "243dee2bac4b1584da14bdf8b8364d0ce8409165f46cf5590d1680447cbf0f3e",
+    "simulator_detailed/configs/schemas/synthetic_world.py": "3167592fff6513ddc8da2597106821b60aabf5788e6396aab30287ed4a4a07d4",
+    "simulator_detailed/generic_graph.py": "f8d56b732ff2c1794af00d4ea87c7473863b5b539e43e785832c52cc3bad6413",
+    "simulator_detailed/generic_runtime.py": "a11b874d5ec4272dae74b00074410bae061d08515339c80e851df714f1c001da",
+    "simulator_detailed/generic_adapter.py": "41ac87d9e7b526406ab330718a710ef91624348f0f3877c3d9205558e2015426",
+    "simulator_detailed/synthetic_adapter.py": "0b8bb64247ce9997bb56d4e222e964724f6837371b38a23e857449487134182d",
+    "simulator_detailed/replay_generic.py": "75539bc1333814ec6f4fa8df3fcf43e9edf10ad7bf9aeef3accc353df2455e44",
+    "simulator_detailed/replay_topology.py": "61122d5dfb170cfbbcec76a8ad19c461fde66c2f2e952bee1fbd1b6d813b1cff",
+    "simulator_detailed/topology_compatibility.py": "df3e15fb7e7c70bbe2813d571624492f915449dc409ed5c65564722ec6c26094",
+    "simulator_detailed/configs/generic_graphs/synthetic_grid_2d.json": "0b383c53369ca29619e114497206f4910f06be2c5c1086d231db18d11ea049be",
+    "simulator_detailed/configs/generic_transactions/acceptance_batch.json": "25235b04ff286913efe8b9fa6fb236949c172b471590a0438fb884bf3b6c069f",
+    "simulator_detailed/configs/generic_adapters/synthetic_world_2d.json": "1ec78e0135d1a3d9f7a22cfb51f679cd390385e46d87658dbac3dce5f6256e98",
+    "simulator_detailed/tests/test_generic_graph.py": "1233d9235f955928fcfe7caea483e0b03c6cb1a883e974e1c66242a4ee2f1e80",
+    "simulator_detailed/tests/test_generic_runtime.py": "9bb8606ab25d0abd80965bfc9760e00e049f671b96b34704395a9484be35b201",
+    "simulator_detailed/tests/test_generic_results.py": "99abceea1ea513b5f50a235e72ab5062ea05e250a6e5bbaa69d5563e3b1e92eb",
+    "simulator_detailed/tests/test_generic_adapter.py": "f45db6e00c241bf56c43dfae92ba140a251dab178d8e59be0bbf91b841d123d9",
+    "simulator_detailed/docs/generic_simulation.md": "8b9c636288a977a404a63dc56d6ef54288639d7beaa888f3ad8ec4f37d01ba4f",
+    "simulator_detailed/docs/README.md": "830c49b9d307216773b21c262fccd80da8da899ae7dcd952fe4adf5392a06139",
+    "simulator_detailed/pyrightconfig.phase2.json": "29ee33e4c586fbf042d9d3b7eea8ed22786b8c026263438a87f10205a73a305b"
+  }
+}
