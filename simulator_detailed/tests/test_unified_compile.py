@@ -101,7 +101,7 @@ class TestPlanContents(unittest.TestCase):
 
     def test_terminal_classification(self):
         plan = compile_system(make_spec([
-            transfer("t_bad", "eu_00", "dma_b"),
+            transfer("t_bad", "eu_00", "eu_10"),  # net_alpha, no declared route: unreachable
             transfer("t_big", "eu_00", "mem_b_ep", payload=2097153),
         ]))
         bad, big = plan.content.transactions

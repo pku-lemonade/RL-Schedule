@@ -47,16 +47,6 @@ TraceAction = Literal[
 ]
 
 
-def _release_held(granted: list[tuple[Resource, Request]]) -> None:
-    """Release granted requests and cancel pending ones after interruption."""
-    for resource, request in granted:
-        if request.triggered:
-            if request in resource.users:
-                resource.release(request)
-        else:
-            request.cancel()
-
-
 @dataclass
 class _ResourceEntry:
     """One physical resource: stable ID, built once, fully accounted."""
@@ -73,6 +63,12 @@ class _ResourceEntry:
     waiting: int = 0
 
 
+def _immediately_available(resource: Resource) -> bool:
+    """Free capacity and an empty queue, so a grant lands this time step."""
+    queue = cast(list[object], resource.queue)  # pyright: ignore[reportUnknownMemberType]
+    return len(resource.users) < resource.capacity and not queue
+
+
 @dataclass(frozen=True)
 class _DynamicRuntime:
     """Compiled routing view of one dynamic network."""
@@ -86,6 +82,8 @@ class ResourceRegistry:
     """Stable-ID resources; one construction per physical resource per plan."""
 
     def __init__(self, env: simpy.Environment, plan: ImmutablePlan):
+        self.env = env
+        self._released = env.event()
         self._entries: dict[str, _ResourceEntry] = {}
         for resource in plan.content.resources:
             if resource.resource_id in self._entries:
@@ -124,32 +122,68 @@ class ResourceRegistry:
                     return False
         return True
 
+    def _notify_release(self) -> None:
+        """Wake every atomic-acquisition waiter; events are single-shot."""
+        self._released.succeed()
+        self._released = self.env.event()
+
+    def release(self, resource: Resource, request: Request) -> None:
+        """Release one granted request on the normal path; notify waiters."""
+        if request.triggered and request in resource.users:
+            resource.release(request)
+            self._notify_release()
+
     def release_all(self, granted: list[tuple[Resource, Request]]) -> None:
+        """Release granted requests and cancel pending ones; notify waiters."""
+        if not granted:
+            return
         for resource, request in granted:
-            if request.triggered and request in resource.users:
-                resource.release(request)
+            if request.triggered:
+                if request in resource.users:
+                    resource.release(request)
+            else:
+                request.cancel()
+        self._notify_release()
 
     def acquire_all(self, resource_ids: tuple[str, ...]) -> ProcessGenerator:
-        """Sorted-order multi-resource acquisition with interrupt safety.
+        """Atomic all-or-nothing acquisition with upfront validation.
 
-        Callers receive the granted requests in sorted ID order. Because every
-        caller acquires in the same total order, circular waits cannot form.
-        An interrupted attempt cancels its pending request and releases the
-        grants it already holds, so partial ownership never survives.
+        The complete identity set is validated before any request exists:
+        empty, duplicate or unknown identities raise immediately, so an
+        invalid set can never strand earlier grants. Grants then land at
+        one time step or not at all — a waiter holds no member of the set
+        while waiting, so partial ownership can never block a
+        single-resource acquirer. An interrupted attempt releases or
+        cancels everything it created. Wait time is attributed to every
+        member entry, matching the per-entry accounting of `_acquire`.
         """
+        if not resource_ids:
+            raise ValueError("resource set is empty")
+        if len(set(resource_ids)) != len(resource_ids):
+            raise ValueError(
+                f"duplicate resource identity in {sorted(resource_ids)}"
+            )
+        entries = [self.get(resource_id) for resource_id in sorted(resource_ids)]
+        resources: list[Resource] = []
+        for entry in entries:
+            if entry.serializer is None:
+                raise ValueError(f"resource {entry.resource_id} is not acquirable")
+            resources.append(entry.serializer)
         granted: list[tuple[Resource, Request]] = []
+        requested = float(self.env.now)
         try:
-            for resource_id in sorted(resource_ids):
-                entry = self.get(resource_id)
-                resource = entry.serializer
-                if resource is None:
-                    raise ValueError(f"resource {resource_id} is not acquirable")
-                request = resource.request()
-                granted.append((resource, request))
-                yield request
-            return list(granted)
+            while True:
+                if all(_immediately_available(resource) for resource in resources):
+                    requests = [resource.request() for resource in resources]
+                    granted.extend(zip(resources, requests))
+                    yield self.env.all_of(tuple(requests))
+                    wait = float(self.env.now) - requested
+                    for entry in entries:
+                        entry.queue_wait_cycles += wait
+                    return list(granted)
+                yield self._released
         except simpy.Interrupt:
-            _release_held(granted)
+            self.release_all(granted)
             raise
 
 
@@ -218,6 +252,7 @@ class RuntimeContext:
         self._done: dict[str, Event] = {}
         self._trace: list[GenericTraceEvent] = []
         self._sequence = 0
+        self._background: list[simpy.Process] = []
         self._terminal: dict[str, Literal["route_unreachable", "capacity_exceeded"]] = {
             tx.transaction_id: tx.terminal
             for tx in self.plan.content.transactions
@@ -289,14 +324,22 @@ class RuntimeContext:
         self._done[transaction_id].succeed()
 
     def _acquire(
-        self, entry: _ResourceEntry, transaction_id: str
+        self,
+        entry: _ResourceEntry,
+        transaction_id: str,
+        granted: list[tuple[Resource, Request]],
     ) -> ProcessGenerator:
-        """Grant one serializer with queue accounting; (resource, request, wait)."""
+        """Grant one serializer with queue accounting; (resource, request, wait).
+
+        The request is registered in `granted` at creation, so an interrupt
+        while waiting still cancels the queued request.
+        """
         resource = entry.serializer
         if resource is None:
             raise ValueError(f"resource {entry.resource_id} is not acquirable")
         requested = float(self.env.now)
         grant = resource.request()
+        granted.append((resource, grant))
         yield grant
         wait = float(self.env.now) - requested
         entry.queue_wait_cycles += wait
@@ -305,13 +348,18 @@ class RuntimeContext:
     def _memory_service(
         self, transaction: PlanTransfer, service: PlanMemoryService
     ) -> ProcessGenerator:
-        """Command issue on the mapped port, then bank+channel data service."""
+        """Command issue on the mapped port, then bank+channel data service.
+
+        Interrupts propagate to the transaction layer: a cancelled or
+        timed-out access never starts a later stage and never reports
+        completion. Bank and channel are acquired atomically through the
+        registry, and every request is released or cancelled on every exit.
+        """
         granted: list[tuple[Resource, Request]] = []
         try:
             port_resource, port_grant, port_wait = yield from self._acquire(
-                self.registry.get(service.port_id), transaction.transaction_id
+                self.registry.get(service.port_id), transaction.transaction_id, granted
             )
-            granted.append((port_resource, port_grant))
             self._emit("memory_command", transaction.transaction_id, service.port_id)
             command_start = float(self.env.now)
             yield self.env.timeout(service.command_cycles)
@@ -319,20 +367,14 @@ class RuntimeContext:
             port = self.registry.get(service.port_id)
             port.busy_cycles += command_end - command_start
             port.service_count += 1
-            port_resource.release(port_grant)
             granted.remove((port_resource, port_grant))
+            self.registry.release(port_resource, port_grant)
 
-            bank = self.registry.get(service.bank_id)
-            channel = self.registry.get(service.channel_id)
-            data_wait = 0.0
-            holds: dict[str, tuple[Resource, Request]] = {}
-            for entry in sorted((bank, channel), key=lambda e: e.resource_id):
-                resource, entry_grant, entry_wait = yield from self._acquire(
-                    entry, transaction.transaction_id
-                )
-                granted.append((resource, entry_grant))
-                holds[entry.resource_id] = (resource, entry_grant)
-                data_wait += entry_wait
+            data_ids = tuple(sorted((service.bank_id, service.channel_id)))
+            data_requested = float(self.env.now)
+            data_granted = yield from self.registry.acquire_all(data_ids)
+            granted.extend(data_granted)
+            data_wait = float(self.env.now) - data_requested
             self._emit("memory_service_start", transaction.transaction_id, service.bank_id)
             service_start = float(self.env.now)
             data_cycles = service.latency_cycles + float(
@@ -340,12 +382,13 @@ class RuntimeContext:
             )
             yield self.env.timeout(data_cycles)
             service_end = float(self.env.now)
-            for entry in (bank, channel):
+            for resource_id in data_ids:
+                entry = self.registry.get(resource_id)
                 entry.busy_cycles += service_end - service_start
                 entry.service_count += 1
-                resource, entry_grant = holds[entry.resource_id]
-                resource.release(entry_grant)
-                granted.remove((resource, entry_grant))
+            for resource, request in data_granted:
+                granted.remove((resource, request))
+                self.registry.release(resource, request)
             self._emit("memory_service_end", transaction.transaction_id, service.bank_id)
             return (
                 GenericMemoryServiceSpan(
@@ -361,10 +404,8 @@ class RuntimeContext:
                 ),
                 port_wait + data_wait,
             )
-        except simpy.Interrupt:
-            pass
         finally:
-            _release_held(granted)
+            self.registry.release_all(granted)
 
     def _pressure(self, network_id: str, link_id: str) -> int:
         """Granted credit users plus pending requests on one link."""
@@ -415,13 +456,15 @@ class RuntimeContext:
         entry.busy_cycles += serialization_end - serialization_start
         entry.service_count += 1
         self._emit("serialize_end", transaction.transaction_id, entry.resource_id)
-        entry.serializer.release(grant)
         granted.remove((entry.serializer, grant))
+        self.registry.release(entry.serializer, grant)
         yield self.env.timeout(timing.hop_cycles)
         arrival = float(self.env.now)
         self._emit("hop_arrive", transaction.transaction_id, entry.resource_id)
         granted.remove((entry.credits, credit))
-        self.env.process(self._return_credit(entry, credit, timing.credit_return_cycles))
+        self._background.append(
+            self.env.process(self._return_credit(entry, credit, timing.credit_return_cycles))
+        )
         return (
             GenericHopSpan(
                 network_id=network_id,
@@ -482,42 +525,34 @@ class RuntimeContext:
             if transaction.memory_service is not None and (
                 transaction.memory_service.direction == "read"
             ):
-                service_result = yield from self._memory_service(
+                service_span, service_wait = yield from self._memory_service(
                     transaction, transaction.memory_service
                 )
-                if service_result is not None:
-                    service_span, service_wait = service_result
-                    wait_cycles += service_wait
+                wait_cycles += service_wait
             if transaction.routing == "static":
                 for hop in transaction.hops:
-                    crossed = yield from self._cross_link(
+                    hop_span, hop_wait = yield from self._cross_link(
                         transaction, hop.network_id, hop.link_id, hop.timing, granted
                     )
-                    if crossed is not None:
-                        hop_span, hop_wait = crossed
-                        hops.append(hop_span)
-                        wait_cycles += hop_wait
+                    hops.append(hop_span)
+                    wait_cycles += hop_wait
             else:
                 current = transaction.source_node
                 while current is not None and current != transaction.destination_node:
                     link_id, dst_node, timing = self._select_next_link(transaction, current)
-                    crossed = yield from self._cross_link(
+                    hop_span, hop_wait = yield from self._cross_link(
                         transaction, transaction.network_id, link_id, timing, granted
                     )
-                    if crossed is not None:
-                        hop_span, hop_wait = crossed
-                        hops.append(hop_span)
-                        wait_cycles += hop_wait
+                    hops.append(hop_span)
+                    wait_cycles += hop_wait
                     current = dst_node
             if transaction.memory_service is not None and (
                 transaction.memory_service.direction == "write"
             ):
-                service_result = yield from self._memory_service(
+                service_span, service_wait = yield from self._memory_service(
                     transaction, transaction.memory_service
                 )
-                if service_result is not None:
-                    service_span, service_wait = service_result
-                    wait_cycles += service_wait
+                wait_cycles += service_wait
             self._finish(
                 transaction.transaction_id,
                 "transfer",
@@ -529,14 +564,14 @@ class RuntimeContext:
         except simpy.Interrupt:
             pass
         finally:
-            _release_held(granted)
+            self.registry.release_all(granted)
 
     def _return_credit(
         self, entry: _ResourceEntry, credit: Request, delay: float
     ) -> ProcessGenerator:
         yield self.env.timeout(delay)
-        if entry.credits is not None and credit.triggered and credit in entry.credits.users:
-            entry.credits.release(credit)
+        if entry.credits is not None:
+            self.registry.release(entry.credits, credit)
         self._emit("credit_release", resource_id=entry.resource_id)
 
     def _compute(self, transaction: PlanCompute) -> ProcessGenerator:
@@ -558,14 +593,14 @@ class RuntimeContext:
             end = float(self.env.now)
             entry.busy_cycles += end - start
             entry.service_count += 1
-            entry.serializer.release(grant)
             granted.remove((entry.serializer, grant))
+            self.registry.release(entry.serializer, grant)
             self._emit("unit_release", transaction.transaction_id, entry.resource_id)
             self._finish(transaction.transaction_id, "compute", start, wait_cycles)
         except simpy.Interrupt:
             pass
         finally:
-            _release_held(granted)
+            self.registry.release_all(granted)
 
     def _wait(self, transaction: PlanWait) -> ProcessGenerator:
         try:
@@ -599,6 +634,50 @@ class RuntimeContext:
         except simpy.Interrupt:
             pass
 
+    def _cancel_processes(self, processes: dict[str, simpy.Process]) -> None:
+        """Interrupt every unfinished business process in plan order."""
+        for transaction_id, process in processes.items():
+            if not process.triggered:
+                self._emit("cancel", transaction_id)
+                process.interrupt()
+
+    def _await_processes(self, processes: dict[str, simpy.Process]) -> None:
+        """Bounded wait until every business process has ended.
+
+        Interrupts propagate through every stage, so unwinding finishes at
+        the interruption time step; the backstop only guards against a
+        future stage that mis-handles interrupts, and a surviving process
+        is caught by the all-released invariant afterwards.
+        """
+        pending = tuple(
+            process for process in processes.values() if not process.triggered
+        )
+        if not pending:
+            return
+        backstop = self.plan.content.max_cycles * 2 + 100.0
+        self.env.run(
+            until=simpy.AnyOf(
+                self.env, (self.env.all_of(pending), self.env.timeout(backstop))
+            )
+        )
+
+    def _drain_background(self) -> None:
+        """Run until delayed credit returns and other background work end."""
+        if self._background:
+            self.env.run(until=self.env.all_of(tuple(self._background)))
+
+    def _abort(self, processes: dict[str, simpy.Process], exc: Exception) -> None:
+        """Cancel in-flight work, run bounded cleanup, then fail honestly."""
+        try:
+            self._cancel_processes(processes)
+            self._await_processes(processes)
+            self._drain_background()
+        except Exception as cleanup_error:  # noqa: BLE001 - cleanup must never mask the root cause
+            exc.add_note(f"cleanup after abort raised: {cleanup_error!r}")
+        raise RuntimeError(
+            f"simulation aborted at {float(self.env.now)} cycles: {exc}"
+        ) from exc
+
     def run(self) -> GenericSimulationResult:
         processes: dict[str, simpy.Process] = {}
         for transaction in self.plan.content.transactions:
@@ -619,15 +698,23 @@ class RuntimeContext:
             if transaction_id not in self._terminal
         )
         drained = self.env.all_of(pending)
-        self.env.run(
-            until=simpy.AnyOf(self.env, (drained, self.env.timeout(self.plan.content.max_cycles)))
-        )
-        if not drained.triggered:
-            for transaction_id, process in processes.items():
-                if not process.triggered:
-                    self._emit("cancel", transaction_id)
-                    process.interrupt()
-            self.env.run()
+        try:
+            self.env.run(
+                until=simpy.AnyOf(
+                    self.env, (drained, self.env.timeout(self.plan.content.max_cycles))
+                )
+            )
+            if not drained.triggered:
+                self._cancel_processes(processes)
+                self._await_processes(processes)
+            self._drain_background()
+        except Exception as exc:  # noqa: BLE001 - any business failure aborts the run
+            self._abort(processes, exc)
+        if not self.registry.all_released():
+            raise RuntimeError(
+                "resources still held or queued after cleanup and drain; "
+                "refusing to report a result"
+            )
 
         spans: list[GenericTransactionSpan] = []
         errors: list[GenericErrorRecord] = []

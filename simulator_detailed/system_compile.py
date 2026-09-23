@@ -67,11 +67,20 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
 
     endpoints: dict[str, str] = {e.endpoint_id: e.node_id for e in graph.dma_endpoints}
     endpoints.update({u.unit_id: u.node_id for u in graph.execution_units})
+    endpoint_network: dict[str, str] = {
+        e.endpoint_id: e.network_id for e in graph.dma_endpoints
+    }
+    endpoint_network.update({u.unit_id: u.network_id for u in graph.execution_units})
     capacities: dict[str, int] = {}
     memories: dict[str, GenericMemoryResource] = {}
     for resource in graph.memory_resources:
-        if resource.endpoint_id is not None and resource.owner_node is not None:
+        if (
+            resource.endpoint_id is not None
+            and resource.owner_node is not None
+            and resource.network_id is not None
+        ):
             endpoints[resource.endpoint_id] = resource.owner_node
+            endpoint_network[resource.endpoint_id] = resource.network_id
             capacities[resource.endpoint_id] = resource.capacity_bytes
             memories[resource.endpoint_id] = resource
     units = {u.unit_id for u in graph.execution_units}
@@ -119,6 +128,14 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
                 if endpoint_id not in endpoints:
                     raise ValueError(
                         f"transfer {transaction.transaction_id}: unknown endpoint {endpoint_id}"
+                    )
+                attached = endpoint_network[endpoint_id]
+                if attached != transaction.network_id:
+                    raise ValueError(
+                        f"transfer {transaction.transaction_id}: endpoint "
+                        f"{endpoint_id} is attached to network {attached}, not "
+                        f"{transaction.network_id}; cross-network references "
+                        "require bridging, which is not supported"
                     )
             memory_service: PlanMemoryService | None = None
             if transaction.address is not None:

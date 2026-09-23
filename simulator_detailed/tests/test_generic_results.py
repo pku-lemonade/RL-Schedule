@@ -34,7 +34,7 @@ def spans_by_id(result):
 
 class TestNegativePaths(unittest.TestCase):
     def test_unreachable_route_is_incomplete_not_raised(self):
-        result = run_batch(batch([transfer("t_bad", "eu_00", "dma_b")]))
+        result = run_batch(batch([transfer("t_bad", "eu_00", "eu_10")]))  # net_alpha, no declared route: unreachable
         self.assertEqual(result.status, "incomplete")
         span = spans_by_id(result)["t_bad"]
         self.assertEqual(span.status, "incomplete")
@@ -44,7 +44,7 @@ class TestNegativePaths(unittest.TestCase):
 
     def test_dependent_of_unreachable_is_dependency_unsatisfied(self):
         result = run_batch(batch([
-            transfer("t_bad", "eu_00", "dma_b"),
+            transfer("t_bad", "eu_00", "eu_10"),  # net_alpha, no declared route: unreachable
             transfer("t_next", "eu_00", "mem_b_ep", depends_on=["t_bad"]),
         ]))
         spans = spans_by_id(result)
@@ -65,7 +65,7 @@ class TestNegativePaths(unittest.TestCase):
             run_batch(batch([transfer("t_ghost", "eu_00", "no_such_ep")]))
 
     def test_all_terminal_batch_has_no_completion(self):
-        result = run_batch(batch([transfer("t_bad", "eu_00", "dma_b")]))
+        result = run_batch(batch([transfer("t_bad", "eu_00", "eu_10")]))  # net_alpha, no declared route: unreachable
         self.assertIsNone(result.completion_cycles)
         self.assertEqual(result.reason, "transactions_incomplete")
 
@@ -74,7 +74,7 @@ class TestResultIntegrity(unittest.TestCase):
     def result_dump(self):
         result = run_batch(batch([
             transfer("t_a", "eu_00", "mem_b_ep"),
-            transfer("t_bad", "eu_00", "dma_b"),
+            transfer("t_bad", "eu_00", "eu_10"),  # net_alpha, no declared route: unreachable
         ]))
         return result.model_dump(mode="json")
 

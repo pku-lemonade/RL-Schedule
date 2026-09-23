@@ -268,6 +268,9 @@ class GenericSystemGraph(GraphRecord):
                 endpoint.port_id,
             )
         endpoint_nodes: dict[str, str] = {e.endpoint_id: e.node_id for e in self.dma_endpoints}
+        endpoint_networks: dict[str, str] = {
+            e.endpoint_id: e.network_id for e in self.dma_endpoints
+        }
         for unit in self.execution_units:
             bind_local(unit.unit_id, "execution unit", unit.node_id, unit.network_id, unit.port_id)
             if nodes[unit.node_id].role != "compute":
@@ -275,6 +278,7 @@ class GenericSystemGraph(GraphRecord):
                     f"execution unit {unit.unit_id}: node {unit.node_id} is not a compute node"
                 )
             endpoint_nodes[unit.unit_id] = unit.node_id
+            endpoint_networks[unit.unit_id] = unit.network_id
         for resource in self.memory_resources:
             if resource.owner_node is not None and resource.owner_node not in nodes:
                 raise ValueError(
@@ -306,6 +310,7 @@ class GenericSystemGraph(GraphRecord):
                     resource.port_id,
                 )
                 endpoint_nodes[resource.endpoint_id] = resource.owner_node
+                endpoint_networks[resource.endpoint_id] = resource.network_id
 
         links_by_network: dict[str, dict[str, GenericLink]] = {}
         for link in self.links:
@@ -325,6 +330,18 @@ class GenericSystemGraph(GraphRecord):
                 raise ValueError(f"route: unknown source endpoint {route.source}")
             if destination_node is None:
                 raise ValueError(f"route: unknown destination endpoint {route.destination}")
+            # Endpoints attach to exactly one network; naming them on another
+            # network is never implied bridging and is rejected here.
+            if endpoint_networks.get(route.source) != route.network_id:
+                raise ValueError(
+                    f"route {route.source}->{route.destination}: source endpoint "
+                    f"{route.source} is not attached to network {route.network_id}"
+                )
+            if endpoint_networks.get(route.destination) != route.network_id:
+                raise ValueError(
+                    f"route {route.source}->{route.destination}: destination endpoint "
+                    f"{route.destination} is not attached to network {route.network_id}"
+                )
             if route.source == route.destination:
                 raise ValueError(f"route {route.source}: source equals destination")
             current = source_node
