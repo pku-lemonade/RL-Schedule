@@ -1,8 +1,8 @@
 ## 1. Program schemas and pure compilation
 
-- [ ] 1.1 Add `GenericInstructionProgram`/`GenericInstructionOp` records and an optional `programs` tuple to the batch schema; enforce strict fields, identity uniqueness and disjointness from transaction identities, per-program operation identity uniqueness, earlier-operation-only `depends_on`, and the at-least-one-transaction-or-program rule.
-- [ ] 1.2 Add optional plan records for programs and expand operations in `compile_system` into namespaced plan transactions with resolved dependencies, terminal classifications and counter bounds; validate every operation reference; identical specs yield identical digests; no SimPy object or global state.
-- [ ] 1.3 Verify program-free batches compile to byte-identical plans; run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md` and commit Part 1.
+- [x] 1.1 Add `GenericInstructionProgram`/`GenericInstructionOp` records and an optional `programs` tuple to the batch schema; enforce strict fields, identity uniqueness and disjointness from transaction identities, per-program operation identity uniqueness, earlier-operation-only `depends_on`, and the at-least-one-transaction-or-program rule.
+- [x] 1.2 Add optional plan records for programs and expand operations in `compile_system` into namespaced plan transactions with resolved dependencies, terminal classifications and counter bounds; validate every operation reference; identical specs yield identical digests; no SimPy object or global state.
+- [x] 1.3 Verify program-free batches compile to byte-identical plans; run focused compile tests, strict Pyright, scoped Ruff and strict OpenSpec validation; record outcomes in `progress.md` and commit Part 1.
 
 ## 2. Sequencer runtime
 

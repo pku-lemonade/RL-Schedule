@@ -167,6 +167,28 @@ class PlanDynamicNetwork(GraphRecord):
     distances: tuple[PlanDestinationDistances, ...]
 
 
+class PlanProgramOp(GraphRecord):
+    """One operation of a program, pointing at its expanded plan transaction."""
+
+    op_id: NeutralId
+    transaction_id: NeutralId
+    issue_cycles: Cycles
+
+
+class PlanInstructionProgram(GraphRecord):
+    """One compiled program: sequencer unit, earliest start, ordered ops."""
+
+    program_id: NeutralId
+    unit_id: NeutralId
+    start_cycles: Cycles
+    ops: tuple[PlanProgramOp, ...]
+
+    @model_validator(mode="after")
+    def identities(self) -> Self:
+        unique(tuple(op.op_id for op in self.ops), f"plan op in {self.program_id}")
+        return self
+
+
 class PlanContent(GraphRecord):
     """Everything the runtime needs, in deterministic order."""
 
@@ -178,6 +200,7 @@ class PlanContent(GraphRecord):
     counters: tuple[PlanCounter, ...]
     transactions: tuple[PlanTransaction, ...]
     dynamic_networks: tuple[PlanDynamicNetwork, ...] = ()
+    programs: tuple[PlanInstructionProgram, ...] = ()
     max_cycles: PositiveTime
 
     @model_validator(mode="after")
@@ -186,6 +209,7 @@ class PlanContent(GraphRecord):
         unique(tuple(c.counter_id for c in self.counters), "plan counter")
         unique(tuple(t.transaction_id for t in self.transactions), "plan transaction")
         unique(tuple(n.network_id for n in self.dynamic_networks), "dynamic network")
+        unique(tuple(p.program_id for p in self.programs), "plan program")
         return self
 
 

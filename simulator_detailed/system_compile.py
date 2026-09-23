@@ -16,6 +16,10 @@ from .configs.schemas.generic_graph import GenericLink, GenericMemoryResource
 from .configs.schemas.generic_transactions import (
     GenericCompute,
     GenericLinkTiming,
+    GenericOpCompute,
+    GenericOpSignal,
+    GenericOpTransfer,
+    GenericOpWait,
     GenericSignal,
     GenericTransfer,
     GenericWait,
@@ -29,8 +33,10 @@ from .configs.schemas.system_spec import (
     PlanDynamicLink,
     PlanDynamicNetwork,
     PlanHop,
+    PlanInstructionProgram,
     PlanMemoryService,
     PlanNodeDistance,
+    PlanProgramOp,
     PlanResource,
     PlanSignal,
     PlanTransaction,
@@ -108,6 +114,10 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
     for transaction in batch.transactions:
         if isinstance(transaction, GenericSignal):
             deltas[transaction.counter_id] = deltas.get(transaction.counter_id, 0) + transaction.delta
+    for program in batch.programs:
+        for op in program.ops:
+            if isinstance(op, GenericOpSignal):
+                deltas[op.counter_id] = deltas.get(op.counter_id, 0) + op.delta
     counters = tuple(
         PlanCounter(
             counter_id=counter.counter_id,
@@ -120,167 +130,270 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
 
     transactions: list[PlanTransaction] = []
     dynamic_usage: dict[str, set[str]] = {}
+
+    def transfer_plan(
+        label: str,
+        network_id: str,
+        source: str,
+        destination: str,
+        payload_bytes: int,
+        address: int | None,
+        depends_on: tuple[str, ...],
+        start_cycles: float,
+    ) -> PlanTransfer:
+        for endpoint_id in (source, destination):
+            if endpoint_id not in endpoints:
+                raise ValueError(f"transfer {label}: unknown endpoint {endpoint_id}")
+            attached = endpoint_network[endpoint_id]
+            if attached != network_id:
+                raise ValueError(
+                    f"transfer {label}: endpoint {endpoint_id} is attached to "
+                    f"network {attached}, not {network_id}; cross-network "
+                    "references require bridging, which is not supported"
+                )
+        memory_service: PlanMemoryService | None = None
+        if address is not None:
+            source_memory = source in memories
+            destination_memory = destination in memories
+            if source_memory == destination_memory:
+                raise ValueError(
+                    f"transfer {label}: an addressed access must name exactly "
+                    "one memory service endpoint"
+                )
+            memory_endpoint = destination if destination_memory else source
+            resource = memories[memory_endpoint]
+            if resource.hierarchy is None:
+                raise ValueError(
+                    f"transfer {label}: addressed access on flat memory "
+                    f"{resource.resource_id}"
+                )
+            if address + payload_bytes > resource.capacity_bytes:
+                raise ValueError(
+                    f"transfer {label}: address range "
+                    f"[{address}, {address + payload_bytes}) exceeds capacity "
+                    f"{resource.capacity_bytes} of {resource.resource_id}"
+                )
+            hierarchy = resource.hierarchy
+            stripe = address // hierarchy.stripe_bytes
+            bank_index = stripe % hierarchy.banks
+            port = hierarchy.ports[stripe % len(hierarchy.ports)]
+            memory_service = PlanMemoryService(
+                resource_id=resource.resource_id,
+                direction="write" if destination_memory else "read",
+                bank_id=f"{resource.resource_id}/bank_{bank_index}",
+                port_id=f"{resource.resource_id}/port_{port.port_id}",
+                channel_id=f"{resource.resource_id}/channel_{port.channel_id}",
+                command_cycles=port.command_cycles,
+                latency_cycles=hierarchy.latency_cycles,
+                channel_bytes_per_cycle=next(
+                    channel.bytes_per_cycle
+                    for channel in hierarchy.channels
+                    if channel.channel_id == port.channel_id
+                ),
+            )
+        if network_id not in policies:
+            raise ValueError(f"transfer {label}: unknown network {network_id}")
+        policy = policies[network_id]
+        routing: Literal["static", "shortest_path", "adaptive"] = "static"
+        source_node: str | None = None
+        destination_node: str | None = None
+        route_link_ids: tuple[str, ...] | None = None
+        if policy == "static_table":
+            route = next(
+                (
+                    route
+                    for route in graph.static_routes
+                    if route.network_id == network_id
+                    and route.source == source
+                    and route.destination == destination
+                ),
+                None,
+            )
+            if route is not None:
+                route_link_ids = tuple(route.link_ids)
+        else:
+            routing = policy
+            source_node = endpoints[source]
+            destination_node = endpoints[destination]
+            dynamic_usage.setdefault(network_id, set()).add(destination_node)
+            member_links = [
+                link for link in graph.links if link.network_id == network_id
+            ]
+            if source_node in _bfs_distances(member_links, destination_node):
+                route_link_ids = ()
+        terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
+        hops: tuple[PlanHop, ...] = ()
+        if route_link_ids is None:
+            terminal = "route_unreachable"
+            memory_service = None
+        else:
+            capacity = capacities.get(destination)
+            if capacity is not None and payload_bytes > capacity:
+                terminal = "capacity_exceeded"
+                memory_service = None
+            else:
+                hops = tuple(
+                    PlanHop(
+                        network_id=network_id,
+                        link_id=link_id,
+                        timing=timing[(network_id, link_id)],
+                    )
+                    for link_id in route_link_ids
+                )
+        return PlanTransfer(
+            transaction_id=label,
+            kind="transfer",
+            network_id=network_id,
+            source=source,
+            destination=destination,
+            payload_bytes=payload_bytes,
+            address=address,
+            depends_on=depends_on,
+            start_cycles=start_cycles,
+            routing=routing,
+            source_node=source_node,
+            destination_node=destination_node,
+            hops=hops,
+            terminal=terminal,
+            memory_service=memory_service,
+        )
+
+    def compute_plan(
+        label: str,
+        unit_id: str,
+        duration_cycles: float,
+        depends_on: tuple[str, ...],
+        start_cycles: float,
+    ) -> PlanCompute:
+        if unit_id not in units:
+            raise ValueError(f"compute {label}: unknown execution unit {unit_id}")
+        return PlanCompute(
+            transaction_id=label,
+            kind="compute",
+            unit_id=unit_id,
+            duration_cycles=duration_cycles,
+            depends_on=depends_on,
+            start_cycles=start_cycles,
+        )
+
+    def wait_plan(
+        label: str,
+        counter_id: str,
+        threshold: int,
+        depends_on: tuple[str, ...],
+        start_cycles: float,
+    ) -> PlanWait:
+        return PlanWait(
+            transaction_id=label,
+            kind="wait",
+            counter_id=counter_id,
+            threshold=threshold,
+            depends_on=depends_on,
+            start_cycles=start_cycles,
+            reachable=bounds[counter_id],
+        )
+
+    def signal_plan(
+        label: str,
+        counter_id: str,
+        delta: int,
+        depends_on: tuple[str, ...],
+        start_cycles: float,
+    ) -> PlanSignal:
+        return PlanSignal(
+            transaction_id=label,
+            kind="signal",
+            counter_id=counter_id,
+            delta=delta,
+            depends_on=depends_on,
+            start_cycles=start_cycles,
+        )
+
     for transaction in batch.transactions:
         depends_on = tuple(transaction.depends_on)
         start_cycles = transaction.start_cycles
         if isinstance(transaction, GenericTransfer):
-            for endpoint_id in (transaction.source, transaction.destination):
-                if endpoint_id not in endpoints:
-                    raise ValueError(
-                        f"transfer {transaction.transaction_id}: unknown endpoint {endpoint_id}"
-                    )
-                attached = endpoint_network[endpoint_id]
-                if attached != transaction.network_id:
-                    raise ValueError(
-                        f"transfer {transaction.transaction_id}: endpoint "
-                        f"{endpoint_id} is attached to network {attached}, not "
-                        f"{transaction.network_id}; cross-network references "
-                        "require bridging, which is not supported"
-                    )
-            memory_service: PlanMemoryService | None = None
-            if transaction.address is not None:
-                source_memory = transaction.source in memories
-                destination_memory = transaction.destination in memories
-                if source_memory == destination_memory:
-                    raise ValueError(
-                        f"transfer {transaction.transaction_id}: an addressed access "
-                        "must name exactly one memory service endpoint"
-                    )
-                memory_endpoint = (
-                    transaction.destination if destination_memory else transaction.source
-                )
-                resource = memories[memory_endpoint]
-                if resource.hierarchy is None:
-                    raise ValueError(
-                        f"transfer {transaction.transaction_id}: addressed access on "
-                        f"flat memory {resource.resource_id}"
-                    )
-                if transaction.address + transaction.payload_bytes > resource.capacity_bytes:
-                    raise ValueError(
-                        f"transfer {transaction.transaction_id}: address range "
-                        f"[{transaction.address}, {transaction.address + transaction.payload_bytes}) "
-                        f"exceeds capacity {resource.capacity_bytes} of {resource.resource_id}"
-                    )
-                hierarchy = resource.hierarchy
-                stripe = transaction.address // hierarchy.stripe_bytes
-                bank_index = stripe % hierarchy.banks
-                port = hierarchy.ports[stripe % len(hierarchy.ports)]
-                memory_service = PlanMemoryService(
-                    resource_id=resource.resource_id,
-                    direction="write" if destination_memory else "read",
-                    bank_id=f"{resource.resource_id}/bank_{bank_index}",
-                    port_id=f"{resource.resource_id}/port_{port.port_id}",
-                    channel_id=f"{resource.resource_id}/channel_{port.channel_id}",
-                    command_cycles=port.command_cycles,
-                    latency_cycles=hierarchy.latency_cycles,
-                    channel_bytes_per_cycle=next(
-                        channel.bytes_per_cycle
-                        for channel in hierarchy.channels
-                        if channel.channel_id == port.channel_id
-                    ),
-                )
-            if transaction.network_id not in policies:
-                raise ValueError(
-                    f"transfer {transaction.transaction_id}: unknown network "
-                    f"{transaction.network_id}"
-                )
-            policy = policies[transaction.network_id]
-            routing: Literal["static", "shortest_path", "adaptive"] = "static"
-            source_node: str | None = None
-            destination_node: str | None = None
-            route_link_ids: tuple[str, ...] | None = None
-            if policy == "static_table":
-                route = next(
-                    (
-                        route
-                        for route in graph.static_routes
-                        if route.network_id == transaction.network_id
-                        and route.source == transaction.source
-                        and route.destination == transaction.destination
-                    ),
-                    None,
-                )
-                if route is not None:
-                    route_link_ids = tuple(route.link_ids)
-            else:
-                routing = policy
-                source_node = endpoints[transaction.source]
-                destination_node = endpoints[transaction.destination]
-                dynamic_usage.setdefault(transaction.network_id, set()).add(destination_node)
-                member_links = [
-                    link for link in graph.links if link.network_id == transaction.network_id
-                ]
-                if source_node in _bfs_distances(member_links, destination_node):
-                    route_link_ids = ()
-            terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
-            hops: tuple[PlanHop, ...] = ()
-            if route_link_ids is None:
-                terminal = "route_unreachable"
-                memory_service = None
-            else:
-                capacity = capacities.get(transaction.destination)
-                if capacity is not None and transaction.payload_bytes > capacity:
-                    terminal = "capacity_exceeded"
-                    memory_service = None
-                else:
-                    hops = tuple(
-                        PlanHop(
-                            network_id=transaction.network_id,
-                            link_id=link_id,
-                            timing=timing[(transaction.network_id, link_id)],
-                        )
-                        for link_id in route_link_ids
-                    )
-            transactions.append(PlanTransfer(
-                transaction_id=transaction.transaction_id,
-                kind="transfer",
-                network_id=transaction.network_id,
-                source=transaction.source,
-                destination=transaction.destination,
-                payload_bytes=transaction.payload_bytes,
-                address=transaction.address,
-                depends_on=depends_on,
-                start_cycles=start_cycles,
-                routing=routing,
-                source_node=source_node,
-                destination_node=destination_node,
-                hops=hops,
-                terminal=terminal,
-                memory_service=memory_service,
+            transactions.append(transfer_plan(
+                transaction.transaction_id,
+                transaction.network_id,
+                transaction.source,
+                transaction.destination,
+                transaction.payload_bytes,
+                transaction.address,
+                depends_on,
+                start_cycles,
             ))
         elif isinstance(transaction, GenericCompute):
-            if transaction.unit_id not in units:
-                raise ValueError(
-                    f"compute {transaction.transaction_id}: unknown execution unit "
-                    f"{transaction.unit_id}"
-                )
-            transactions.append(PlanCompute(
-                transaction_id=transaction.transaction_id,
-                kind="compute",
-                unit_id=transaction.unit_id,
-                duration_cycles=transaction.duration_cycles,
-                depends_on=depends_on,
-                start_cycles=start_cycles,
+            transactions.append(compute_plan(
+                transaction.transaction_id,
+                transaction.unit_id,
+                transaction.duration_cycles,
+                depends_on,
+                start_cycles,
             ))
         elif isinstance(transaction, GenericWait):
-            transactions.append(PlanWait(
-                transaction_id=transaction.transaction_id,
-                kind="wait",
-                counter_id=transaction.counter_id,
-                threshold=transaction.threshold,
-                depends_on=depends_on,
-                start_cycles=start_cycles,
-                reachable=bounds[transaction.counter_id],
+            transactions.append(wait_plan(
+                transaction.transaction_id,
+                transaction.counter_id,
+                transaction.threshold,
+                depends_on,
+                start_cycles,
             ))
         else:
-            transactions.append(PlanSignal(
-                transaction_id=transaction.transaction_id,
-                kind="signal",
-                counter_id=transaction.counter_id,
-                delta=transaction.delta,
-                depends_on=depends_on,
-                start_cycles=start_cycles,
+            transactions.append(signal_plan(
+                transaction.transaction_id,
+                transaction.counter_id,
+                transaction.delta,
+                depends_on,
+                start_cycles,
             ))
+
+    programs: list[PlanInstructionProgram] = []
+    for program in batch.programs:
+        if program.unit_id not in units:
+            raise ValueError(
+                f"program {program.program_id}: unknown execution unit "
+                f"{program.unit_id}"
+            )
+        plan_ops: list[PlanProgramOp] = []
+        previous: str | None = None
+        for op in program.ops:
+            label = f"{program.program_id}/{op.op_id}"
+            if op.depends_on is None:
+                op_deps = (previous,) if previous is not None else ()
+            else:
+                op_deps = tuple(
+                    f"{program.program_id}/{dep}" for dep in op.depends_on
+                )
+            if isinstance(op, GenericOpTransfer):
+                transactions.append(transfer_plan(
+                    label, op.network_id, op.source, op.destination,
+                    op.payload_bytes, op.address, op_deps, 0.0,
+                ))
+            elif isinstance(op, GenericOpCompute):
+                transactions.append(compute_plan(
+                    label, op.unit_id, op.duration_cycles, op_deps, 0.0,
+                ))
+            elif isinstance(op, GenericOpWait):
+                transactions.append(wait_plan(
+                    label, op.counter_id, op.threshold, op_deps, 0.0,
+                ))
+            else:
+                transactions.append(signal_plan(
+                    label, op.counter_id, op.delta, op_deps, 0.0,
+                ))
+            plan_ops.append(PlanProgramOp(
+                op_id=op.op_id,
+                transaction_id=label,
+                issue_cycles=op.issue_cycles,
+            ))
+            previous = label
+        programs.append(PlanInstructionProgram(
+            program_id=program.program_id,
+            unit_id=program.unit_id,
+            start_cycles=program.start_cycles,
+            ops=tuple(plan_ops),
+        ))
 
     resources: list[PlanResource] = []
     for network in sorted(batch.timing, key=lambda n: n.network_id):
@@ -363,6 +476,7 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
         counters=counters,
         transactions=tuple(transactions),
         dynamic_networks=tuple(dynamic_tables),
+        programs=tuple(programs),
         max_cycles=batch.max_cycles,
     )
     return ImmutablePlan(

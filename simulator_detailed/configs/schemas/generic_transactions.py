@@ -107,6 +107,87 @@ GenericTransaction = Annotated[
 ]
 
 
+class GenericOpBase(GraphRecord):
+    """Shared operation envelope: identity, issue cost, dependencies.
+
+    An omitted `depends_on` (None) means "the immediately preceding
+    operation" — strict in-order completion. An explicit tuple names
+    earlier operations of the same program only; an empty tuple declares no
+    predecessor dependency and permits overlap.
+    """
+
+    op_id: NeutralId
+    issue_cycles: Cycles = 0.0
+    depends_on: tuple[NeutralId, ...] | None = None
+
+
+class GenericOpTransfer(GenericOpBase):
+    """Endpoint-to-endpoint transfer operation; may carry an address."""
+
+    kind: Literal["transfer"]
+    network_id: NeutralId
+    source: NeutralId
+    destination: NeutralId
+    payload_bytes: PositiveInt
+    address: Index | None = None
+
+
+class GenericOpCompute(GenericOpBase):
+    """Occupies one execution unit for a configured duration."""
+
+    kind: Literal["compute"]
+    unit_id: NeutralId
+    duration_cycles: PositiveTime
+
+
+class GenericOpWait(GenericOpBase):
+    """Completes when the named counter first reaches the threshold."""
+
+    kind: Literal["wait"]
+    counter_id: NeutralId
+    threshold: PositiveInt
+
+
+class GenericOpSignal(GenericOpBase):
+    """Adds a declared delta to the named counter."""
+
+    kind: Literal["signal"]
+    counter_id: NeutralId
+    delta: PositiveInt
+
+
+GenericInstructionOp = Annotated[
+    GenericOpTransfer | GenericOpCompute | GenericOpWait | GenericOpSignal,
+    Field(discriminator="kind"),
+]
+
+
+class GenericInstructionProgram(GraphRecord):
+    """One in-order operation stream sequenced by one execution unit."""
+
+    program_id: NeutralId
+    unit_id: NeutralId
+    start_cycles: Cycles = 0.0
+    ops: tuple[GenericInstructionOp, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def structure(self) -> Self:
+        unique(
+            tuple(op.op_id for op in self.ops),
+            f"operation identity in program {self.program_id}",
+        )
+        earlier: set[str] = set()
+        for op in self.ops:
+            for dependency in op.depends_on or ():
+                if dependency not in earlier:
+                    raise ValueError(
+                        f"operation {op.op_id} in program {self.program_id}: "
+                        f"dependency {dependency} is not an earlier operation"
+                    )
+            earlier.add(op.op_id)
+        return self
+
+
 class GenericTransactionBatch(GraphRecord):
     """A finite, strictly admitted batch executed on one generic system graph."""
 
@@ -116,13 +197,18 @@ class GenericTransactionBatch(GraphRecord):
     graph_path: NeutralId | None = None
     timing: tuple[GenericNetworkTiming, ...] = Field(min_length=1)
     counters: tuple[GenericCounter, ...] = ()
-    transactions: tuple[GenericTransaction, ...] = Field(min_length=1)
+    transactions: tuple[GenericTransaction, ...] = ()
+    programs: tuple[GenericInstructionProgram, ...] = ()
     max_cycles: PositiveTime
 
     @model_validator(mode="after")
     def references(self) -> Self:
         unique(tuple(t.network_id for t in self.timing), "timing network")
         unique(tuple(c.counter_id for c in self.counters), "counter identity")
+        if not self.transactions and not self.programs:
+            raise ValueError(
+                "a batch must contain at least one transaction or program"
+            )
         counter_ids = {c.counter_id for c in self.counters}
         timing_networks = {t.network_id for t in self.timing}
         identities: list[str] = []
@@ -147,6 +233,28 @@ class GenericTransactionBatch(GraphRecord):
                     )
         unique(tuple(identities), "transaction identity")
         declared = set(identities)
+        program_ids = tuple(p.program_id for p in self.programs)
+        unique(program_ids, "program identity")
+        collision = set(program_ids) & declared
+        if collision:
+            raise ValueError(
+                "program identities collide with transactions: "
+                + ", ".join(sorted(collision))
+            )
+        for program in self.programs:
+            for op in program.ops:
+                label = f"operation {program.program_id}/{op.op_id}"
+                if isinstance(op, GenericOpTransfer):
+                    if op.network_id not in timing_networks:
+                        raise ValueError(
+                            f"{label}: no timing declared for network {op.network_id}"
+                        )
+                elif isinstance(op, (GenericOpWait, GenericOpSignal)) and (
+                    op.counter_id not in counter_ids
+                ):
+                    raise ValueError(
+                        f"{label}: undeclared counter {op.counter_id}"
+                    )
         for transaction in self.transactions:
             for dependency in transaction.depends_on:
                 if dependency not in declared:
@@ -239,6 +347,43 @@ class GenericTransactionSpan(GraphRecord):
         return self
 
 
+class GenericProgramSpan(GraphRecord):
+    """Derived per-program outcome; never authoritative over op spans.
+
+    `start` is the first issued operation's start when any operation ran;
+    `end` exists only for a complete program and equals its last
+    operation's end. An incomplete program mirrors the reason of the
+    operation that stopped it.
+    """
+
+    program_id: NeutralId
+    unit_id: NeutralId
+    status: Literal["complete", "incomplete"]
+    reason: Literal[
+        "completed",
+        "cycle_limit",
+        "dependency_unsatisfied",
+        "route_unreachable",
+        "capacity_exceeded",
+    ]
+    start_cycles: Cycles | None
+    end_cycles: Cycles | None
+
+    @model_validator(mode="after")
+    def consistency(self) -> Self:
+        if self.status == "complete":
+            if self.reason != "completed":
+                raise ValueError("a complete program must carry reason completed")
+            if self.start_cycles is None or self.end_cycles is None:
+                raise ValueError("a complete program requires start and end cycles")
+        else:
+            if self.reason == "completed":
+                raise ValueError("an incomplete program cannot claim completion")
+            if self.end_cycles is not None:
+                raise ValueError("an incomplete program cannot carry an end cycle")
+        return self
+
+
 class GenericResourceUsage(GraphRecord):
     resource_id: NeutralId
     kind: Literal[
@@ -288,6 +433,8 @@ class GenericTraceEvent(GraphRecord):
         "memory_service_start",
         "memory_service_end",
         "route_select",
+        "issue_acquire",
+        "issue_release",
     ]
     transaction_id: NeutralId | None = None
     resource_id: NeutralId | None = None
@@ -307,6 +454,7 @@ class GenericSimulationResult(GraphRecord):
     graph_sha256: Digest
     batch_sha256: Digest
     transactions: tuple[GenericTransactionSpan, ...]
+    programs: tuple[GenericProgramSpan, ...] = ()
     resources: tuple[GenericResourceUsage, ...]
     counters: tuple[GenericCounterState, ...]
     errors: tuple[GenericErrorRecord, ...] = ()
@@ -338,4 +486,5 @@ class GenericSimulationResult(GraphRecord):
         sequences = [event.sequence for event in self.trace]
         if sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
             raise ValueError("trace sequences must be unique and ordered")
+        unique(tuple(p.program_id for p in self.programs), "program span identity")
         return self
