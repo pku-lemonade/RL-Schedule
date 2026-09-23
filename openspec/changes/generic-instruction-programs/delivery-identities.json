@@ -1,0 +1,95 @@
+{
+  "kind": "generic_instruction_programs_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-23",
+  "progress": {
+    "complete": 9,
+    "total": 9,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "3085e69",
+    "990fb34",
+    "c55f541"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 763,
+      "passed": 762,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 216.9
+    },
+    "pyright": "0 errors, 0 warnings, 0 informations (phase-2 scope)",
+    "openspec": "Change 'generic-instruction-programs' is valid (strict)"
+  },
+  "requirements": {
+    "IP-01": {
+      "code": [
+        "simulator_detailed/configs/schemas/generic_transactions.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramValidation"
+      ]
+    },
+    "IP-02": {
+      "code": [
+        "simulator_detailed/system_compile.py",
+        "simulator_detailed/configs/schemas/system_spec.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramCompilation"
+      ]
+    },
+    "IP-03": {
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_serial_chain_timing",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_explicit_overlap_inside_program",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_issue_occupancy_never_overlaps_on_shared_unit"
+      ]
+    },
+    "IP-04": {
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_wait_signal_across_programs",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_cycle_limit_interrupts_program_and_releases",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramAcceptance::test_issue_contention_with_batch_transactions"
+      ]
+    },
+    "IP-05": {
+      "code": [
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramRuntime::test_terminal_operation_stops_program"
+      ]
+    },
+    "IP-06": {
+      "code": [
+        "simulator_detailed/configs/schemas/generic_transactions.py",
+        "simulator_detailed/runtime_context.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramAcceptance::test_repeat_runs_byte_identical",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramAcceptance::test_program_free_digest_stability",
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramAcceptance::test_addressed_memory_composition"
+      ]
+    },
+    "IP-07": {
+      "code": [
+        "simulator_detailed/configs/schemas/generic_graph.py",
+        "simulator_detailed/generic_adapter.py"
+      ],
+      "tests": [
+        "simulator_detailed/tests/test_instruction_programs.py::TestProgramNeutralVocabulary"
+      ]
+    }
+  }
+}

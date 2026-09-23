@@ -114,3 +114,48 @@ git diff --check — clean
 openspec validate generic-instruction-programs --strict
 Change 'generic-instruction-programs' is valid
 ```
+
+
+## Part 3: public acceptance, documentation and delivery (tasks 3.1-3.3, 2026-09-23)
+
+Public suite: `tests/test_instruction_programs.py` now covers all ten
+acceptance categories across its classes — validation and compile
+rejections (TestProgramValidation/TestProgramCompilation, Part 1), serial
+default ordering, explicit overlap, issue contention between two programs
+on one unit, cross-program wait/signal, terminal stop and cycle-limit
+cleanup (TestProgramRuntime, Part 2), and the new TestProgramAcceptance:
+issue contention with batch transactions (exact cycle outcomes), addressed
+memory composition inside a program (exact network + service windows),
+byte-identical repeated runs (full result JSON equality) and program-free
+digest stability (absent vs empty `programs` key yields identical plan and
+spec digests; program-free results carry an empty `programs` tuple).
+TestProgramNeutralVocabulary covers IP-07: forbidden tokens are rejected in
+program and operation identities, the new public modules scan clean, and a
+seeded violation in a copied module is detected.
+
+Documentation: `simulator_detailed/docs/generic_simulation.md` gains the
+"Instruction programs" section. Delivery recorded in `delivery.md` and
+`delivery-identities.json`.
+
+Final validation on this host (2026-09-23):
+
+```text
+.venv/bin/python -m unittest discover -s simulator_detailed/tests
+Ran 763 tests in 216.869s — OK (skipped=1)
+
+.venv/bin/python -m pyright --pythonpath .venv/bin/python \
+    --project simulator_detailed/pyrightconfig.phase2.json
+0 errors, 0 warnings, 0 informations
+
+.venv/bin/ruff check simulator_detailed/runtime_context.py \
+    simulator_detailed/system_compile.py \
+    simulator_detailed/configs/schemas/generic_transactions.py \
+    simulator_detailed/configs/schemas/system_spec.py \
+    simulator_detailed/tests/test_instruction_programs.py
+All checks passed!
+
+git diff --check — clean
+
+openspec validate generic-instruction-programs --strict
+Change 'generic-instruction-programs' is valid
+```

@@ -12,6 +12,6 @@
 
 ## 3. Public acceptance, documentation and delivery
 
-- [ ] 3.1 Add the independent public suite: serial default ordering, explicit-overlap, issue contention between two programs on one unit, contention with batch transactions, cross-program wait/signal, terminal-stop semantics, cycle-limit cleanup, compile rejections, addressed-memory composition, byte-identical repeats and program-free digest stability.
-- [ ] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
-- [ ] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking IP requirements to code/tests, and commit the final validated part locally without pushing or archiving.
+- [x] 3.1 Add the independent public suite: serial default ordering, explicit-overlap, issue contention between two programs on one unit, contention with batch transactions, cross-program wait/signal, terminal-stop semantics, cycle-limit cleanup, compile rejections, addressed-memory composition, byte-identical repeats and program-free digest stability.
+- [x] 3.2 Re-run the complete detailed suite, strict Pyright, the explicit affected Ruff scope, `git diff --check` and strict OpenSpec validation; record exact counts.
+- [x] 3.3 Update `docs/generic_simulation.md`, finalize `progress.md`, `delivery.md` and `delivery-identities.json` linking IP requirements to code/tests, and commit the final validated part locally without pushing or archiving.

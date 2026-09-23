@@ -222,3 +222,36 @@ byte-identical. Each decision emits a `route_select` trace event, and chosen
 hops appear in spans exactly like static hops. Dynamic paths compose with
 addressed memory accesses: a write services after the dynamically routed
 arrival, a read services before departure.
+
+## Instruction programs
+
+A transaction batch may additionally declare `programs`: named operation
+sequences, each bound to one execution unit as its sequencer. An operation
+is exactly one of the four existing kinds with the same field rules as a
+batch transaction (`transfer` may carry an `address`), plus an explicit
+`issue_cycles` dispatch cost. `depends_on` names earlier operations of the
+same program only — forward references are rejected, so programs are
+acyclic by construction; the default dependency is the immediately
+preceding operation, and an explicit (possibly empty) `depends_on` enables
+overlap. A program-level `start_cycles` sets the earliest issue time.
+
+Compilation expands every operation into the immutable plan as a
+namespaced transaction (`program_id/op_id`) with resolved dependencies,
+terminal classifications and counter bounds, so operations share the
+registry, event bus, cancellation, drain and abort semantics of batch
+transactions. At runtime one sequencer process per program issues
+operations in program order: once an operation's dependencies have
+completed, the sequencer occupies its unit for `issue_cycles` (emitting
+`issue_acquire`/`issue_release` trace events) and then starts the
+operation as its own process, so independent operations overlap while the
+default chain stays serial. Issue requests on one unit serialize in
+deterministic order and contend with any compute occupancy on that unit.
+A terminal-classified operation ends its program without running;
+remaining operations never issue and report `dependency_unsatisfied`.
+
+The result carries a derived `programs` tuple: a program is complete iff
+every operation completed, its start is the first operation's start and
+its end the last operation's end; an incomplete program mirrors the reason
+of the operation that stopped it. Program spans never override operation
+spans, and program-free batches are untouched — plans, digests and results
+are byte-identical with or without an empty `programs` key.

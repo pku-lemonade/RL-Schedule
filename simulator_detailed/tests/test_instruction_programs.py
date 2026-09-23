@@ -6,9 +6,12 @@ classification, counter bounds and digest determinism. Runtime behavior is
 covered by the sequencer tests in Part 2 (same file, later classes).
 """
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from simulator_detailed.configs.schemas.system_spec import SystemSpec
+from simulator_detailed.generic_adapter import scan_forbidden_tokens
 from simulator_detailed.runtime_context import RuntimeContext
 from simulator_detailed.system_compile import compile_system
 
@@ -114,10 +117,11 @@ def program(pid, ops, unit="eu0", start=0.0):
     }
 
 
-def compile_batch(batch_doc):
+def compile_batch(batch_doc, graph=None):
     spec = SystemSpec.model_validate({
         "kind": "system_spec", "schema_version": 1, "spec_id": "ip-spec",
-        "graph": small_graph(), "batch": batch_doc,
+        "graph": graph if graph is not None else small_graph(),
+        "batch": batch_doc,
     })
     return compile_system(spec)
 
@@ -397,6 +401,139 @@ class TestProgramRuntime(unittest.TestCase):
             event.action == "cancel" and event.transaction_id == "p0"
             for event in result.trace
         ))
+
+
+class TestProgramAcceptance(unittest.TestCase):
+    """Acceptance: batch contention, addressed memory, determinism."""
+
+    def run_batch(self, batch_doc, graph=None):
+        plan = compile_batch(batch_doc, graph)
+        return RuntimeContext(plan).run()
+
+    @staticmethod
+    def spans(result):
+        return {s.transaction_id: s for s in result.transactions}
+
+    def test_issue_contention_with_batch_transactions(self):
+        # Batch compute holds eu0 for 8 cycles; the program's issue waits.
+        result = self.run_batch(batch(
+            transactions=[{
+                "transaction_id": "t0", "kind": "compute", "unit_id": "eu0",
+                "duration_cycles": 8.0, "depends_on": [], "start_cycles": 0.0,
+            }],
+            programs=[program("p0", [
+                op_compute("a", unit="eu1", duration=1.0, issue_cycles=2.0),
+            ])],
+        ))
+        spans = self.spans(result)
+        self.assertEqual(
+            (spans["t0"].start_cycles, spans["t0"].end_cycles), (0.0, 8.0)
+        )
+        self.assertEqual(
+            (spans["p0/a"].start_cycles, spans["p0/a"].end_cycles), (10.0, 11.0)
+        )
+        acquire = next(
+            event for event in result.trace
+            if event.action == "issue_acquire" and event.transaction_id == "p0"
+        )
+        self.assertEqual(acquire.time_cycles, 8.0)
+        self.assertEqual(result.status, "complete")
+
+    def test_addressed_memory_composition(self):
+        graph = small_graph()
+        graph["memory_resources"][0]["hierarchy"] = {
+            "banks": 2, "stripe_bytes": 64, "latency_cycles": 3.0,
+            "ports": [
+                {"port_id": "mp0", "channel_id": "mc0", "command_cycles": 2.0},
+            ],
+            "channels": [{"channel_id": "mc0", "bytes_per_cycle": 8}],
+        }
+        result = self.run_batch(batch(programs=[program("p0", [
+            op_transfer(
+                "w", source="eu1", destination="mem_ep", payload=16, address=128
+            ),
+            op_compute("c", unit="eu1", duration=2.0),
+        ])]), graph)
+        spans = self.spans(result)
+        write = spans["p0/w"]
+        self.assertEqual(write.status, "complete")
+        # eu1->mem_ep over l12: serialize 2 (16 B at 10 B/cycle) + 1 hop,
+        # then command 2 and data service latency 3 + 2 (16 B at 8 B/cycle).
+        self.assertEqual(write.end_cycles, 10.0)
+        service = write.service
+        self.assertEqual(service.direction, "write")
+        self.assertEqual(service.command_start_cycles, 3.0)
+        self.assertEqual(service.service_end_cycles, 10.0)
+        self.assertEqual(
+            (spans["p0/c"].start_cycles, spans["p0/c"].end_cycles), (10.0, 12.0)
+        )
+        self.assertEqual(result.programs[0].end_cycles, 12.0)
+        self.assertEqual(result.status, "complete")
+
+    def test_repeat_runs_byte_identical(self):
+        doc = batch(
+            counters=[{"counter_id": "gate", "initial_value": 0}],
+            programs=[
+                program("p0", [
+                    op_compute("a", duration=3.0), op_transfer("t", payload=20),
+                ]),
+                program("p1", [op_signal("s"), op_wait("w")], unit="eu1"),
+            ],
+        )
+        first = self.run_batch(doc)
+        second = self.run_batch(doc)
+        self.assertEqual(first.status, "complete")
+        self.assertEqual(first.model_dump_json(), second.model_dump_json())
+
+    def test_program_free_digest_stability(self):
+        absent = batch(transactions=[idle_tx()])
+        absent.pop("programs")
+        present_empty = batch(transactions=[idle_tx()])
+        plan_absent = compile_batch(absent)
+        plan_empty = compile_batch(present_empty)
+        self.assertEqual(plan_absent.content.programs, ())
+        self.assertEqual(plan_empty.content.programs, ())
+        self.assertEqual(plan_absent.plan_sha256, plan_empty.plan_sha256)
+        self.assertEqual(plan_absent.spec_sha256, plan_empty.spec_sha256)
+        # A program-free result carries an empty programs tuple.
+        result = RuntimeContext(plan_absent).run()
+        self.assertEqual(result.programs, ())
+        self.assertEqual(result.status, "complete")
+
+
+class TestProgramNeutralVocabulary(unittest.TestCase):
+    """IP-07: denylist enforcement covers program identities and modules."""
+
+    def test_forbidden_tokens_rejected_in_program_identities(self):
+        with self.assertRaises(ValueError):
+            compile_batch(batch(programs=[
+                program("prog_galaxy", [op_compute("a")]),
+            ]))
+        with self.assertRaises(ValueError):
+            compile_batch(batch(programs=[
+                program("p0", [op_compute("op_galaxy")]),
+            ]))
+
+    def test_new_public_modules_carry_no_forbidden_tokens(self):
+        root = Path(__file__).resolve().parents[1]
+        files = [
+            root / "configs" / "schemas" / "generic_transactions.py",
+            root / "configs" / "schemas" / "system_spec.py",
+            root / "system_compile.py",
+            root / "runtime_context.py",
+            root / "docs" / "generic_simulation.md",
+        ]
+        self.assertEqual(scan_forbidden_tokens(files), ())
+
+    def test_seeded_violation_detected_in_new_modules(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "runtime_context.py").read_text()
+        with tempfile.TemporaryDirectory() as tmp:
+            seeded = Path(tmp) / "runtime_context.py"
+            seeded.write_text(source + "\n# galaxy\n")
+            findings = scan_forbidden_tokens([seeded])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].token, "galaxy")
 
 
 if __name__ == "__main__":
