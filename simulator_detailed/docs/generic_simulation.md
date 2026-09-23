@@ -25,8 +25,12 @@ nothing is device-derived and unknown fields fail validation.
 
 Identifiers must be synthetic. A case-insensitive denylist rejects real
 device and vendor tokens in every identifier. Validation rejects duplicate
-identities, dangling references, empty networks, occupied port halves and
-routes that are non-contiguous or revisit a node.
+identities, dangling references, empty networks, occupied port halves,
+routes that are non-contiguous or revisit a node, and routes that name
+endpoints attached to another network — every endpoint attaches to exactly
+one network, and a node shared by several networks is never an implied
+bridge. Compilation likewise rejects transfers whose source or destination
+is not attached to the transfer's network.
 
 Loading compiles the document into the canonical topology machinery and
 returns one unified `GenericSystem` object exposing network membership,
@@ -113,8 +117,9 @@ for private CI to check that no private identifier leaks into shared files.
   store-and-forward without cut-through.
 - Endpoint injection/ejection occupies no local-link time in this phase.
 - Incomplete transactions record no partial-hop progress.
-- Structural reference errors (unknown endpoints, units, networks) fail
-  before simulation; only viability failures appear inside results.
+- Structural reference errors (unknown endpoints, units, networks) and
+  cross-network endpoint references fail before simulation; only viability
+  failures appear inside results.
 - Model cycles come entirely from configured rates; no hardware timing claim
   is made or implied.
 
@@ -138,9 +143,22 @@ SystemSpec --compile_system()--> ImmutablePlan --RuntimeContext--> SimulationRes
   environment and time, one `ResourceRegistry`, one `EventBus`, transaction
   states, the deterministic trace and the error accounting, and executes all
   four transaction kinds in a single run. The registry builds each physical
-  resource at most once per plan, acquires multiple resources in sorted ID
-  order and releases everything on completion, failure or cancellation. The
-  bus owns named events and counted events; waits whose threshold exceeds the
+  resource at most once per plan. Multi-resource acquisition validates the
+  complete identity set before any request exists (unknown, duplicate or
+  empty identities are rejected) and is atomic: a waiter holds no member of
+  the set while waiting, so single-resource acquirers are never blocked by
+  partial holders. Requests are registered at creation and cancellable
+  while queued, and everything is released on completion, failure or
+  cancellation. Interrupts propagate through every service stage, so a
+  cancelled or timed-out transaction never continues business and never
+  reports completion. The run loop has explicit phases — business up to
+  `drained` or `max_cycles`, bounded cancellation cleanup, then a drain of
+  delayed credit returns — so a returned `drained` means no resource holds
+  or awaits ownership and the trace records the final releases, while
+  `completion_cycles` keeps its business-completion meaning. A runtime
+  exception aborts the run: in-flight work is cancelled, bounded cleanup
+  executes and a chained error is raised instead of any success result.
+  The bus owns named events and counted events; waits whose threshold exceeds the
   declared reachable bound are reported explicitly in the result error list.
 - The result additionally carries per-transaction `wait_cycles`,
   per-resource `queue_wait_cycles`, an `errors` list, a deterministic `trace`
@@ -172,8 +190,11 @@ Mapping is deterministic: `stripe = address // stripe_bytes`, bank =
 `stripe % banks`, port = `ports[stripe % len(ports)]`, channel = the port's
 bound channel. A write services after the network traversal arrives; a read
 services before departure. Command issue occupies the mapped port for
-`command_cycles`; data service then holds the mapped bank and channel for
-`latency_cycles + ceil(bytes / channel_bytes_per_cycle)`. Same bank
+`command_cycles`; data service then acquires the mapped bank and channel
+atomically (a waiter holds neither while queued) and holds them for
+`latency_cycles + ceil(bytes / channel_bytes_per_cycle)`. Interrupts in any
+stage propagate to the transaction layer: a cancelled access starts no
+later stage and leaves no held or queued ownership behind. Same bank
 serializes, different banks overlap, one port serializes commands, and one
 channel bounds aggregate data rate. Spans record the service window
 (`span.service`) and memory resources report busy/queue-wait/utilization

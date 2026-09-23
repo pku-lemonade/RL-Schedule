@@ -1,0 +1,53 @@
+{
+  "kind": "generic_runtime_correctness_delivery",
+  "schema_version": 1,
+  "recorded_at": "2026-09-23",
+  "progress": {
+    "complete": 10,
+    "total": 10,
+    "final_delivery": true
+  },
+  "pushed": false,
+  "archived": false,
+  "incremental_commits": [
+    "d2ac69c",
+    "393e58e"
+  ],
+  "verification": {
+    "full_suite": {
+      "discovered": 733,
+      "passed": 732,
+      "failed_or_errored": 0,
+      "skipped_optional": 1,
+      "elapsed_seconds": 234.1
+    },
+    "new_suite_pre_fix": "15 tests: 13 failures, 1 error, 1 pass (at d2ac69c)",
+    "new_suite_post_fix": "15 tests: 15 pass",
+    "pyright": "0 errors, 0 warnings, 0 informations (phase-2 project scope)",
+    "ruff": "All checks passed (six new/changed modules and tests)",
+    "openspec": "Change 'generic-runtime-correctness' is valid (strict)",
+    "environment": "Linux 6.1.0-35-amd64 x86_64, Python 3.12.12, SimPy 4.1.2, ruff 0.16.7"
+  },
+  "files": {
+    "runtime": [
+      "simulator_detailed/runtime_context.py",
+      "simulator_detailed/system_compile.py",
+      "simulator_detailed/configs/schemas/generic_graph.py"
+    ],
+    "tests": [
+      "simulator_detailed/tests/test_runtime_correctness.py",
+      "simulator_detailed/tests/test_generic_results.py",
+      "simulator_detailed/tests/test_unified_compile.py"
+    ],
+    "docs": [
+      "simulator_detailed/docs/generic_simulation.md"
+    ]
+  },
+  "requirements": {
+    "UR-R02": "atomic pre-validated multi-resource acquisition, register-at-creation, cancellable queued requests",
+    "UR-R05": "interrupt propagation, bounded cancellation cleanup, background drain, all-released invariant, honest abort",
+    "AM-04": "atomic bank+channel data service, cancellation propagates to the transaction layer",
+    "GS-G03": "static routes may name only endpoints attached to the route's network",
+    "UR-C01": "transfers may name only endpoints attached to the transfer's network"
+  }
+}
