@@ -6,9 +6,9 @@
 
 ## 2. Sequencer runtime
 
-- [ ] 2.1 Implement program processes: in-order issue with `issue_cycles` occupancy on the sequencer unit, `issue_acquire`/`issue_release` trace events, operation execution through the existing per-kind mechanics, and program-level `start_cycles`.
-- [ ] 2.2 Implement termination: terminal operations end the program with `dependency_unsatisfied` followers; interrupts unwind programs with full release; derive program spans and expose the additive `programs` result tuple.
-- [ ] 2.3 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
+- [x] 2.1 Implement program processes: in-order issue with `issue_cycles` occupancy on the sequencer unit, `issue_acquire`/`issue_release` trace events, operation execution through the existing per-kind mechanics, and program-level `start_cycles`.
+- [x] 2.2 Implement termination: terminal operations end the program with `dependency_unsatisfied` followers; interrupts unwind programs with full release; derive program spans and expose the additive `programs` result tuple.
+- [x] 2.3 Run focused runtime tests, strict Pyright, scoped Ruff and strict OpenSpec validation; update `progress.md` and commit Part 2.
 
 ## 3. Public acceptance, documentation and delivery
 

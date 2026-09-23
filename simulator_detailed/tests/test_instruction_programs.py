@@ -9,6 +9,7 @@ covered by the sequencer tests in Part 2 (same file, later classes).
 import unittest
 
 from simulator_detailed.configs.schemas.system_spec import SystemSpec
+from simulator_detailed.runtime_context import RuntimeContext
 from simulator_detailed.system_compile import compile_system
 
 
@@ -277,6 +278,125 @@ class TestProgramCompilation(unittest.TestCase):
         self.assertEqual(
             [t.transaction_id for t in plan.content.transactions], ["t_idle"],
         )
+
+
+class TestProgramRuntime(unittest.TestCase):
+    """Sequencer runtime: issue occupancy, overlap, termination, cleanup."""
+
+    def run_batch(self, batch_doc):
+        plan = compile_batch(batch_doc)
+        return RuntimeContext(plan).run()
+
+    @staticmethod
+    def spans(result):
+        return {s.transaction_id: s for s in result.transactions}
+
+    def test_serial_chain_timing(self):
+        result = self.run_batch(batch(programs=[program("p0", [
+            op_compute("a", duration=5.0), op_compute("b", duration=5.0),
+        ])]))
+        spans = self.spans(result)
+        self.assertEqual(spans["p0/a"].status, "complete")
+        self.assertEqual(spans["p0/b"].status, "complete")
+        self.assertEqual((spans["p0/a"].start_cycles, spans["p0/a"].end_cycles), (0.0, 5.0))
+        self.assertEqual((spans["p0/b"].start_cycles, spans["p0/b"].end_cycles), (5.0, 10.0))
+        prog = result.programs[0]
+        self.assertEqual((prog.status, prog.reason), ("complete", "completed"))
+        self.assertEqual((prog.start_cycles, prog.end_cycles), (0.0, 10.0))
+
+    def test_explicit_overlap_inside_program(self):
+        # Sequencer on eu1; the long compute occupies eu0 so issue is free.
+        result = self.run_batch(batch(programs=[program("p0", [
+            op_compute("a", duration=10.0),
+            op_compute("b", duration=1.0, unit="eu1", depends_on=[]),
+            op_compute("c", duration=1.0, unit="eu1"),
+        ], unit="eu1")]))
+        spans = self.spans(result)
+        self.assertEqual(spans["p0/a"].start_cycles, 0.0)
+        self.assertEqual(spans["p0/b"].start_cycles, 0.0)
+        self.assertEqual(spans["p0/b"].end_cycles, 1.0)
+        self.assertEqual((spans["p0/c"].start_cycles, spans["p0/c"].end_cycles), (1.0, 2.0))
+        self.assertEqual(result.programs[0].end_cycles, 10.0)
+        self.assertEqual(result.status, "complete")
+
+    def test_issue_occupancy_never_overlaps_on_shared_unit(self):
+        result = self.run_batch(batch(programs=[
+            program("p0", [
+                op_compute("a", duration=1.0, issue_cycles=2.0),
+                op_compute("c", duration=1.0, issue_cycles=2.0),
+            ]),
+            program("p1", [op_compute("b", duration=1.0, issue_cycles=2.0)]),
+        ]))
+        self.assertEqual(result.status, "complete")
+        holder = None
+        acquisitions = 0
+        for event in result.trace:
+            if event.action == "issue_acquire":
+                self.assertIsNone(holder)
+                holder = event.transaction_id
+                acquisitions += 1
+            elif event.action == "issue_release":
+                self.assertEqual(holder, event.transaction_id)
+                holder = None
+        self.assertEqual(acquisitions, 3)
+        self.assertIsNone(holder)
+
+    def test_wait_signal_across_programs(self):
+        result = self.run_batch(batch(
+            counters=[{"counter_id": "gate", "initial_value": 0}],
+            programs=[
+                program("w", [op_wait("w1"), op_compute("c", duration=2.0)], unit="eu1"),
+                program("s", [op_signal("s1")], unit="eu0", start=7.0),
+            ],
+        ))
+        spans = self.spans(result)
+        self.assertEqual(spans["s/s1"].status, "complete")
+        self.assertEqual(spans["w/w1"].status, "complete")
+        self.assertGreaterEqual(spans["w/w1"].end_cycles, spans["s/s1"].end_cycles)
+        self.assertEqual(
+            (spans["w/c"].start_cycles, spans["w/c"].end_cycles),
+            (spans["w/w1"].end_cycles, spans["w/w1"].end_cycles + 2.0),
+        )
+        progs = {p.program_id: p for p in result.programs}
+        self.assertEqual(progs["w"].status, "complete")
+        self.assertEqual(progs["s"].status, "complete")
+
+    def test_terminal_operation_stops_program(self):
+        result = self.run_batch(batch(programs=[program("p0", [
+            op_compute("before", duration=1.0),
+            op_transfer("no_route", destination="mem_ep"),
+            op_compute("after", duration=1.0),
+        ])]))
+        spans = self.spans(result)
+        self.assertEqual(spans["p0/before"].status, "complete")
+        self.assertEqual(spans["p0/no_route"].reason, "route_unreachable")
+        self.assertEqual(spans["p0/after"].reason, "dependency_unsatisfied")
+        prog = result.programs[0]
+        self.assertEqual(prog.status, "incomplete")
+        self.assertEqual(prog.reason, "route_unreachable")
+        self.assertEqual(prog.start_cycles, 0.0)
+        self.assertIsNone(prog.end_cycles)
+
+    def test_cycle_limit_interrupts_program_and_releases(self):
+        result = self.run_batch(batch(
+            max_cycles=10.0,
+            programs=[program("p0", [
+                op_compute("long", duration=100.0),
+                op_compute("never"),
+            ])],
+        ))
+        spans = self.spans(result)
+        self.assertEqual(spans["p0/long"].status, "incomplete")
+        self.assertEqual(spans["p0/long"].reason, "cycle_limit")
+        self.assertEqual(spans["p0/never"].reason, "dependency_unsatisfied")
+        prog = result.programs[0]
+        self.assertEqual((prog.status, prog.reason), ("incomplete", "cycle_limit"))
+        self.assertIsNone(prog.start_cycles)
+        self.assertIsNone(prog.end_cycles)
+        self.assertTrue(any(
+            event.action == "cancel" and event.transaction_id == "p0"
+            for event in result.trace
+        ))
 
 
 if __name__ == "__main__":

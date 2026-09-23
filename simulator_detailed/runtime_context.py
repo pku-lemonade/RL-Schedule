@@ -25,6 +25,7 @@ from .configs.schemas.generic_transactions import (
     GenericHopSpan,
     GenericLinkTiming,
     GenericMemoryServiceSpan,
+    GenericProgramSpan,
     GenericResourceUsage,
     GenericSimulationResult,
     GenericTraceEvent,
@@ -33,8 +34,10 @@ from .configs.schemas.generic_transactions import (
 from .configs.schemas.system_spec import (
     ImmutablePlan,
     PlanCompute,
+    PlanInstructionProgram,
     PlanMemoryService,
     PlanSignal,
+    PlanTransaction,
     PlanTransfer,
     PlanWait,
 )
@@ -43,7 +46,7 @@ TraceAction = Literal[
     "credit_acquire", "credit_release", "serialize_start", "serialize_end",
     "hop_arrive", "unit_acquire", "unit_release", "counter_publish",
     "wait_resume", "cancel", "memory_command", "memory_service_start",
-    "memory_service_end", "route_select",
+    "memory_service_end", "route_select", "issue_acquire", "issue_release",
 ]
 
 
@@ -257,6 +260,9 @@ class RuntimeContext:
             tx.transaction_id: tx.terminal
             for tx in self.plan.content.transactions
             if isinstance(tx, PlanTransfer) and tx.terminal is not None
+        }
+        self._plan_transactions: dict[str, PlanTransaction] = {
+            tx.transaction_id: tx for tx in self.plan.content.transactions
         }
         self._dynamic: dict[str, _DynamicRuntime] = {}
         for network in self.plan.content.dynamic_networks:
@@ -634,6 +640,67 @@ class RuntimeContext:
         except simpy.Interrupt:
             pass
 
+    def _dispatch(self, transaction: PlanTransaction) -> ProcessGenerator:
+        """Run one plan transaction through its per-kind mechanics."""
+        if isinstance(transaction, PlanTransfer):
+            yield from self._transfer(transaction)
+        elif isinstance(transaction, PlanCompute):
+            yield from self._compute(transaction)
+        elif isinstance(transaction, PlanWait):
+            yield from self._wait(transaction)
+        else:
+            yield from self._signal(transaction)
+
+    def _program(
+        self,
+        program: PlanInstructionProgram,
+        processes: dict[str, simpy.Process],
+    ) -> ProcessGenerator:
+        """Sequencer: dependency-gated issue, asynchronous execution.
+
+        Each operation becomes its own registered process once its
+        dependencies have completed, so independent operations of one
+        program overlap while the default previous-operation dependency
+        keeps a serial chain; execution mechanics stay the per-kind
+        bodies, and cancellation covers spawned operations through the
+        shared process registry. The sequencer unit is held only for
+        `issue_cycles` per operation, so a program never occupies its
+        unit while waiting on data, dependencies or counters; operations
+        on one unit still issue in deterministic request order. A
+        terminal operation ends the program without running; the
+        remaining operations never issue and report
+        `dependency_unsatisfied`.
+        """
+        try:
+            if program.start_cycles > self.env.now:
+                yield self.env.timeout(program.start_cycles - self.env.now)
+            entry = self.registry.get(program.unit_id)
+            for op in program.ops:
+                transaction = self._plan_transactions[op.transaction_id]
+                if transaction.transaction_id in self._terminal:
+                    break
+                for dependency in transaction.depends_on:
+                    yield self._done[dependency]
+                issue_granted = yield from self.registry.acquire_all(
+                    (program.unit_id,)
+                )
+                self._emit("issue_acquire", program.program_id, program.unit_id)
+                issue_start = float(self.env.now)
+                try:
+                    if op.issue_cycles > 0:
+                        yield self.env.timeout(op.issue_cycles)
+                finally:
+                    issue_end = float(self.env.now)
+                    entry.busy_cycles += issue_end - issue_start
+                    entry.service_count += 1
+                    self.registry.release_all(issue_granted)
+                    self._emit("issue_release", program.program_id, program.unit_id)
+                processes[op.transaction_id] = self.env.process(
+                    self._dispatch(transaction)
+                )
+        except simpy.Interrupt:
+            pass
+
     def _cancel_processes(self, processes: dict[str, simpy.Process]) -> None:
         """Interrupt every unfinished business process in plan order."""
         for transaction_id, process in processes.items():
@@ -679,19 +746,25 @@ class RuntimeContext:
         ) from exc
 
     def run(self) -> GenericSimulationResult:
+        op_ids = frozenset(
+            op.transaction_id
+            for program in self.plan.content.programs
+            for op in program.ops
+        )
         processes: dict[str, simpy.Process] = {}
         for transaction in self.plan.content.transactions:
             self._done[transaction.transaction_id] = self.env.event()
             if transaction.transaction_id in self._terminal:
                 continue
-            if isinstance(transaction, PlanTransfer):
-                processes[transaction.transaction_id] = self.env.process(self._transfer(transaction))
-            elif isinstance(transaction, PlanCompute):
-                processes[transaction.transaction_id] = self.env.process(self._compute(transaction))
-            elif isinstance(transaction, PlanWait):
-                processes[transaction.transaction_id] = self.env.process(self._wait(transaction))
-            else:
-                processes[transaction.transaction_id] = self.env.process(self._signal(transaction))
+            if transaction.transaction_id in op_ids:
+                continue
+            processes[transaction.transaction_id] = self.env.process(
+                self._dispatch(transaction)
+            )
+        for program in self.plan.content.programs:
+            processes[program.program_id] = self.env.process(
+                self._program(program, processes)
+            )
         pending = tuple(
             event
             for transaction_id, event in self._done.items()
@@ -759,6 +832,41 @@ class RuntimeContext:
                 code=reason,
                 message=self._incomplete_message(transaction, reason),
             ))
+        span_by_id = {span.transaction_id: span for span in spans}
+        program_spans: list[GenericProgramSpan] = []
+        for program in self.plan.content.programs:
+            op_spans = [span_by_id[op.transaction_id] for op in program.ops]
+            starts = [
+                span.start_cycles
+                for span in op_spans
+                if span.start_cycles is not None
+            ]
+            if all(span.status == "complete" for span in op_spans):
+                ends = [
+                    span.end_cycles
+                    for span in op_spans
+                    if span.end_cycles is not None
+                ]
+                program_spans.append(GenericProgramSpan(
+                    program_id=program.program_id,
+                    unit_id=program.unit_id,
+                    status="complete",
+                    reason="completed",
+                    start_cycles=min(starts),
+                    end_cycles=max(ends),
+                ))
+            else:
+                stopped = next(
+                    span for span in op_spans if span.status == "incomplete"
+                )
+                program_spans.append(GenericProgramSpan(
+                    program_id=program.program_id,
+                    unit_id=program.unit_id,
+                    status="incomplete",
+                    reason=stopped.reason,
+                    start_cycles=min(starts) if starts else None,
+                    end_cycles=None,
+                ))
         completed = [span.end_cycles for span in spans if span.end_cycles is not None]
         completion = max(completed) if completed else None
         complete = all(span.status == "complete" for span in spans)
@@ -787,6 +895,7 @@ class RuntimeContext:
             graph_sha256=self.plan.content.graph_sha256,
             batch_sha256=self.plan.content.batch_sha256,
             transactions=tuple(spans),
+            programs=tuple(program_spans),
             resources=resources,
             counters=self.bus.counters(),
             errors=tuple(errors),
