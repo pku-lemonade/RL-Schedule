@@ -1,4 +1,4 @@
-"""Unified RuntimeContext: one context executes transfer/compute/wait/signal.
+"""Unified RuntimeContext: one context executes legacy and whole-operation services.
 
 The context owns the SimPy environment and time, one ResourceRegistry, one
 EventBus, transaction states, a deterministic trace and metrics, and the
@@ -30,6 +30,8 @@ from .configs.schemas.generic_transactions import (
     GenericSimulationResult,
     GenericTraceEvent,
     GenericTransactionSpan,
+    GenericWholeOperationSpan,
+    GenericResultSpan,
 )
 from .configs.schemas.system_spec import (
     ImmutablePlan,
@@ -40,6 +42,7 @@ from .configs.schemas.system_spec import (
     PlanTransaction,
     PlanTransfer,
     PlanWait,
+    PlanWholeOperation,
 )
 
 TraceAction = Literal[
@@ -47,6 +50,7 @@ TraceAction = Literal[
     "hop_arrive", "unit_acquire", "unit_release", "counter_publish",
     "wait_resume", "cancel", "memory_command", "memory_service_start",
     "memory_service_end", "route_select", "issue_acquire", "issue_release",
+    "operation_start", "operation_end",
 ]
 
 
@@ -244,14 +248,14 @@ class _CounterRuntime:
 
 
 class RuntimeContext:
-    """One environment, one registry, one bus, all four transaction kinds."""
+    """One environment, one registry, one bus, all transaction kinds."""
 
     def __init__(self, plan: ImmutablePlan):
         self.plan = ImmutablePlan.model_validate(plan.model_dump(mode="json"))
         self.env = simpy.Environment()
         self.registry = ResourceRegistry(self.env, self.plan)
         self.bus = EventBus(self.env, self.plan)
-        self._spans: dict[str, GenericTransactionSpan] = {}
+        self._spans: dict[str, GenericResultSpan] = {}
         self._done: dict[str, Event] = {}
         self._trace: list[GenericTraceEvent] = []
         self._sequence = 0
@@ -640,9 +644,29 @@ class RuntimeContext:
         except simpy.Interrupt:
             pass
 
+    def _operation(self, transaction: PlanWholeOperation) -> ProcessGenerator:
+        """One isolated interval; no link, compute or memory engagement."""
+        try:
+            yield from self._start(transaction.depends_on, transaction.start_cycles)
+            start = float(self.env.now)
+            cost = transaction.operation_cost
+            self._emit("operation_start", transaction.transaction_id, detail=cost.provider_ref)
+            yield self.env.timeout(cost.duration_cycles)
+            self._emit("operation_end", transaction.transaction_id, detail=cost.provider_ref)
+            self._spans[transaction.transaction_id] = GenericWholeOperationSpan(
+                transaction_id=transaction.transaction_id, kind="whole_operation",
+                status="complete", reason="completed", start_cycles=start,
+                end_cycles=float(self.env.now), wait_cycles=0.0, operation_cost=cost,
+            )
+            self._done[transaction.transaction_id].succeed()
+        except simpy.Interrupt:
+            pass
+
     def _dispatch(self, transaction: PlanTransaction) -> ProcessGenerator:
         """Run one plan transaction through its per-kind mechanics."""
-        if isinstance(transaction, PlanTransfer):
+        if isinstance(transaction, PlanWholeOperation):
+            yield from self._operation(transaction)
+        elif isinstance(transaction, PlanTransfer):
             yield from self._transfer(transaction)
         elif isinstance(transaction, PlanCompute):
             yield from self._compute(transaction)
@@ -789,7 +813,7 @@ class RuntimeContext:
                 "refusing to report a result"
             )
 
-        spans: list[GenericTransactionSpan] = []
+        spans: list[GenericResultSpan] = []
         errors: list[GenericErrorRecord] = []
         for transaction in self.plan.content.transactions:
             terminal_reason = self._terminal.get(transaction.transaction_id)
@@ -819,14 +843,21 @@ class RuntimeContext:
             reason: Literal["cycle_limit", "dependency_unsatisfied"] = (
                 "dependency_unsatisfied" if unsatisfied else "cycle_limit"
             )
-            spans.append(GenericTransactionSpan(
-                transaction_id=transaction.transaction_id,
-                kind=transaction.kind,
-                status="incomplete",
-                reason=reason,
-                start_cycles=None,
-                end_cycles=None,
-            ))
+            if isinstance(transaction, PlanWholeOperation):
+                spans.append(GenericWholeOperationSpan(
+                    transaction_id=transaction.transaction_id, kind="whole_operation",
+                    status="incomplete", reason=reason, start_cycles=None, end_cycles=None,
+                    operation_cost=transaction.operation_cost,
+                ))
+            else:
+                spans.append(GenericTransactionSpan(
+                    transaction_id=transaction.transaction_id,
+                    kind=transaction.kind,
+                    status="incomplete",
+                    reason=reason,
+                    start_cycles=None,
+                    end_cycles=None,
+                ))
             errors.append(GenericErrorRecord(
                 transaction_id=transaction.transaction_id,
                 code=reason,
@@ -901,6 +932,11 @@ class RuntimeContext:
             errors=tuple(errors),
             trace=tuple(self._trace),
             plan_sha256=self.plan.plan_sha256,
+            execution=(
+                "generic_operation_service" if all(s.kind == "whole_operation" for s in spans)
+                else "generic_mixed_service" if any(s.kind == "whole_operation" for s in spans)
+                else "generic_packet_transport"
+            ),
         )
 
     def _terminal_message(
@@ -920,7 +956,7 @@ class RuntimeContext:
 
     def _incomplete_message(
         self,
-        transaction: PlanTransfer | PlanCompute | PlanWait | PlanSignal,
+        transaction: PlanTransaction,
         reason: Literal["cycle_limit", "dependency_unsatisfied"],
     ) -> str:
         if reason == "dependency_unsatisfied":

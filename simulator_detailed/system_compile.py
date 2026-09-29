@@ -1,4 +1,4 @@
-"""Pure `compile_system`: SystemSpec -> ImmutablePlan.
+"""`compile_system`: SystemSpec and optional cost registry -> ImmutablePlan.
 
 Compilation revalidates the input, checks every entity/resource/port/
 attachment/fabric/transaction reference, resolves routes and effective link
@@ -23,7 +23,10 @@ from .configs.schemas.generic_transactions import (
     GenericSignal,
     GenericTransfer,
     GenericWait,
+    GenericWholeOperation,
 )
+from .configs.schemas.operation_cost import OperationCostRequest
+from .operation_cost import OperationCostRegistry
 from .configs.schemas.system_spec import (
     ImmutablePlan,
     PlanCompute,
@@ -42,6 +45,7 @@ from .configs.schemas.system_spec import (
     PlanTransaction,
     PlanTransfer,
     PlanWait,
+    PlanWholeOperation,
     SystemSpec,
 )
 from .generic_graph import generic_digest, normalize_generic
@@ -64,8 +68,14 @@ def _bfs_distances(links: list[GenericLink], destination: str) -> dict[str, int]
     return distances
 
 
-def compile_system(spec: SystemSpec) -> ImmutablePlan:
-    """Validate and freeze one system spec into an immutable plan; pure."""
+def compile_system(
+    spec: SystemSpec, *, operation_costs: OperationCostRegistry | None = None,
+) -> ImmutablePlan:
+    """Validate and freeze; explicit whole operations quote once at compile time.
+
+    Providers are caller-supplied capabilities. Legacy compilation remains
+    pure; whole-operation compilation depends on the registered quote.
+    """
     spec = SystemSpec.model_validate(spec.model_dump(mode="json"))
     graph = normalize_generic(spec.graph)
     batch = spec.batch
@@ -312,7 +322,17 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
     for transaction in batch.transactions:
         depends_on = tuple(transaction.depends_on)
         start_cycles = transaction.start_cycles
-        if isinstance(transaction, GenericTransfer):
+        if isinstance(transaction, GenericWholeOperation):
+            if operation_costs is None:
+                raise ValueError("whole operation requires an operation cost registry")
+            cost = operation_costs.compile(transaction.provider_ref, OperationCostRequest(
+                operation_id=transaction.transaction_id, domain=transaction.domain,
+            ))
+            transactions.append(PlanWholeOperation(
+                transaction_id=transaction.transaction_id, kind="whole_operation",
+                depends_on=depends_on, start_cycles=start_cycles, operation_cost=cost,
+            ))
+        elif isinstance(transaction, GenericTransfer):
             transactions.append(transfer_plan(
                 transaction.transaction_id,
                 transaction.network_id,
@@ -478,8 +498,10 @@ def compile_system(spec: SystemSpec) -> ImmutablePlan:
         dynamic_networks=tuple(dynamic_tables),
         programs=tuple(programs),
         max_cycles=batch.max_cycles,
+        runtime_clock=normalized_spec.runtime_clock,
     )
     return ImmutablePlan(
+        schema_version=normalized_spec.schema_version,
         spec_sha256=content_digest(normalized_spec.model_dump(mode="json")),
         content=content,
         plan_sha256=content_digest(content.model_dump(mode="json")),

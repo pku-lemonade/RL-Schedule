@@ -1,6 +1,7 @@
 """Neutral generic transaction batches and simulation results.
 
-Exactly four transaction kinds exist: transfer, compute, wait and signal.
+Transfer, compute, wait and signal retain their existing timing paths.
+An explicit whole_operation transaction selects a registered cost provider.
 Timing fields use neutral `cycles` names with explicit per-network rates; no
 device-era units or defaults appear. Wait/signal dependencies are counters:
 signals add deltas, waits complete when the counter reaches a threshold.
@@ -13,6 +14,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_validator
 
 from .generic_graph import NeutralId
+from .operation_cost import CompiledOperationCost, OperationDomain
 from .topology import (
     Cycles,
     Digest,
@@ -101,8 +103,16 @@ class GenericSignal(GenericTransactionBase):
     delta: PositiveInt
 
 
+class GenericWholeOperation(GenericTransactionBase):
+    """Explicit isolated service, without transfer or compute resource claims."""
+
+    kind: Literal["whole_operation"]
+    provider_ref: NeutralId
+    domain: OperationDomain
+
+
 GenericTransaction = Annotated[
-    GenericTransfer | GenericCompute | GenericWait | GenericSignal,
+    GenericTransfer | GenericCompute | GenericWait | GenericSignal | GenericWholeOperation,
     Field(discriminator="kind"),
 ]
 
@@ -195,7 +205,7 @@ class GenericTransactionBatch(GraphRecord):
     schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
     batch_id: NeutralId
     graph_path: NeutralId | None = None
-    timing: tuple[GenericNetworkTiming, ...] = Field(min_length=1)
+    timing: tuple[GenericNetworkTiming, ...]
     counters: tuple[GenericCounter, ...] = ()
     transactions: tuple[GenericTransaction, ...] = ()
     programs: tuple[GenericInstructionProgram, ...] = ()
@@ -203,6 +213,10 @@ class GenericTransactionBatch(GraphRecord):
 
     @model_validator(mode="after")
     def references(self) -> Self:
+        if not self.timing and (self.programs or any(
+            not isinstance(t, GenericWholeOperation) for t in self.transactions
+        )):
+            raise ValueError("network timing is required outside whole-operation-only batches")
         unique(tuple(t.network_id for t in self.timing), "timing network")
         unique(tuple(c.counter_id for c in self.counters), "counter identity")
         if not self.transactions and not self.programs:
@@ -307,9 +321,9 @@ class GenericMemoryServiceSpan(GraphRecord):
     service_end_cycles: Cycles
 
 
-class GenericTransactionSpan(GraphRecord):
+class GenericSpanBase(GraphRecord):
     transaction_id: NeutralId
-    kind: Literal["transfer", "compute", "wait", "signal"]
+    kind: Literal["transfer", "compute", "wait", "signal", "whole_operation"]
     status: Literal["complete", "incomplete"]
     reason: Literal[
         "completed",
@@ -345,6 +359,32 @@ class GenericTransactionSpan(GraphRecord):
         if self.service is not None and self.kind != "transfer":
             raise ValueError("only transfer spans record memory service")
         return self
+
+
+class GenericTransactionSpan(GenericSpanBase):
+    """Existing result shape, unchanged for all original transaction kinds."""
+
+    kind: Literal["transfer", "compute", "wait", "signal"]
+
+
+class GenericWholeOperationSpan(GenericSpanBase):
+    kind: Literal["whole_operation"]
+    operation_cost: CompiledOperationCost
+
+    @model_validator(mode="after")
+    def operation_scope(self) -> Self:
+        if self.operation_cost.quote.operation_id != self.transaction_id:
+            raise ValueError("operation span scope does not match its quote")
+        if self.status == "complete" and (
+            self.end_cycles != self.start_cycles + self.operation_cost.duration_cycles
+        ):
+            raise ValueError("operation span duration does not match its quote")
+        return self
+
+
+GenericResultSpan = Annotated[
+    GenericTransactionSpan | GenericWholeOperationSpan, Field(discriminator="kind"),
+]
 
 
 class GenericProgramSpan(GraphRecord):
@@ -435,6 +475,8 @@ class GenericTraceEvent(GraphRecord):
         "route_select",
         "issue_acquire",
         "issue_release",
+        "operation_start",
+        "operation_end",
     ]
     transaction_id: NeutralId | None = None
     resource_id: NeutralId | None = None
@@ -453,14 +495,16 @@ class GenericSimulationResult(GraphRecord):
     completion_cycles: Cycles | None
     graph_sha256: Digest
     batch_sha256: Digest
-    transactions: tuple[GenericTransactionSpan, ...]
+    transactions: tuple[GenericResultSpan, ...]
     programs: tuple[GenericProgramSpan, ...] = ()
     resources: tuple[GenericResourceUsage, ...]
     counters: tuple[GenericCounterState, ...]
     errors: tuple[GenericErrorRecord, ...] = ()
     trace: tuple[GenericTraceEvent, ...] = ()
     plan_sha256: Digest | None = None
-    execution: Literal["generic_packet_transport"] = "generic_packet_transport"
+    execution: Literal[
+        "generic_packet_transport", "generic_operation_service", "generic_mixed_service",
+    ] = "generic_packet_transport"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
 
     @model_validator(mode="after")
@@ -468,6 +512,14 @@ class GenericSimulationResult(GraphRecord):
         """Corrupted or partial outputs must fail revalidation."""
         if not self.transactions:
             raise ValueError("an empty transaction set cannot report a result")
+        operations = tuple(s.kind == "whole_operation" for s in self.transactions)
+        expected_execution = (
+            "generic_operation_service" if all(operations)
+            else "generic_mixed_service" if any(operations)
+            else "generic_packet_transport"
+        )
+        if self.execution != expected_execution:
+            raise ValueError("execution mode disagrees with transaction kinds")
         complete = tuple(s.status == "complete" for s in self.transactions)
         if self.status == "complete":
             if not all(complete):

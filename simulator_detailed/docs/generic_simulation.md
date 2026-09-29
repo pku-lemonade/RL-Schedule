@@ -1,4 +1,4 @@
-# Generic system graphs, four-kind transactions and adapters
+# Generic system graphs, transactions and adapters
 
 The generic layer describes and simulates neutral systems that carry no real
 device or vendor vocabulary. It is the supported way to model private
@@ -49,8 +49,8 @@ also dispatches generic graph documents.
 
 ## Transaction batches
 
-`kind: generic_transaction_batch`, `schema_version: 1`. Exactly four
-transaction kinds exist:
+`kind: generic_transaction_batch`, `schema_version: 1`. The four original
+transaction kinds keep their behavior; whole-operation service is explicit:
 
 | Kind | Effect |
 | --- | --- |
@@ -58,6 +58,7 @@ transaction kinds exist:
 | `compute` | Holds `unit_id` exclusively for `duration_cycles` |
 | `wait` | Completes when `counter_id` first reaches `threshold` |
 | `signal` | Adds `delta` to `counter_id` |
+| `whole_operation` | Runs one isolated interval from an explicitly registered cost provider |
 
 `timing` declares explicit per-network link rates (`bytes_per_cycle`,
 `hop_cycles`, `credit_return_cycles`, `buffer_slots`) with optional per-link
@@ -134,15 +135,17 @@ SystemSpec --compile_system()--> ImmutablePlan --RuntimeContext--> SimulationRes
 
 - `SystemSpec` (`kind: system_spec`, v1) composes one graph document with one
   transaction batch. `compile_system(spec)` in `simulator_detailed.system_compile`
-  is pure: it validates every entity, resource, port, attachment, fabric and
+  is pure for the original transaction kinds: it validates every entity, resource, port, attachment, fabric and
   transaction reference, resolves routes and effective timings, classifies
   terminal transfers, computes counter reachability bounds and returns an
-  immutable, content-addressed plan. Identical input yields identical plans
-  and digests; compilation creates no simulation objects.
+  immutable, content-addressed plan. Identical legacy input yields identical plans
+  and digests; compilation creates no simulation objects. Whole-operation plans
+  also depend on the registered contract, conversion and returned quote, all of
+  which are included in the plan digest.
 - `RuntimeContext` (`simulator_detailed.runtime_context`) holds the
   environment and time, one `ResourceRegistry`, one `EventBus`, transaction
   states, the deterministic trace and the error accounting, and executes all
-  four transaction kinds in a single run. The registry builds each physical
+  supported transaction kinds in a single run. The registry builds each physical
   resource at most once per plan. Multi-resource acquisition validates the
   complete identity set before any request exists (unknown, duplicate or
   empty identities are rejected) and is atomic: a waiter holds no member of
@@ -255,3 +258,66 @@ its end the last operation's end; an incomplete program mirrors the reason
 of the operation that stopped it. Program spans never override operation
 spans, and program-free batches are untouched — plans, digests and results
 are byte-identical with or without an empty `programs` key.
+
+## Explicit whole-operation service
+
+This opt-in transaction is separate from `transfer` and `compute`:
+
+```json
+{
+  "transaction_id": "job_a",
+  "kind": "whole_operation",
+  "provider_ref": "provider_a",
+  "domain": {"operation_kind": "job", "domain_id": "case_v1"},
+  "depends_on": [],
+  "start_cycles": 0
+}
+```
+
+`domain_id` identifies the complete workload/configuration revision. The
+compiler checks exact domain identity, not physical suitability of a model.
+No untyped parameters or implicit topology, endpoint or memory effects exist.
+Only top-level transactions support this kind; instruction programs keep
+their original four kinds. A whole-operation-only batch may explicitly use
+`timing: []`; mixed batches retain the original network timing requirements.
+
+Caller code supplies an `OperationCostRegistry` from
+`simulator_detailed.operation_cost`. Call `register(provider, contract=...,
+conversion=...)` with `OperationCostContract` and `OperationCycleConversion`
+from `configs.schemas.operation_cost`. Registration takes a frozen contract
+snapshot without calling the provider. Each explicitly selected transaction
+calls `provider.quote(OperationCostRequest)` once during `compile_system(spec,
+operation_costs=registry)`. The function/class/adapter compatibility shims
+accept the same optional keyword. The CLI does not discover or load providers.
+
+A quote is an `OperationCostQuote` or a matching dictionary. It must carry
+`quantity: service_duration`, `scope: whole_operation`, the requested operation
+ID, unit, domain, provenance (`provider_ref`, `revision`, `evidence_ref`), a
+positive finite value, and `service_semantics: isolated_service_duration`.
+Unit/domain/provenance must equal the registered contract. Unknown fields,
+bool-valued numbers, unknown units and incompatible semantics are rejected.
+Ordinary provider exceptions propagate before a runtime environment exists.
+
+Conversion is mandatory, including identity conversion. It names a reference,
+source unit, target `{kind: cycle, name: cycle, clock_domain: generic_runtime}`,
+positive integer numerator/denominator, evidence reference and `rounding: ceil`.
+The compiler uses exact rational multiplication and rounds upward once for the
+whole duration. Unit or clock names alone supply no conversion. Values and
+converted cycle counts are bounded by `2**53`. The only semantic adaptation is
+`isolated_service_duration` to `isolated_completion`; arbitrary costs,
+timestamps, throughputs and contended elapsed times are not supported.
+
+`RuntimeContext` contains no provider and never quotes. It respects earliest
+start/dependencies, waits once for the compiled duration, and emits only
+`operation_start`/`operation_end` with the provider reference in `detail`.
+On cycle-limit cancellation it emits no completion and retains the quote as
+admission evidence. No hop, credit, compute occupancy or memory-service event
+is created for the operation. Independent operations may overlap; shared
+resource contention and physical execution are not modeled by this service.
+
+The operation span carries `operation_cost` (quote, conversion, provider
+reference and duration). Result `execution` is `generic_operation_service` for
+operation-only batches or `generic_mixed_service` for mixed batches. Legacy
+results remain `generic_packet_transport`; their serialized shapes and digests
+are unchanged. Replaying the frozen plan uses the admitted quote, not a fresh
+measurement. No concrete external provider or hardware calibration is shipped.

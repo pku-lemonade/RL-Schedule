@@ -22,6 +22,7 @@ from .configs.schemas.generic_transactions import (
 )
 from .generic_graph import topology_from_generic
 from .generic_runtime import run_generic_batch
+from .operation_cost import OperationCostRegistry
 
 
 class GenericInputAdapter(ABC):
@@ -36,7 +37,9 @@ class GenericInputAdapter(ABC):
         """Return the converted transaction batch; the boundary revalidates it."""
 
 
-def run_generic_adapter(adapter: GenericInputAdapter) -> GenericSimulationResult:
+def run_generic_adapter(
+    adapter: GenericInputAdapter, *, operation_costs: OperationCostRegistry | None = None,
+) -> GenericSimulationResult:
     """Revalidate both documents, compile the graph and execute the batch."""
     graph = GenericSystemGraph.model_validate(
         adapter.load_system_graph().model_dump(mode="json", round_trip=True)
@@ -44,7 +47,7 @@ def run_generic_adapter(adapter: GenericInputAdapter) -> GenericSimulationResult
     batch = GenericTransactionBatch.model_validate(
         adapter.load_transactions().model_dump(mode="json", round_trip=True)
     )
-    return run_generic_batch(topology_from_generic(graph), batch)
+    return run_generic_batch(topology_from_generic(graph), batch, operation_costs=operation_costs)
 
 
 @dataclass(frozen=True)

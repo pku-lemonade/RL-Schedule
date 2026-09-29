@@ -12,11 +12,13 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from ...topology import content_digest
 from .generic_graph import GenericSystemGraph, NeutralId
 from .generic_transactions import GenericLinkTiming, GenericTransactionBatch
+from .operation_cost import CompiledOperationCost
+from .generic_timebase import GenericClockDomain, validate_clock_conversion
 from .topology import (
     Cycles,
     Digest,
@@ -32,10 +34,24 @@ class SystemSpec(GraphRecord):
     """The single compile input: one graph plus one transaction batch."""
 
     kind: Literal["system_spec"]
-    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)]
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=2)]
     spec_id: NeutralId
     graph: GenericSystemGraph
     batch: GenericTransactionBatch
+    runtime_clock: GenericClockDomain | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler):
+        data = handler(self)
+        if data.get("runtime_clock") is None:
+            data.pop("runtime_clock", None)
+        return data
+
+    @model_validator(mode="after")
+    def timebase_version(self) -> Self:
+        if (self.schema_version == 2) != (self.runtime_clock is not None):
+            raise ValueError("v2 requires runtime_clock; v1 has no timebase")
+        return self
 
 
 class PlanHop(GraphRecord):
@@ -105,8 +121,22 @@ class PlanSignal(GraphRecord):
     start_cycles: Cycles
 
 
+class PlanWholeOperation(GraphRecord):
+    transaction_id: NeutralId
+    kind: Literal["whole_operation"]
+    depends_on: tuple[NeutralId, ...]
+    start_cycles: Cycles
+    operation_cost: CompiledOperationCost
+
+    @model_validator(mode="after")
+    def operation_scope(self) -> Self:
+        if self.transaction_id != self.operation_cost.quote.operation_id:
+            raise ValueError("plan operation scope does not match its quote")
+        return self
+
+
 PlanTransaction = Annotated[
-    PlanTransfer | PlanCompute | PlanWait | PlanSignal,
+    PlanTransfer | PlanCompute | PlanWait | PlanSignal | PlanWholeOperation,
     Field(discriminator="kind"),
 ]
 
@@ -202,9 +232,21 @@ class PlanContent(GraphRecord):
     dynamic_networks: tuple[PlanDynamicNetwork, ...] = ()
     programs: tuple[PlanInstructionProgram, ...] = ()
     max_cycles: PositiveTime
+    runtime_clock: GenericClockDomain | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_shape(self, handler):
+        data = handler(self)
+        if data.get("runtime_clock") is None:
+            data.pop("runtime_clock", None)
+        return data
 
     @model_validator(mode="after")
     def identities(self) -> Self:
+        if self.runtime_clock is not None:
+            for transaction in self.transactions:
+                if isinstance(transaction, PlanWholeOperation):
+                    validate_clock_conversion(self.runtime_clock, transaction.operation_cost.conversion)
         unique(tuple(r.resource_id for r in self.resources), "plan resource")
         unique(tuple(c.counter_id for c in self.counters), "plan counter")
         unique(tuple(t.transaction_id for t in self.transactions), "plan transaction")
@@ -217,13 +259,15 @@ class ImmutablePlan(GraphRecord):
     """A validated, frozen, content-addressed execution plan."""
 
     kind: Literal["immutable_plan"] = "immutable_plan"
-    schema_version: Annotated[int, Field(strict=True, ge=1, le=1)] = 1
+    schema_version: Annotated[int, Field(strict=True, ge=1, le=2)] = 1
     spec_sha256: Digest
     content: PlanContent
     plan_sha256: Digest
 
     @model_validator(mode="after")
     def digest_matches(self) -> Self:
+        if (self.schema_version == 2) != (self.content.runtime_clock is not None):
+            raise ValueError("plan v2 requires runtime_clock; plan v1 has no timebase")
         if self.plan_sha256 != content_digest(self.content.model_dump(mode="json")):
             raise ValueError("plan digest does not match plan content")
         return self
