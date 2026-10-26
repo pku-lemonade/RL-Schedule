@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
+
+from .operation_envelope import OperationEnvelope, validate_envelope_dependencies
 
 from .generic_graph import NeutralId
 from .operation_cost import CompiledOperationCost, OperationDomain
@@ -35,14 +37,42 @@ class GenericLinkTiming(GraphRecord):
     buffer_slots: PositiveInt
 
 
+class GenericLatencyFifoTiming(GraphRecord):
+    """Clocked packet FIFO service, without an independent credit protocol.
+
+    Input slots stay owned while the packet is waiting for a downstream
+    queue. Visibility latency and packet issue interval are separate costs.
+    Every value is supplied; this contract has no device-specific default.
+    """
+    mode: Literal["latency_fifo"]
+    stage: Literal["ingress", "transit", "egress"]
+    packet_bytes: PositiveInt
+    issue_cycles: PositiveInt
+    input_latency_cycles: Cycles
+    channel_latency_cycles: Cycles
+    fifo_slots: PositiveInt
+    channel_slots: PositiveInt
+    input_resource_id: NeutralId
+    output_resource_id: NeutralId
+    channel_resource_id: NeutralId
+    flow_serialized: bool = False
+
+    @property
+    def buffer_slots(self):
+        return self.fifo_slots
+
+
+GenericTransportTiming = GenericLinkTiming | GenericLatencyFifoTiming
+
+
 class GenericLinkOverride(GraphRecord):
     link_id: NeutralId
-    timing: GenericLinkTiming
+    timing: GenericTransportTiming
 
 
 class GenericNetworkTiming(GraphRecord):
     network_id: NeutralId
-    link: GenericLinkTiming
+    link: GenericTransportTiming
     overrides: tuple[GenericLinkOverride, ...] = ()
 
     @model_validator(mode="after")
@@ -77,6 +107,17 @@ class GenericTransfer(GenericTransactionBase):
     destination: NeutralId
     payload_bytes: PositiveInt
     address: Index | None = None
+    multicast_group: NeutralId | None = None
+    flow_priority: int = 0
+    flow_release_delay_cycles: Cycles = 0.0
+
+    @model_serializer(mode="wrap")
+    def flow_shape(self, handler):
+        data = handler(self)
+        for name, default in (("multicast_group", None), ("flow_priority", 0), ("flow_release_delay_cycles", 0.0)):
+            if data.get(name) == default:
+                data.pop(name, None)
+        return data
 
 
 class GenericCompute(GenericTransactionBase):
@@ -210,6 +251,14 @@ class GenericTransactionBatch(GraphRecord):
     transactions: tuple[GenericTransaction, ...] = ()
     programs: tuple[GenericInstructionProgram, ...] = ()
     max_cycles: PositiveTime
+    operation_envelopes: tuple[OperationEnvelope, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def envelope_shape(self, handler):
+        data = handler(self)
+        if not data.get("operation_envelopes"):
+            data.pop("operation_envelopes", None)
+        return data
 
     @model_validator(mode="after")
     def references(self) -> Self:
@@ -246,7 +295,17 @@ class GenericTransactionBatch(GraphRecord):
                         f"undeclared counter {counter_id}"
                     )
         unique(tuple(identities), "transaction identity")
-        declared = set(identities)
+        envelopes = {envelope.operation_id: envelope for envelope in self.operation_envelopes}
+        if len(envelopes) != len(self.operation_envelopes) or set(envelopes) & set(identities):
+            raise ValueError("ENVELOPE_IDENTITY")
+        declared = set(identities) | set(envelopes)
+        for envelope in envelopes.values():
+            if {phase.phase_id for phase in envelope.phases} & declared:
+                raise ValueError("ENVELOPE_NAMESPACE_COLLISION")
+            if (any(member not in identities for member in envelope.member_transactions)
+                    or any(dependency not in declared or dependency == envelope.operation_id for dependency in envelope.depends_on)):
+                raise ValueError("ENVELOPE_MEMBER_REFERENCE")
+        validate_envelope_dependencies(self.transactions, self.operation_envelopes)
         program_ids = tuple(p.program_id for p in self.programs)
         unique(program_ids, "program identity")
         collision = set(program_ids) & declared
@@ -282,6 +341,7 @@ class GenericTransactionBatch(GraphRecord):
                     )
         # Dependency cycles make the batch unschedulable; reject before simulation.
         incoming = {t.transaction_id: set(t.depends_on) for t in self.transactions}
+        incoming.update({envelope.operation_id: set(envelope.depends_on) | set(envelope.member_transactions) for envelope in self.operation_envelopes})
         resolved: set[str] = set()
         pending = dict(incoming)
         while pending:
@@ -477,6 +537,8 @@ class GenericTraceEvent(GraphRecord):
         "issue_release",
         "operation_start",
         "operation_end",
+        "transaction_start", "transaction_complete", "transaction_stop",
+        "fifo_event", "fifo_wait", "sync_arrive", "sync_complete",
     ]
     transaction_id: NeutralId | None = None
     resource_id: NeutralId | None = None
@@ -507,6 +569,19 @@ class GenericSimulationResult(GraphRecord):
     ] = "generic_packet_transport"
     silicon_timing: Literal["unvalidated"] = "unvalidated"
 
+    operation_envelopes: tuple[dict, ...] = ()
+    contention: dict | None = None
+
+    @model_serializer(mode="wrap")
+    def optional_extensions(self, handler):
+        data = handler(self)
+        if not data.get("operation_envelopes"):
+            data.pop("operation_envelopes", None)
+        if data.get("contention") is None:
+            data.pop("contention", None)
+        return data
+
+
     @model_validator(mode="after")
     def consistency(self) -> Self:
         """Corrupted or partial outputs must fail revalidation."""
@@ -520,7 +595,7 @@ class GenericSimulationResult(GraphRecord):
         )
         if self.execution != expected_execution:
             raise ValueError("execution mode disagrees with transaction kinds")
-        complete = tuple(s.status == "complete" for s in self.transactions)
+        complete = tuple(s.status == "complete" for s in self.transactions) + tuple(envelope.get("status") == "complete" for envelope in self.operation_envelopes)
         if self.status == "complete":
             if not all(complete):
                 raise ValueError("status complete requires every span complete")
@@ -532,6 +607,7 @@ class GenericSimulationResult(GraphRecord):
             if self.reason != "transactions_incomplete":
                 raise ValueError("an incomplete run carries reason transactions_incomplete")
         ends = [s.end_cycles for s in self.transactions if s.end_cycles is not None]
+        ends.extend(envelope["end_cycles"] for envelope in self.operation_envelopes if envelope.get("end_cycles") is not None)
         expected = max(ends) if ends else None
         if self.completion_cycles != expected:
             raise ValueError("completion_cycles disagrees with the transaction spans")

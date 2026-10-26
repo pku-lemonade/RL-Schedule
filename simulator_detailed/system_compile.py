@@ -16,6 +16,7 @@ from .configs.schemas.generic_graph import GenericLink, GenericMemoryResource
 from .configs.schemas.generic_transactions import (
     GenericCompute,
     GenericLinkTiming,
+    GenericLatencyFifoTiming,
     GenericOpCompute,
     GenericOpSignal,
     GenericOpTransfer,
@@ -333,7 +334,7 @@ def compile_system(
                 depends_on=depends_on, start_cycles=start_cycles, operation_cost=cost,
             ))
         elif isinstance(transaction, GenericTransfer):
-            transactions.append(transfer_plan(
+            item = transfer_plan(
                 transaction.transaction_id,
                 transaction.network_id,
                 transaction.source,
@@ -342,7 +343,13 @@ def compile_system(
                 transaction.address,
                 depends_on,
                 start_cycles,
-            ))
+            )
+            item = item.model_copy(update={
+                "multicast_group": transaction.multicast_group,
+                "flow_priority": transaction.flow_priority,
+                "flow_release_delay_cycles": transaction.flow_release_delay_cycles,
+            })
+            transactions.append(item)
         elif isinstance(transaction, GenericCompute):
             transactions.append(compute_plan(
                 transaction.transaction_id,
@@ -415,6 +422,17 @@ def compile_system(
             ops=tuple(plan_ops),
         ))
 
+    groups = {}
+    for item in transactions:
+        if isinstance(item, PlanTransfer) and item.multicast_group is not None:
+            groups.setdefault(item.multicast_group, []).append(item)
+    for items in groups.values():
+        if len({(item.source, item.network_id, item.payload_bytes, item.start_cycles, item.depends_on) for item in items}) != 1:
+            raise ValueError("MULTICAST_GROUP_INPUT_MISMATCH")
+        if any(not item.hops or getattr(item.hops[0].timing, "mode", None) != "latency_fifo" for item in items):
+            raise ValueError("MULTICAST_FIFO_CONTRACT_REQUIRED")
+        if len({item.destination for item in items}) != len(items):
+            raise ValueError("MULTICAST_DUPLICATE_DESTINATION")
     resources: list[PlanResource] = []
     for network in sorted(batch.timing, key=lambda n: n.network_id):
         for link in sorted(
@@ -426,6 +444,24 @@ def compile_system(
                 kind="link",
                 capacity=timing[(network.network_id, link.link_id)].buffer_slots,
             ))
+    fifo_resources = {}
+    output_flow_serialization = {}
+    for item in timing.values():
+        if isinstance(item, GenericLatencyFifoTiming):
+            for identity, capacity in ((item.input_resource_id, item.fifo_slots),
+                                       (item.channel_resource_id, item.channel_slots)):
+                if identity in fifo_resources and fifo_resources[identity] != capacity:
+                    raise ValueError("LATENCY_FIFO_SHARED_CAPACITY_MISMATCH")
+                fifo_resources[identity] = capacity
+            identity = item.output_resource_id
+            if identity in output_flow_serialization and output_flow_serialization[identity] != item.flow_serialized:
+                raise ValueError("LATENCY_FIFO_SHARED_FLOW_SERIALIZATION_MISMATCH")
+            output_flow_serialization[identity] = item.flow_serialized
+            if identity in fifo_resources and fifo_resources[identity] != 1:
+                raise ValueError("LATENCY_FIFO_SHARED_ISSUE_MISMATCH")
+            fifo_resources[identity] = 1
+    for identity, capacity in sorted(fifo_resources.items()):
+        resources.append(PlanResource(resource_id=identity, kind="link", capacity=capacity))
     for unit_id in sorted(units):
         resources.append(PlanResource(
             resource_id=unit_id,
@@ -499,6 +535,7 @@ def compile_system(
         programs=tuple(programs),
         max_cycles=batch.max_cycles,
         runtime_clock=normalized_spec.runtime_clock,
+        operation_envelopes=batch.operation_envelopes,
     )
     return ImmutablePlan(
         schema_version=normalized_spec.schema_version,

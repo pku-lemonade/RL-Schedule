@@ -17,7 +17,11 @@ from typing import Literal, cast
 
 import simpy
 from simpy.events import Event, ProcessGenerator
-from simpy.resources.resource import Request, Resource
+from simpy.resources.resource import Request, Resource, PriorityResource
+
+from .quantity_resources import QuantityRegistryMixin
+from .runtime_cleanup import dispose_owned
+from .moe_runtime_extensions import MoeRuntimeExtensions
 
 from .configs.schemas.generic_transactions import (
     GenericCounterState,
@@ -51,6 +55,8 @@ TraceAction = Literal[
     "wait_resume", "cancel", "memory_command", "memory_service_start",
     "memory_service_end", "route_select", "issue_acquire", "issue_release",
     "operation_start", "operation_end",
+    "transaction_start", "transaction_complete", "transaction_stop",
+    "fifo_event", "fifo_wait", "sync_arrive", "sync_complete",
 ]
 
 
@@ -85,28 +91,36 @@ class _DynamicRuntime:
     distances: Mapping[str, Mapping[str, int]]
 
 
-class ResourceRegistry:
+class ResourceRegistry(QuantityRegistryMixin):
     """Stable-ID resources; one construction per physical resource per plan."""
 
     def __init__(self, env: simpy.Environment, plan: ImmutablePlan):
         self.env = env
         self._released = env.event()
         self._entries: dict[str, _ResourceEntry] = {}
+        self._init_quantities()
+        self._closing = False
+        fifo_outputs = {
+            hop.timing.output_resource_id
+            for transaction in plan.content.transactions if isinstance(transaction, PlanTransfer)
+            for hop in transaction.hops if getattr(hop.timing, "mode", None) == "latency_fifo"
+        }
         for resource in plan.content.resources:
             if resource.resource_id in self._entries:
                 raise ValueError(f"duplicate physical resource {resource.resource_id}")
+            serializer_type = PriorityResource if resource.resource_id in fifo_outputs else Resource
             if resource.kind == "link":
                 self._entries[resource.resource_id] = _ResourceEntry(
                     resource_id=resource.resource_id,
                     kind="link",
                     credits=Resource(env, capacity=resource.capacity),
-                    serializer=Resource(env, capacity=1),
+                    serializer=serializer_type(env, capacity=1),
                 )
             else:
                 self._entries[resource.resource_id] = _ResourceEntry(
                     resource_id=resource.resource_id,
                     kind=resource.kind,
-                    serializer=Resource(env, capacity=1),
+                    serializer=serializer_type(env, capacity=1),
                 )
 
     def get(self, resource_id: str) -> _ResourceEntry:
@@ -127,10 +141,12 @@ class ResourceRegistry:
                 queue = cast(list[object], resource.queue)  # pyright: ignore[reportUnknownMemberType]
                 if resource.users or queue:
                     return False
-        return True
+        return self.quantities_released()
 
     def _notify_release(self) -> None:
         """Wake every atomic-acquisition waiter; events are single-shot."""
+        if self._closing:
+            return
         self._released.succeed()
         self._released = self.env.event()
 
@@ -193,6 +209,9 @@ class ResourceRegistry:
             self.release_all(granted)
             raise
 
+    def dispose(self):
+        return dispose_owned(self)
+
 
 class EventBus:
     """Named events, counted events and wait conditions, deterministically ordered."""
@@ -247,7 +266,7 @@ class _CounterRuntime:
         self.changed = self.env.event()
 
 
-class RuntimeContext:
+class RuntimeContext(MoeRuntimeExtensions):
     """One environment, one registry, one bus, all transaction kinds."""
 
     def __init__(self, plan: ImmutablePlan):
@@ -260,6 +279,7 @@ class RuntimeContext:
         self._trace: list[GenericTraceEvent] = []
         self._sequence = 0
         self._background: list[simpy.Process] = []
+        self._initialize_moe_extensions()
         self._terminal: dict[str, Literal["route_unreachable", "capacity_exceeded"]] = {
             tx.transaction_id: tx.terminal
             for tx in self.plan.content.transactions
@@ -525,6 +545,12 @@ class RuntimeContext:
         return link_id, dst, timing
 
     def _transfer(self, transaction: PlanTransfer) -> ProcessGenerator:
+        if transaction.hops and getattr(transaction.hops[0].timing, "mode", None) == "latency_fifo":
+            if transaction.multicast_group is not None:
+                from .latency_multicast import transfer_multicast
+                return (yield from transfer_multicast(self, transaction))
+            from .latency_fifo import transfer_latency_fifo
+            return (yield from transfer_latency_fifo(self, transaction))
         granted: list[tuple[Resource, Request]] = []
         try:
             yield from self._start(transaction.depends_on, transaction.start_cycles)
@@ -770,6 +796,8 @@ class RuntimeContext:
         ) from exc
 
     def run(self) -> GenericSimulationResult:
+        if self._moe_extensions_enabled():
+            return self._run_moe_extensions()
         op_ids = frozenset(
             op.transaction_id
             for program in self.plan.content.programs

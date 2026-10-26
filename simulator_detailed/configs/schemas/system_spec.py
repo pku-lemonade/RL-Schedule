@@ -15,8 +15,9 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, model_serializer, model_validator
 
 from ...topology import content_digest
+from .operation_envelope import OperationEnvelope, validate_envelope_dependencies
 from .generic_graph import GenericSystemGraph, NeutralId
-from .generic_transactions import GenericLinkTiming, GenericTransactionBatch
+from .generic_transactions import GenericTransportTiming, GenericTransactionBatch
 from .operation_cost import CompiledOperationCost
 from .generic_timebase import GenericClockDomain, validate_clock_conversion
 from .topology import (
@@ -59,7 +60,7 @@ class PlanHop(GraphRecord):
 
     network_id: NeutralId
     link_id: NeutralId
-    timing: GenericLinkTiming
+    timing: GenericTransportTiming
 
 
 class PlanMemoryService(GraphRecord):
@@ -91,6 +92,17 @@ class PlanTransfer(GraphRecord):
     hops: tuple[PlanHop, ...] = ()
     terminal: Literal["route_unreachable", "capacity_exceeded"] | None = None
     memory_service: PlanMemoryService | None = None
+    multicast_group: NeutralId | None = None
+    flow_priority: int = 0
+    flow_release_delay_cycles: Cycles = 0.0
+
+    @model_serializer(mode="wrap")
+    def flow_shape(self, handler):
+        data = handler(self)
+        for name, default in (("multicast_group", None), ("flow_priority", 0), ("flow_release_delay_cycles", 0.0)):
+            if data.get(name) == default:
+                data.pop(name, None)
+        return data
 
 
 class PlanCompute(GraphRecord):
@@ -173,7 +185,7 @@ class PlanDynamicLink(GraphRecord):
     link_id: NeutralId
     src_node: NeutralId
     dst_node: NeutralId
-    timing: GenericLinkTiming
+    timing: GenericTransportTiming
 
 
 class PlanNodeDistance(GraphRecord):
@@ -232,11 +244,14 @@ class PlanContent(GraphRecord):
     dynamic_networks: tuple[PlanDynamicNetwork, ...] = ()
     programs: tuple[PlanInstructionProgram, ...] = ()
     max_cycles: PositiveTime
+    operation_envelopes: tuple[OperationEnvelope, ...] = ()
     runtime_clock: GenericClockDomain | None = None
 
     @model_serializer(mode="wrap")
     def legacy_shape(self, handler):
         data = handler(self)
+        if not data.get("operation_envelopes"):
+            data.pop("operation_envelopes", None)
         if data.get("runtime_clock") is None:
             data.pop("runtime_clock", None)
         return data
@@ -250,6 +265,16 @@ class PlanContent(GraphRecord):
         unique(tuple(r.resource_id for r in self.resources), "plan resource")
         unique(tuple(c.counter_id for c in self.counters), "plan counter")
         unique(tuple(t.transaction_id for t in self.transactions), "plan transaction")
+        envelope_ids = {envelope.operation_id for envelope in self.operation_envelopes}
+        transaction_ids = {transaction.transaction_id for transaction in self.transactions}
+        if len(envelope_ids) != len(self.operation_envelopes) or envelope_ids & transaction_ids:
+            raise ValueError("PLAN_ENVELOPE_IDENTITY")
+        for envelope in self.operation_envelopes:
+            if {phase.phase_id for phase in envelope.phases} & (transaction_ids | envelope_ids):
+                raise ValueError("ENVELOPE_NAMESPACE_COLLISION")
+            if any(member not in transaction_ids for member in envelope.member_transactions):
+                raise ValueError("PLAN_ENVELOPE_MEMBER")
+        validate_envelope_dependencies(self.transactions, self.operation_envelopes)
         unique(tuple(n.network_id for n in self.dynamic_networks), "dynamic network")
         unique(tuple(p.program_id for p in self.programs), "plan program")
         return self
