@@ -40,7 +40,14 @@ Cartesian product must fit the explicit `grid_budget`. Limits on grid size,
 axes and schema collection sizes are CPU safety limits, not hardware domains.
 One frozen cost/exposure box and scenario set are shared across all points.
 
-## Two Modes
+## Modes
+
+**`causal_timing`** consumes a caller-owned canonical action/dependency join and
+once-only local timing partition. It validates exact versus unresolved bindings
+without promoting unknowns, keeps clocks separate, and applies explicit shared
+or co-bottleneck response laws without inventing a schedule or adding observed
+service twice. See [CAUSAL_TIMING.md](CAUSAL_TIMING.md) for its closed schema,
+accounting rules, interpretation limits and the existing API/CLI entry points.
 
 **`hypothetical_joint`** requires a complete caller DAG, exclusive per-node
 service and residual intervals, one common reference, source clock boundaries,

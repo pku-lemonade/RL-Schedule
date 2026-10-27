@@ -5,20 +5,30 @@ separate from hypothetical exclusive costs and never become additional credits.
 """
 import argparse
 from copy import deepcopy
-from decimal import Decimal, localcontext
+from decimal import Context, Decimal, DivisionByZero, InvalidOperation, Overflow, ROUND_HALF_EVEN, localcontext
 import itertools
 import json
 from pathlib import Path
+import sys
 
 if __package__:
+    from . import causal_full_analysis
+    from . import causal_timing
     from . import counterfactual as formulas
     from . import design_space_schema as wire
 else:
+    import causal_full_analysis
+    import causal_timing
     import counterfactual as formulas
     import design_space_schema as wire
 
 Rejected = wire.Rejected
 need = wire.need
+
+
+def _arithmetic_context():
+    return Context(prec=28, rounding=ROUND_HALF_EVEN, Emin=-999999, Emax=999999,
+        capitals=1, clamp=0, flags=[], traps=[InvalidOperation, DivisionByZero, Overflow])
 
 
 def _span(value, path, positive=False, unit=False):
@@ -41,15 +51,25 @@ def _unavailable(missing):
 class DesignSpace:
     """Own all mutable inputs and return defensive snapshots at every public API."""
 
-    def __init__(self, specification):
+    @staticmethod
+    def certified(specification):
+        """Admit once into immutable state for execution-local summary handoff."""
+        if __package__:
+            from . import certified_setup
+        else:
+            import certified_setup
+        return certified_setup.admit(specification)
+
+    def __init__(self, specification, *, admission_only=False):
         owned = deepcopy(specification)
         self._mode = wire.mode_of(owned)
         wire.validate(owned, wire.model_schema(self._mode))
         self._specification = owned
         self._identity = formulas.identity(owned)
-        with localcontext() as context:
-            context.prec = 28
-            self._admit()
+        with localcontext(_arithmetic_context()):
+            need(type(admission_only) is bool and (not admission_only or self._mode == 'causal_full_analysis'),
+                'MODE', '$/mode', 'admission-only construction requires full analysis')
+            self._admit(admission_only=admission_only)
 
     @property
     def identity(self):
@@ -64,13 +84,21 @@ class DesignSpace:
     def specification(self):
         return deepcopy(self._specification)
 
-    def schema(self):
-        return wire.request_schema(self._mode)
+    def schema(self, *, output_detail='full'):
+        version = causal_full_analysis.schema.output_version(output_detail)
+        need(output_detail == 'full' or self._mode == 'causal_full_analysis', 'MODE', '$/mode', 'summary requires full analysis')
+        return wire.request_schema(self._mode, version)
 
-    def template(self):
+    def template(self, *, output_detail='full'):
+        causal_full_analysis.schema.output_version(output_detail)
+        need(output_detail == 'full' or self._mode == 'causal_full_analysis', 'MODE', '$/mode', 'summary requires full analysis')
+        if self._mode == 'causal_full_analysis':
+            return causal_full_analysis.template(self, output_detail=output_detail)
         uncertainty = dict(coupling=wire.COUPLING)
         if self._mode == 'hypothetical_joint':
             uncertainty.update(costs='model_independent_box', sharing='model_scenarios')
+        elif self._mode == 'causal_timing':
+            uncertainty.update(costs='fixed_once_only_partition', sharing='model_scenarios')
         else:
             uncertainty.update(costs='unresolved_not_instantiated', sharing='fixed_observed_overlap',
                 readiness=dict(mode=None, radius=None, path_count=None))
@@ -99,9 +127,11 @@ class DesignSpace:
             result['numeric_mfu'] = _unavailable('applicable_numeric_peak_authority')
         if self._mode == 'evidence_portfolio':
             result['joint_latency'] = _unavailable('exclusive_joint_service_law_and_cost_ownership')
+        if self._mode == 'causal_timing':
+            result['causal_schedule_latency'] = _unavailable('resolved_causal_service_costs_and_clock_relation')
         return result
 
-    def _admit(self):
+    def _admit(self, *, admission_only=False):
         spec = self._specification
         _index(spec['unavailable'], 'output', '$/unavailable')
         need(spec['peak_domain']['timebase'] == spec['timebase'], 'TIMEBASE', '$/peak_domain', 'matching timebase required')
@@ -116,8 +146,15 @@ class DesignSpace:
         if kind in ('accepted', 'hypothesis'):
             _span(peak['interval'], '$/peak/interval', positive=True)
         self._families = _index(spec['families'], 'id', '$/families')
-        if self._mode == 'evidence_portfolio':
+        if self._mode == 'causal_full_analysis':
+            self._timing, self._baseline = causal_full_analysis.admit(spec, admission_only=admission_only)
+        elif self._mode == 'evidence_portfolio':
             self._admit_portfolio()
+        elif self._mode == 'causal_timing':
+            self._timing = causal_timing.admit(spec)
+            duration = max(row['duration_ticks'] for row in self._timing['clocks'])
+            self._baseline = dict(authority='caller_partition', latency_interval=formulas.strings((duration, duration)),
+                mfu=self._mfu((duration, duration)), clocks=self._timing['clocks'], causal_latency_ticks=None)
         else:
             self._admit_joint()
 
@@ -230,21 +267,44 @@ class DesignSpace:
             latency_interval=formulas.strings((duration, duration)), mfu=self._mfu((duration, duration)),
             boundaries=spec['boundaries'], caller_reference_is_not_measured_stage_cost=True)
 
-    def evaluate(self, request):
+    def evaluate(self, request, *, capacity=None):
         owned = deepcopy(request)
         mode = wire.mode_of(owned)
-        wire.validate(owned, wire.request_schema(mode))
+        wire.validate(owned, wire.request_schema(mode, owned.get('version')))
         need(mode == self._mode, 'MODE', '$/mode', 'request mode must match frozen model')
+        need(capacity is None or mode == 'causal_full_analysis', 'CAPACITY_MODE', '$', 'capacity requires summary')
         need(owned['input_identity'] == self.identity and formulas.identity(self._specification) == self.identity,
             'IDENTITY', '$/input_identity', 'unchanged frozen workload, routes, observations and model required')
-        with localcontext() as context:
-            context.prec = 28
+        with localcontext(_arithmetic_context()):
+            if mode == 'causal_full_analysis':
+                return deepcopy(causal_full_analysis.evaluate(self, owned, capacity=capacity))
             axes = self._axes(owned)
-            result = self._joint(owned, axes) if mode == 'hypothetical_joint' else self._portfolio(owned, axes)
+            if mode == 'causal_timing':
+                result = causal_timing.evaluate(self, owned, axes)
+            else:
+                result = self._joint(owned, axes) if mode == 'hypothetical_joint' else self._portfolio(owned, axes)
         return deepcopy(dict(version=wire.RESULT_VERSION, mode=mode, input_identity=self.identity,
             request_identity=formulas.identity(owned), identity_hooks=self._specification['identity_hooks'],
             study_id=owned['study_id'], evidence_backed_baseline=self._baseline, unavailable=self._unavailable_outputs(),
             frozen_peak_unchanged=True, observed_intervals_added_as_cost=False, refitted=False, **result))
+
+    def summary_capacity(self, request, limits):
+        if __package__:
+            from . import causal_full_capacity
+        else:
+            import causal_full_capacity
+        return causal_full_capacity.certify(self, deepcopy(request), deepcopy(limits))
+
+    def evaluate_to(self, request, sink, *, block_size=1, capacity=None):
+        """Write canonical full-analysis bytes to a binary sink; return a completion receipt."""
+        owned = deepcopy(request)
+        mode = wire.mode_of(owned)
+        wire.validate(owned, wire.request_schema(mode, owned.get('version')))
+        need(mode == self._mode == 'causal_full_analysis', 'MODE', '$/mode', 'full-analysis sink requires a matching full-analysis model')
+        need(owned['input_identity'] == self.identity and formulas.identity(self._specification) == self.identity,
+            'IDENTITY', '$/input_identity', 'unchanged frozen workload, routes, observations and model required')
+        with localcontext(_arithmetic_context()):
+            return causal_full_analysis.evaluate_to(self, owned, sink, block_size=block_size, capacity=capacity)
 
     def _axes(self, request):
         _index(request['axes'], 'id', '$/axes')
@@ -416,21 +476,62 @@ def cli(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     schema = commands.add_parser('schema')
-    schema.add_argument('--kind', choices=('model', 'request'), required=True)
-    schema.add_argument('--mode', choices=('hypothetical_joint', 'evidence_portfolio'), required=True)
-    for command in ('catalog', 'template', 'evaluate'):
+    schema.add_argument('--kind', choices=('model', 'request', 'result'), required=True)
+    schema.add_argument('--mode', choices=wire.MODES, required=True)
+    schema.add_argument('--output-detail', choices=('full', 'summary'), default='full')
+    for command in ('catalog', 'template', 'evaluate', 'capacity'):
         child = commands.add_parser(command)
         child.add_argument('--model', required=True)
-        if command == 'evaluate':
+        if command in ('evaluate', 'capacity'):
             child.add_argument('--request', required=True)
+        if command == 'evaluate':
+            child.add_argument('--capacity')
+            child.add_argument('--receipt')
+        if command == 'capacity':
+            child.add_argument('--limits', required=True)
+        if command == 'template':
+            child.add_argument('--output-detail', choices=('full', 'summary'), default='full')
     args = parser.parse_args(argv)
     try:
         if args.command == 'schema':
-            result = wire.model_schema(args.mode) if args.kind == 'model' else wire.request_schema(args.mode)
+            version = causal_full_analysis.schema.output_version(args.output_detail)
+            need(args.output_detail == 'full' or (args.mode == 'causal_full_analysis' and args.kind != 'model'),
+                'MODE', '$/mode', 'summary selector requires full-analysis request or result schema')
+            if args.kind == 'result':
+                need(args.mode == 'causal_full_analysis', 'MODE', '$/mode', 'closed result schema is versioned for full analysis only')
+                result = causal_full_analysis.result_schema(version)
+            else:
+                result = wire.model_schema(args.mode) if args.kind == 'model' else wire.request_schema(args.mode, version)
         else:
-            model = DesignSpace(wire.strict_json(Path(args.model).read_bytes()))
+            request = None
+            if args.command in ('evaluate', 'capacity'):
+                request = wire.strict_json(Path(args.request).read_bytes())
+                wire.validate(request, wire.request_schema(wire.mode_of(request), request.get('version')))
+            summary = request is not None and request['version'] == causal_full_analysis.schema.SUMMARY_VERSION
+            model = DesignSpace(wire.strict_json(Path(args.model).read_bytes()), admission_only=summary or args.command == 'capacity'
+                or (args.command == 'template' and args.output_detail == 'summary'))
             if args.command == 'evaluate':
-                result = model.evaluate(wire.strict_json(Path(args.request).read_bytes()))
+                capacity = wire.strict_json(Path(args.capacity).read_bytes()) if args.capacity else None
+                need((summary and args.receipt is not None) or (not summary and args.receipt is None),
+                    'CAPACITY_RECEIPT', '$', 'summary requires an explicit receipt destination; full detail does not')
+                if summary:
+                    receipt_path = Path(args.receipt)
+                    need(type(capacity) is dict and type(capacity.get('limits')) is dict,
+                        'CAPACITY_CERTIFICATE', '$', 'summary requires its capacity certificate')
+                    need(not receipt_path.exists() and receipt_path.parent.stat().st_dev == capacity['limits'].get('device'),
+                        'CAPACITY_RECEIPT', '$', 'new receipt on the certified output filesystem required')
+                if model._mode == 'causal_full_analysis':
+                    receipt = model.evaluate_to(request, causal_full_analysis.streaming.TextSink(sys.stdout), capacity=capacity)
+                    if summary:
+                        with receipt_path.open('xb') as target:
+                            target.write(formulas.encoded(receipt))
+                    return 0
+                need(capacity is None, 'CAPACITY_MODE', '$', 'capacity requires summary')
+                result = model.evaluate(request)
+            elif args.command == 'capacity':
+                result = model.summary_capacity(request, wire.strict_json(Path(args.limits).read_bytes()))
+            elif args.command == 'template':
+                result = model.template(output_detail=args.output_detail)
             else:
                 result = getattr(model, args.command)()
         print(formulas.encoded(result).decode(), end='')

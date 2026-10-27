@@ -1,0 +1,57 @@
+{
+  "axes": [
+    {
+      "domain": [
+        "0.5",
+        "2"
+      ],
+      "exposure": {
+        "identity": "exposure-group-x",
+        "interval": [
+          "0.25",
+          "0.75"
+        ]
+      },
+      "family": "group-x",
+      "grid": [
+        "0.5",
+        "1",
+        "2"
+      ],
+      "id": "axis-group-x",
+      "unit": "dimensionless_service_scale"
+    },
+    {
+      "domain": [
+        "0.5",
+        "2"
+      ],
+      "exposure": {
+        "identity": "exposure-group-y",
+        "interval": [
+          "0.25",
+          "0.75"
+        ]
+      },
+      "family": "group-y",
+      "grid": [
+        "0.5",
+        "1",
+        "2"
+      ],
+      "id": "axis-group-y",
+      "unit": "dimensionless_service_scale"
+    }
+  ],
+  "claim": "conditional_not_physical_truth",
+  "grid_budget": 256,
+  "input_identity": "f45dd32b48bee7922016aa16b4d9eb5873a257b26723b86b5079b6ad6a37e920",
+  "mode": "causal_timing",
+  "study_id": "independent-invented-grid",
+  "uncertainty": {
+    "costs": "fixed_once_only_partition",
+    "coupling": "shared_box_and_scenario_across_grid",
+    "sharing": "model_scenarios"
+  },
+  "version": "caller-design-space-request-v1"
+}

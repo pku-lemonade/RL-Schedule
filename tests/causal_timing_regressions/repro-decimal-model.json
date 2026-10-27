@@ -1,0 +1,233 @@
+{
+  "clocks": [
+    {
+      "id": "local-x",
+      "rank": 2,
+      "window": [
+        10,
+        24
+      ]
+    }
+  ],
+  "evidence_identity": "invented-review",
+  "families": [
+    {
+      "authority": "caller_hypothesis",
+      "id": "group-x",
+      "law": "inverse_partition_response"
+    },
+    {
+      "authority": "caller_hypothesis",
+      "id": "group-y",
+      "law": "inverse_partition_response"
+    }
+  ],
+  "identity_hooks": {
+    "overlap": "review-overlap",
+    "routes": "review-routes",
+    "source": "review-source",
+    "timebase_contract": "review-timebase_contract",
+    "workload": "review-workload"
+  },
+  "join": {
+    "actions": [
+      {
+        "clock": "local-x",
+        "id": "early",
+        "interval": [
+          10,
+          16
+        ],
+        "source_cost_ticks": null
+      },
+      {
+        "clock": "local-x",
+        "id": "later",
+        "interval": [
+          16,
+          22
+        ],
+        "source_cost_ticks": null
+      },
+      {
+        "clock": "local-x",
+        "id": "ambiguous",
+        "interval": [
+          13,
+          19
+        ],
+        "source_cost_ticks": null
+      }
+    ],
+    "bindings": [
+      {
+        "action": "early",
+        "candidates": [],
+        "identity": "identity-early",
+        "status": "exact",
+        "unknown": null
+      },
+      {
+        "action": "later",
+        "candidates": [],
+        "identity": "identity-later",
+        "status": "exact",
+        "unknown": null
+      },
+      {
+        "action": "ambiguous",
+        "candidates": [
+          "candidate-only"
+        ],
+        "identity": null,
+        "status": "unresolved",
+        "unknown": "missing_dynamic_identity"
+      }
+    ],
+    "dependencies": [
+      {
+        "after": "later",
+        "basis": "happens_before",
+        "before": "early",
+        "id": "declared-order",
+        "identity": "caller-order",
+        "status": "exact",
+        "unknown": null
+      }
+    ]
+  },
+  "mode": "causal_timing",
+  "partition": {
+    "atoms": [
+      {
+        "accounting_owner": "charge-0",
+        "active_actions": [
+          "early"
+        ],
+        "clock": "local-x",
+        "duration_ticks": 3,
+        "exclusive_causal_owner": null,
+        "family_mask_conservative": 1,
+        "family_mask_inclusive": 1,
+        "id": "piece-0",
+        "interval": [
+          10,
+          13
+        ],
+        "owner_kind": "exclusive_observation"
+      },
+      {
+        "accounting_owner": "charge-1",
+        "active_actions": [
+          "early",
+          "ambiguous"
+        ],
+        "clock": "local-x",
+        "duration_ticks": 3,
+        "exclusive_causal_owner": null,
+        "family_mask_conservative": 1,
+        "family_mask_inclusive": 3,
+        "id": "piece-1",
+        "interval": [
+          13,
+          16
+        ],
+        "owner_kind": "shared_observation"
+      },
+      {
+        "accounting_owner": "charge-2",
+        "active_actions": [
+          "later",
+          "ambiguous"
+        ],
+        "clock": "local-x",
+        "duration_ticks": 3,
+        "exclusive_causal_owner": null,
+        "family_mask_conservative": 2,
+        "family_mask_inclusive": 3,
+        "id": "piece-2",
+        "interval": [
+          16,
+          19
+        ],
+        "owner_kind": "shared_observation"
+      },
+      {
+        "accounting_owner": "charge-3",
+        "active_actions": [
+          "later"
+        ],
+        "clock": "local-x",
+        "duration_ticks": 3,
+        "exclusive_causal_owner": null,
+        "family_mask_conservative": 2,
+        "family_mask_inclusive": 2,
+        "id": "piece-3",
+        "interval": [
+          19,
+          22
+        ],
+        "owner_kind": "exclusive_observation"
+      },
+      {
+        "accounting_owner": "charge-4",
+        "active_actions": [],
+        "clock": "local-x",
+        "duration_ticks": 2,
+        "exclusive_causal_owner": null,
+        "family_mask_conservative": 0,
+        "family_mask_inclusive": 0,
+        "id": "piece-4",
+        "interval": [
+          22,
+          24
+        ],
+        "owner_kind": "residual"
+      }
+    ],
+    "causal_latency_ticks": null
+  },
+  "peak": {
+    "domain": null,
+    "evidence": null,
+    "interval": null,
+    "kind": "unavailable",
+    "missing_input": "peak_unknown",
+    "parameter": null
+  },
+  "peak_domain": {
+    "convention": "abstract_work",
+    "engine_scope": "abstract_scope",
+    "participants": [
+      "local-x"
+    ],
+    "rate_unit": "work_per_tick",
+    "timebase": "review_tick"
+  },
+  "scenarios": [
+    {
+      "id": "conservative-shared_serial",
+      "membership": "conservative",
+      "overlap": "shared_serial"
+    },
+    {
+      "id": "conservative-co_bottleneck",
+      "membership": "conservative",
+      "overlap": "co_bottleneck"
+    },
+    {
+      "id": "inclusive-shared_serial",
+      "membership": "inclusive",
+      "overlap": "shared_serial"
+    },
+    {
+      "id": "inclusive-co_bottleneck",
+      "membership": "inclusive",
+      "overlap": "co_bottleneck"
+    }
+  ],
+  "timebase": "review_tick",
+  "unavailable": [],
+  "useful_flops": 1,
+  "version": "caller-sensitivity-model-v1"
+}

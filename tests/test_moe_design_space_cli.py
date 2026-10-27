@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from simulator_detailed.moe_model import design_space, exploration_pipeline
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 import design_space_fixtures as fixtures
+import causal_timing_fixtures as timing_fixtures
 
 
 class DesignSpaceCliTests(unittest.TestCase):
@@ -24,7 +26,7 @@ class DesignSpaceCliTests(unittest.TestCase):
         return code, json.loads(stream.getvalue())
 
     def test_explicit_mode_schema_dispatch(self):
-        for mode in ('hypothetical_joint', 'evidence_portfolio'):
+        for mode in design_space.wire.MODES:
             code, result = self.call(['schema', '--kind', 'request', '--mode', mode])
             self.assertEqual(code, 0)
             self.assertEqual(result, design_space.wire.request_schema(mode))
@@ -53,6 +55,23 @@ class DesignSpaceCliTests(unittest.TestCase):
         parser = exploration_pipeline._parser()
         self.assertEqual(parser.parse_args(['status', '--run-dir', 'synthetic']).command, 'status')
         self.assertEqual(parser.parse_args(['analyze', '--run-dir', 'synthetic']).command, 'analyze')
+
+    def test_causal_timing_dispatch_without_execution(self):
+        spec = timing_fixtures.model()
+        model = design_space.DesignSpace(spec)
+        query = timing_fixtures.request(model)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'model.json').write_text(json.dumps(spec))
+            (root / 'query.json').write_text(json.dumps(query))
+            code, result = self.call(['evaluate', '--model', str(root / 'model.json'), '--request', str(root / 'query.json')])
+            self.assertEqual(code, 0)
+            self.assertEqual(result, model.evaluate(query))
+
+    def test_causal_timing_module_entry_point(self):
+        result = subprocess.run([sys.executable, '-B', '-m', 'simulator_detailed.moe_model.design_space',
+            'schema', '--kind', 'model', '--mode', 'causal_timing'], capture_output=True, check=True, cwd=ROOT)
+        self.assertEqual(json.loads(result.stdout), design_space.wire.model_schema('causal_timing'))
 
 
 if __name__ == '__main__':
